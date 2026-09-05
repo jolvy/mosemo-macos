@@ -1,10 +1,11 @@
 # macOS Collector Feasibility Spike
 
-이 디렉터리는 Mosemo 전체 MVP가 아니라 네이티브 수집 방식의 가능성만
-판정하기 위한 실행·측정 안내다. 앱은 고정 bundle ID
-`io.mosemo.collector.spike`를 사용하며 SQLite, HTTP, 서버, 화면 캡처,
-영속 로그 없이 최근 600개의 안전 이벤트와 테스트용 브라우저 원시 맥락만
-메모리 ring buffer에 둔다.
+이 디렉터리는 네이티브 수집 방식의 가능성을 검증하는 macOS 앱과 서버 인증
+경계를 함께 담는다. 앱은 고정 bundle ID `io.mosemo.app`을 사용한다.
+`CollectorCore`는 네트워크를 모르며, 수집 데이터는 SQLite·파일·서버·영속
+로그에 기록하지 않고 최근 600개의 안전 이벤트와 테스트용 브라우저 원시
+맥락만 메모리 ring buffer에 둔다. 서버 통신은 `MosemoAPI`의 로그인과 현재
+계정 조회로 제한된다.
 
 현재 빌드는 feasibility 확인을 위해 일반 Chrome·Firefox의 활성 탭 제목과 전체
 URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 안전 이벤트와
@@ -42,9 +43,10 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 
 | 경로 | 책임 |
 | --- | --- |
-| `Package.swift` | CollectorCore, 실행 앱, XCTest를 로컬 Swift Package로 연결 |
-| `Mosemo.xcodeproj/` | macOS 앱·Core·테스트 target과 공유 scheme 정의 |
-| `Info.plist` | 고정 bundle ID 빌드의 앱 메타데이터와 Apple Events 사용 목적 선언 |
+| `Package.swift` | CollectorCore, MosemoAPI, 실행 앱과 XCTest를 로컬 Swift Package로 연결 |
+| `Package.resolved` | OpenAPI generator와 runtime 의존성 버전 고정 |
+| `Mosemo.xcodeproj/` | Swift package product를 사용하는 macOS 앱 target과 공유 scheme 정의 |
+| `Info.plist` | bundle ID, 인증 callback scheme, Apple Events 사용 목적 선언 |
 | `Sources/CollectorCore/SessionStateMachine.swift` | 집중 시작·휴식·재개·종료와 수집 허용 상태 |
 | `Sources/CollectorCore/SafeActivityEvent.swift` | 안전 이벤트 allow-list와 보호 맥락 필드 제거 |
 | `Sources/CollectorCore/SurfaceClassifier.swift` | 등록 도메인·Chrome surface·브라우저 transition 분류 |
@@ -59,30 +61,39 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Sources/MosemoApp/InputActivityMonitor.swift` | 입력 모니터링 권한과 listen-only event tap |
 | `Sources/MosemoApp/ReturnAnchorStore.swift` | 메모리 전용 앱·창·Chrome 탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
+| `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
+| `Sources/MosemoAPI/` | OpenAPI snapshot, internal 생성 코드, Keychain·오류·모델 경계 |
 | `Tests/CollectorCoreTests/` | OS API와 분리된 Core 조건·경계 XCTest |
-| `scripts/check_collector_privacy.sh` | 화면 캡처·네트워크·DB·영속 기록·금지 필드 정적 검사 |
+| `Tests/MosemoAPITests/` | fake generated API를 사용한 인증·오류·PKCE 단위 테스트 |
+| `scripts/update_openapi.sh` | 전달받은 OpenAPI artifact 교체와 생성·테스트 검증 |
+| `scripts/check_collector_privacy.sh` | CollectorCore 네트워크 경계와 화면 캡처·영속 기록·금지 필드 정적 검사 |
 | `scripts/check_safe_diagnostics.sh` | 복사한 안전 진단에서 금지 데이터 검사 |
 | `scripts/sample_collector_process.sh` | 장시간 CPU·RSS 표본 CSV 생성 |
 | `scripts/summarize_collector_samples.sh` | 장시간 표본 평균 CPU·최대 RSS 요약 |
 | `docs/TRANSITION_RESULTS.csv` | 100회 수동 전환의 행별 기록 양식 |
 | `docs/RESULT_TEMPLATE.md` | 새 측정 실행을 위한 빈 결과 양식 |
 | `docs/RESULT_2026-08-22.md` | 이번 구현에서 실제 측정한 결과와 미측정 항목 |
+| `docs/AUTH_RUNTIME_CHECKLIST.md` | 실제 Kakao 계정이 필요한 수동 로그인 검증 기록 |
 
 ## 빌드, 테스트, 실행
 
-Xcode 16 이상과 macOS 14 이상이 필요하다. 이 `macos` 디렉터리를 작업
+Swift 6.1을 포함한 Xcode와 macOS 14 이상이 필요하다. 이 디렉터리를 작업
 루트로 두고 실행한다.
 
 ```sh
-/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcrun swift test
+
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild \
   -project Mosemo.xcodeproj \
   -scheme Mosemo \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /tmp/MosemoDerivedData \
-  test
+  build
 ```
 
-앱만 빌드할 때는 마지막 인자를 `build`로 바꾼다. Xcode에서는
+패키지 테스트는 `swift test`를 기준으로 실행한다. Xcode에서는
 `Mosemo.xcodeproj`를 열고 `Mosemo` scheme의
 My Mac 대상을 선택해 Run한다. 유료 Apple Developer 계정은 필요하지 않으며
 `Sign to Run Locally` ad-hoc 서명을 사용한다.
@@ -100,14 +111,32 @@ ditto \
 open "$HOME/Applications/Mosemo.app"
 ```
 
-순수 로직을 Swift Package로만 반복 실행할 수도 있다.
+Release archive에는 배포 API URL을 build setting으로 전달한다.
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+  -project Mosemo.xcodeproj \
+  -scheme Mosemo \
+  -configuration Release \
+  -archivePath /tmp/Mosemo.xcarchive \
+  MOSEMO_API_BASE_URL=https://api.example.com \
+  archive
+```
+
+## OpenAPI snapshot 갱신
+
+서버에서 export한 artifact만 입력으로 받는다. 앱 빌드나 CI는 서버 저장소 또는
+실행 중인 서버에서 명세를 내려받지 않는다.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-CLANG_MODULE_CACHE_PATH=/tmp/MosemoModuleCache \
-SWIFTPM_MODULECACHE_OVERRIDE=/tmp/MosemoModuleCache \
-swift test --enable-code-coverage
+scripts/update_openapi.sh /path/to/exported-openapi.json
 ```
+
+스크립트는 JSON과 필수 인증 operation을 확인하고 snapshot을 교체한 뒤 command
+plugin으로 `GeneratedSources`를 갱신하고 `MosemoAPI` 컴파일과 전체 `swift test`를
+실행한다. Xcode build plugin 검증에 의존하지 않도록 생성 파일은 커밋한다.
+검증이 실패하면 기존 snapshot을 복원한다.
 
 ## 필요한 macOS 권한
 
@@ -245,9 +274,9 @@ scripts/check_collector_privacy.sh
 ```
 
 테스트용 제목·전체 URL은 앱 계층의 비영속 진단 record에 의도적으로 존재한다.
-따라서 정적 검사는 안전 Core 모델, 화면 캡처·네트워크·DB·파일 저장·application
-logging의 부재를 검사한다. `안전 진단 복사` 결과 검사는 아래 스크립트로 별도
-수행한다.
+따라서 정적 검사는 `CollectorCore`의 네트워크 부재, 전체 production source의
+화면 캡처·DB·파일 저장·application logging 부재, 인증 비밀의 logging 부재를
+검사한다. `안전 진단 복사` 결과 검사는 아래 스크립트로 별도 수행한다.
 
 진단 clipboard 내용을 임시 파일로 저장한 경우:
 

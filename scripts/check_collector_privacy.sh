@@ -11,7 +11,7 @@ check_absent() {
     label=$1
     pattern=$2
     shift 2
-    if rg -n --glob '*.swift' --glob '*.plist' "$pattern" "$@"; then
+    if rg -n --glob '*.swift' --glob '*.plist' --glob '*.json' "$pattern" "$@"; then
         printf 'FAIL: %s\n' "$label" >&2
         failed=1
     else
@@ -25,8 +25,13 @@ check_absent \
     "$production_sources" "$info_plist"
 
 check_absent \
-    "network and database APIs are absent" \
-    'URLSession|NWConnection|Network\.framework|SQLite|CoreData|NSPersistentContainer' \
+    "network APIs are absent from CollectorCore" \
+    'URLSession|NWConnection|Network\.framework' \
+    "$production_sources/CollectorCore"
+
+check_absent \
+    "database APIs are absent from production sources" \
+    'SQLite|CoreData|NSPersistentContainer' \
     "$production_sources"
 
 check_absent \
@@ -40,9 +45,15 @@ check_absent \
     "$production_sources"
 
 check_absent \
+    "authentication secrets are absent from logging arguments" \
+    '(print|debugPrint|NSLog|os_log|Logger).*\b(accessToken|authorizationCode|codeVerifier|callbackURL)\b' \
+    "$production_sources"
+
+check_absent \
     "forbidden payload field names are absent from safe core models" \
     'fullURL|pageTitle|keyContents|clickCoordinates|mousePath|screenImage|pageBody|formValue' \
-    "$production_sources/CollectorCore"
+    "$production_sources/CollectorCore" \
+    "$production_sources/MosemoAPI/openapi.json"
 
 if [ "$failed" -ne 0 ]; then
     exit 1

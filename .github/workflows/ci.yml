@@ -1,0 +1,55 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve exact dependencies
+        run: swift package resolve
+
+      - name: Verify committed OpenAPI generation
+        run: |
+          swift package --allow-writing-to-package-directory \
+            generate-code-from-openapi \
+            --target MosemoAPI
+          git diff --exit-code -- Sources/MosemoAPI/GeneratedSources
+
+      - name: Unit tests and generated client compilation
+        run: swift test
+
+      - name: Privacy boundary
+        run: scripts/check_collector_privacy.sh
+
+      - name: Xcode Debug build
+        run: >-
+          xcodebuild
+          -project Mosemo.xcodeproj
+          -scheme Mosemo
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Xcode Release archive
+        run: >-
+          xcodebuild
+          -project Mosemo.xcodeproj
+          -scheme Mosemo
+          -configuration Release
+          -archivePath "$RUNNER_TEMP/Mosemo.xcarchive"
+          CODE_SIGNING_ALLOWED=NO
+          MOSEMO_API_BASE_URL=https://api.example.invalid
+          archive
