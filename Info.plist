@@ -10,6 +10,19 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>io.mosemo.app.authentication</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.mosemo.app</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -22,8 +35,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>MosemoAPIBaseURL</key>
+	<string>$(MOSEMO_API_BASE_URL)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Google Chrome 자동화 권한을 확인하고, 활성 집중 세션 중 전면 창과 활성 탭 변화를 분류하며 테스트 진단에 탭 제목과 URL을 표시하기 위해 권한이 필요합니다.</string>
 	<key>NSHumanReadableCopyright</key>

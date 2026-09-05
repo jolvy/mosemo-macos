@@ -6,12 +6,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		200000000000000000000001 /* SessionStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000001 /* SessionStateMachine.swift */; };
-		200000000000000000000002 /* SafeActivityEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000002 /* SafeActivityEvent.swift */; };
-		200000000000000000000003 /* SurfaceClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000003 /* SurfaceClassifier.swift */; };
-		200000000000000000000004 /* InputActivityAggregator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000004 /* InputActivityAggregator.swift */; };
-		200000000000000000000005 /* ReturnTracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000005 /* ReturnTracking.swift */; };
-		200000000000000000000006 /* DetectionStatistics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000006 /* DetectionStatistics.swift */; };
 		200000000000000000000011 /* MosemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000011 /* MosemoApp.swift */; };
 		200000000000000000000012 /* CollectorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000012 /* CollectorViewModel.swift */; };
 		200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000013 /* ChromeAppleEventClient.swift */; };
@@ -20,28 +14,12 @@
 		200000000000000000000016 /* InputActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000016 /* InputActivityMonitor.swift */; };
 		200000000000000000000017 /* WorkspaceObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000017 /* WorkspaceObserver.swift */; };
 		200000000000000000000018 /* PerformanceSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000018 /* PerformanceSampler.swift */; };
-		200000000000000000000021 /* SessionStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000021 /* SessionStateMachineTests.swift */; };
-		200000000000000000000022 /* SafeActivityEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000022 /* SafeActivityEventTests.swift */; };
-		200000000000000000000023 /* SurfaceClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000023 /* SurfaceClassifierTests.swift */; };
-		200000000000000000000024 /* InputActivityAggregatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000024 /* InputActivityAggregatorTests.swift */; };
-		200000000000000000000025 /* ReturnTrackingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000025 /* ReturnTrackingTests.swift */; };
-		200000000000000000000026 /* DetectionStatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000026 /* DetectionStatisticsTests.swift */; };
-		200000000000000000000031 /* CollectorCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 300000000000000000000031 /* CollectorCore.a */; };
-		200000000000000000000032 /* CollectorCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 300000000000000000000031 /* CollectorCore.a */; };
+		200000000000000000000019 /* AuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000019 /* AuthCoordinator.swift */; };
+		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
+		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		400000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = 100000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = 100000000000000000000002; remoteInfo = CollectorCore; };
-		400000000000000000000002 = {isa = PBXContainerItemProxy; containerPortal = 100000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = 100000000000000000000002; remoteInfo = CollectorCore; };
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		300000000000000000000001 /* SessionStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStateMachine.swift; sourceTree = "<group>"; };
-		300000000000000000000002 /* SafeActivityEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeActivityEvent.swift; sourceTree = "<group>"; };
-		300000000000000000000003 /* SurfaceClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceClassifier.swift; sourceTree = "<group>"; };
-		300000000000000000000004 /* InputActivityAggregator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputActivityAggregator.swift; sourceTree = "<group>"; };
-		300000000000000000000005 /* ReturnTracking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReturnTracking.swift; sourceTree = "<group>"; };
-		300000000000000000000006 /* DetectionStatistics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionStatistics.swift; sourceTree = "<group>"; };
 		300000000000000000000011 /* MosemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MosemoApp.swift; sourceTree = "<group>"; };
 		300000000000000000000012 /* CollectorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectorViewModel.swift; sourceTree = "<group>"; };
 		300000000000000000000013 /* ChromeAppleEventClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeAppleEventClient.swift; sourceTree = "<group>"; };
@@ -50,76 +28,161 @@
 		300000000000000000000016 /* InputActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputActivityMonitor.swift; sourceTree = "<group>"; };
 		300000000000000000000017 /* WorkspaceObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceObserver.swift; sourceTree = "<group>"; };
 		300000000000000000000018 /* PerformanceSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSampler.swift; sourceTree = "<group>"; };
-		300000000000000000000021 /* SessionStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStateMachineTests.swift; sourceTree = "<group>"; };
-		300000000000000000000022 /* SafeActivityEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeActivityEventTests.swift; sourceTree = "<group>"; };
-		300000000000000000000023 /* SurfaceClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceClassifierTests.swift; sourceTree = "<group>"; };
-		300000000000000000000024 /* InputActivityAggregatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputActivityAggregatorTests.swift; sourceTree = "<group>"; };
-		300000000000000000000025 /* ReturnTrackingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReturnTrackingTests.swift; sourceTree = "<group>"; };
-		300000000000000000000026 /* DetectionStatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionStatisticsTests.swift; sourceTree = "<group>"; };
+		300000000000000000000019 /* AuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCoordinator.swift; sourceTree = "<group>"; };
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		300000000000000000000031 /* CollectorCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libCollectorCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
-		300000000000000000000032 /* CollectorCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CollectorCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000040 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		500000000000000000000001 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		500000000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (200000000000000000000031 /* CollectorCore.a in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
-		500000000000000000000003 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (200000000000000000000032 /* CollectorCore.a in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		500000000000000000000002 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				200000000000000000000041 /* CollectorCore in Frameworks */,
+				200000000000000000000042 /* MosemoAPI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		600000000000000000000001 = {isa = PBXGroup; children = (600000000000000000000002 /* Sources */, 600000000000000000000005 /* Tests */, 300000000000000000000040 /* Info.plist */, 600000000000000000000006 /* Products */,); sourceTree = "<group>"; };
-		600000000000000000000002 /* Sources */ = {isa = PBXGroup; children = (600000000000000000000003 /* CollectorCore */, 600000000000000000000004 /* MosemoApp */,); path = Sources; sourceTree = "<group>"; };
-		600000000000000000000003 /* CollectorCore */ = {isa = PBXGroup; children = (300000000000000000000001, 300000000000000000000002, 300000000000000000000003, 300000000000000000000004, 300000000000000000000005, 300000000000000000000006,); path = CollectorCore; sourceTree = "<group>"; };
-		600000000000000000000004 /* MosemoApp */ = {isa = PBXGroup; children = (300000000000000000000011, 300000000000000000000012, 300000000000000000000013, 300000000000000000000014, 300000000000000000000015, 300000000000000000000016, 300000000000000000000017, 300000000000000000000018,); path = MosemoApp; sourceTree = "<group>"; };
-		600000000000000000000005 /* Tests */ = {isa = PBXGroup; children = (600000000000000000000007 /* CollectorCoreTests */,); path = Tests; sourceTree = "<group>"; };
-		600000000000000000000006 /* Products */ = {isa = PBXGroup; children = (300000000000000000000030, 300000000000000000000031, 300000000000000000000032,); name = Products; sourceTree = "<group>"; };
-		600000000000000000000007 /* CollectorCoreTests */ = {isa = PBXGroup; children = (300000000000000000000021, 300000000000000000000022, 300000000000000000000023, 300000000000000000000024, 300000000000000000000025, 300000000000000000000026,); path = CollectorCoreTests; sourceTree = "<group>"; };
+		600000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				600000000000000000000002 /* Sources */,
+				300000000000000000000040 /* Info.plist */,
+				600000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		600000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				600000000000000000000004 /* MosemoApp */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		600000000000000000000004 /* MosemoApp */ = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000011 /* MosemoApp.swift */,
+				300000000000000000000012 /* CollectorViewModel.swift */,
+				300000000000000000000013 /* ChromeAppleEventClient.swift */,
+				300000000000000000000014 /* AccessibilityClient.swift */,
+				300000000000000000000015 /* ReturnAnchorStore.swift */,
+				300000000000000000000016 /* InputActivityMonitor.swift */,
+				300000000000000000000017 /* WorkspaceObserver.swift */,
+				300000000000000000000018 /* PerformanceSampler.swift */,
+				300000000000000000000019 /* AuthCoordinator.swift */,
+			);
+			path = MosemoApp;
+			sourceTree = "<group>";
+		};
+		600000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000030 /* Mosemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		100000000000000000000002 /* CollectorCore */ = {isa = PBXNativeTarget; buildConfigurationList = 700000000000000000000002; buildPhases = (800000000000000000000001, 500000000000000000000001,); buildRules = (); dependencies = (); name = CollectorCore; productName = CollectorCore; productReference = 300000000000000000000031; productType = "com.apple.product-type.library.static"; };
-		100000000000000000000003 /* Mosemo */ = {isa = PBXNativeTarget; buildConfigurationList = 700000000000000000000003; buildPhases = (800000000000000000000002, 500000000000000000000002, 800000000000000000000005,); buildRules = (); dependencies = (900000000000000000000001,); name = Mosemo; productName = Mosemo; productReference = 300000000000000000000030; productType = "com.apple.product-type.application"; };
-		100000000000000000000004 /* CollectorCoreTests */ = {isa = PBXNativeTarget; buildConfigurationList = 700000000000000000000004; buildPhases = (800000000000000000000003, 500000000000000000000003,); buildRules = (); dependencies = (900000000000000000000002,); name = CollectorCoreTests; productName = CollectorCoreTests; productReference = 300000000000000000000032; productType = "com.apple.product-type.bundle.unit-test"; };
+		100000000000000000000003 /* Mosemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 700000000000000000000003;
+			buildPhases = (
+				800000000000000000000002,
+				500000000000000000000002,
+				800000000000000000000005,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = Mosemo;
+			packageProductDependencies = (
+				B00000000000000000000001 /* CollectorCore */,
+				B00000000000000000000002 /* MosemoAPI */,
+			);
+			productName = Mosemo;
+			productReference = 300000000000000000000030 /* Mosemo.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		100000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 1600; LastUpgradeCheck = 1600; TargetAttributes = {100000000000000000000002 = {CreatedOnToolsVersion = 16.0;}; 100000000000000000000003 = {CreatedOnToolsVersion = 16.0;}; 100000000000000000000004 = {CreatedOnToolsVersion = 16.0; TestTargetID = 100000000000000000000002;};};}; buildConfigurationList = 700000000000000000000001; compatibilityVersion = "Xcode 14.0"; developmentRegion = ko; hasScannedForEncodings = 0; knownRegions = (ko, Base,); mainGroup = 600000000000000000000001; productRefGroup = 600000000000000000000006; projectDirPath = ""; projectRoot = ""; targets = (100000000000000000000003, 100000000000000000000002, 100000000000000000000004,); };
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					100000000000000000000003 = {CreatedOnToolsVersion = 26.0;};
+				};
+			};
+			buildConfigurationList = 700000000000000000000001;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ko;
+			hasScannedForEncodings = 0;
+			knownRegions = (ko, Base,);
+			mainGroup = 600000000000000000000001;
+			packageReferences = (
+				B00000000000000000000000 /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = 600000000000000000000006;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000003 /* Mosemo */,
+			);
+		};
 /* End PBXProject section */
-
-/* Begin PBXSourcesBuildPhase section */
-		800000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (200000000000000000000001, 200000000000000000000002, 200000000000000000000003, 200000000000000000000004, 200000000000000000000005, 200000000000000000000006,); runOnlyForDeploymentPostprocessing = 0; };
-		800000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (200000000000000000000011, 200000000000000000000012, 200000000000000000000013, 200000000000000000000014, 200000000000000000000015, 200000000000000000000016, 200000000000000000000017, 200000000000000000000018,); runOnlyForDeploymentPostprocessing = 0; };
-		800000000000000000000003 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (200000000000000000000021, 200000000000000000000022, 200000000000000000000023, 200000000000000000000024, 200000000000000000000025, 200000000000000000000026,); runOnlyForDeploymentPostprocessing = 0; };
-/* End PBXSourcesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		800000000000000000000005 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		900000000000000000000001 = {isa = PBXTargetDependency; target = 100000000000000000000002; targetProxy = 400000000000000000000001; };
-		900000000000000000000002 = {isa = PBXTargetDependency; target = 100000000000000000000002; targetProxy = 400000000000000000000002; };
-/* End PBXTargetDependency section */
+/* Begin PBXSourcesBuildPhase section */
+		800000000000000000000002 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				200000000000000000000011 /* MosemoApp.swift in Sources */,
+				200000000000000000000012 /* CollectorViewModel.swift in Sources */,
+				200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */,
+				200000000000000000000014 /* AccessibilityClient.swift in Sources */,
+				200000000000000000000015 /* ReturnAnchorStore.swift in Sources */,
+				200000000000000000000016 /* InputActivityMonitor.swift in Sources */,
+				200000000000000000000017 /* WorkspaceObserver.swift in Sources */,
+				200000000000000000000018 /* PerformanceSampler.swift in Sources */,
+				200000000000000000000019 /* AuthCoordinator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		A00000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; ONLY_ACTIVE_ARCH = YES; SDKROOT = macosx; SWIFT_VERSION = 5.0;}; name = Debug; };
-		A00000000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; ONLY_ACTIVE_ARCH = YES; SDKROOT = macosx; SWIFT_VERSION = 5.0;}; name = Release; };
-		A00000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; DEFINES_MODULE = YES; ENABLE_TESTABILITY = YES; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_MODULE_NAME = CollectorCore; PRODUCT_NAME = CollectorCore; SKIP_INSTALL = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_VERSION = 5.0;}; name = Debug; };
-		A00000000000000000000012 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_MODULE_NAME = CollectorCore; PRODUCT_NAME = CollectorCore; SKIP_INSTALL = YES; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0;}; name = Release; };
-		A00000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.collector.spike; PRODUCT_NAME = Mosemo; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_VERSION = 5.0;}; name = Debug; };
-		A00000000000000000000022 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.collector.spike; PRODUCT_NAME = Mosemo; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0;}; name = Release; };
-		A00000000000000000000031 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.collector.spike.tests; PRODUCT_NAME = CollectorCoreTests; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_VERSION = 5.0;}; name = Debug; };
-		A00000000000000000000032 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.collector.spike.tests; PRODUCT_NAME = CollectorCoreTests; SWIFT_VERSION = 5.0;}; name = Release; };
+		A00000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; ONLY_ACTIVE_ARCH = YES; SDKROOT = macosx; SWIFT_VERSION = 5.0;}; name = Debug; };
+		A00000000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0;}; name = Release; };
+		A00000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1; MOSEMO_API_BASE_URL = "http://localhost:8000"; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.app; PRODUCT_NAME = Mosemo; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_VERSION = 5.0;}; name = Debug; };
+		A00000000000000000000022 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1; MOSEMO_API_BASE_URL = ""; PRODUCT_BUNDLE_IDENTIFIER = io.mosemo.app; PRODUCT_NAME = Mosemo; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0;}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
 		700000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000001, A00000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		700000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000011, A00000000000000000000012,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		700000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000021, A00000000000000000000022,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		700000000000000000000004 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000031, A00000000000000000000032,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B00000000000000000000000 /* XCLocalSwiftPackageReference "." */ = {isa = XCLocalSwiftPackageReference; relativePath = "."; };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B00000000000000000000001 /* CollectorCore */ = {isa = XCSwiftPackageProductDependency; package = B00000000000000000000000 /* XCLocalSwiftPackageReference "." */; productName = CollectorCore; };
+		B00000000000000000000002 /* MosemoAPI */ = {isa = XCSwiftPackageProductDependency; package = B00000000000000000000000 /* XCLocalSwiftPackageReference "." */; productName = MosemoAPI; };
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 100000000000000000000001 /* Project object */;
 }

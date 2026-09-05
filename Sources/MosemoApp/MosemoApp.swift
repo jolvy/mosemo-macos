@@ -1,13 +1,36 @@
 import CollectorCore
+import MosemoAPI
 import SwiftUI
 
 @main
 struct MosemoApp: App {
-    @StateObject private var model = CollectorViewModel()
+    @StateObject private var model: CollectorViewModel
+    @StateObject private var auth: AuthCoordinator
+
+    init() {
+        _model = StateObject(wrappedValue: CollectorViewModel())
+
+        if let baseURL = AppConfiguration.apiBaseURL {
+            do {
+                let client = try LiveMosemoAPIClient(baseURL: baseURL)
+                _auth = StateObject(wrappedValue: AuthCoordinator(client: client))
+            } catch {
+                _auth = StateObject(wrappedValue: AuthCoordinator(
+                    client: nil,
+                    configurationMessage: "API 서버 주소가 올바르지 않습니다."
+                ))
+            }
+        } else {
+            _auth = StateObject(wrappedValue: AuthCoordinator(
+                client: nil,
+                configurationMessage: "API 서버 주소가 설정되지 않았습니다."
+            ))
+        }
+    }
 
     var body: some Scene {
         MenuBarExtra("Mosemo", systemImage: model.collectionAllowed ? "scope" : "pause.circle") {
-            CollectorMenuView(model: model)
+            CollectorMenuView(model: model, auth: auth)
         }
         .menuBarExtraStyle(.window)
 
@@ -21,12 +44,31 @@ struct MosemoApp: App {
 
 private struct CollectorMenuView: View {
     @ObservedObject var model: CollectorViewModel
+    @ObservedObject var auth: AuthCoordinator
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("macOS Collector Feasibility Spike")
                 .font(.headline)
+
+            GroupBox("계정") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let account = auth.account {
+                        Text("카카오 계정 · \(account.id.uuidString)")
+                            .font(.caption)
+                            .textSelection(.enabled)
+                        Button("로그아웃") { auth.signOut() }
+                    } else {
+                        Button("카카오로 로그인") { auth.beginLogin() }
+                            .disabled(auth.isAuthenticating)
+                    }
+                    Text(auth.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             TextField("이번 집중 의도", text: $model.intentionDraft)
                 .textFieldStyle(.roundedBorder)
@@ -63,6 +105,9 @@ private struct CollectorMenuView: View {
         }
         .padding()
         .frame(width: 520)
+        .task {
+            await auth.restoreSession()
+        }
     }
 
     private func openDiagnostics() {
@@ -73,6 +118,25 @@ private struct CollectorMenuView: View {
                 .first { $0.title == "Collector 진단" }?
                 .makeKeyAndOrderFront(nil)
         }
+    }
+}
+
+private enum AppConfiguration {
+    static var apiBaseURL: URL? {
+        if let value = Bundle.main.object(
+            forInfoDictionaryKey: "MosemoAPIBaseURL"
+        ) as? String,
+           !value.isEmpty,
+           !value.contains("$("),
+           let url = URL(string: value) {
+            return url
+        }
+
+        #if DEBUG
+        return URL(string: "http://localhost:8000")
+        #else
+        return nil
+        #endif
     }
 }
 
