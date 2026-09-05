@@ -13,6 +13,14 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 앱을 종료하거나 새 집중 세션을 시작하면 메모리에서 사라진다. 제품 개인정보
 경계에는 포함할 수 없는 개발 진단 예외다.
 
+## 설계 문서
+
+- [macOS OpenAPI·인증 아키텍처](OPENAPI_AUTH_ARCHITECTURE.md): 모듈 경계,
+  생성 코드 관리, Kakao 로그인, Keychain, 오류·Privacy·CI 정책
+- [ADR-0001: OpenAPI 생성 코드를 MosemoAPI 내부에 둔다](adr/0001-keep-generated-openapi-inside-mosemo-api.md)
+- [ADR-0002: 브라우저 OAuth와 generated API 호출을 분리한다](adr/0002-separate-browser-oauth-from-generated-api.md)
+- [Kakao 로그인 수동 runtime 검증](AUTH_RUNTIME_CHECKLIST.md)
+
 ## 구현 경계
 
 - `NSWorkspace` 알림으로 전면 앱 전환을 받는다.
