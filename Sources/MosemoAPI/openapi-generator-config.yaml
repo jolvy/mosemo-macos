@@ -1,0 +1,9 @@
+generate:
+  - types
+  - client
+accessModifier: internal
+namingStrategy: idiomatic
+filter:
+  operations:
+    - get_me_api_v1_accounts_me_get
+    - exchange_token_api_v1_auth_token_post
