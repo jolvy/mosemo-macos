@@ -2,7 +2,8 @@
 
 이 문서는 서버가 제공한 OpenAPI artifact를 Mosemo macOS 앱에서 사용하는
 구조와 Kakao 로그인 경계를 설명한다. 서버 계약의 설계·변경·배포는 이 저장소의
-범위가 아니며, `Sources/MosemoAPI/openapi.json`을 확정된 입력으로 취급한다.
+범위가 아니며, 형제 저장소의 `mosemo-server/openapi/openapi.json`을 확정된
+입력으로 취급한다.
 
 관련 결정의 배경은 다음 ADR에 보존한다.
 
@@ -84,11 +85,11 @@ public protocol MosemoAPIClient: Sendable {
 `LiveMosemoAPIClient`가 앱의 `Account`로 명시적으로 변환한다. 서버 스키마가
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
 
-## OpenAPI snapshot과 생성 코드
+## OpenAPI 계약과 생성 코드
 
 | 항목 | 현재 값 |
 | --- | --- |
-| 입력 | `Sources/MosemoAPI/openapi.json` |
+| 입력 | `../mosemo-server/openapi/openapi.json` |
 | 설정 | `Sources/MosemoAPI/openapi-generator-config.yaml` |
 | 생성 모드 | `types`, `client` |
 | 접근 수준 | `internal` |
@@ -108,9 +109,10 @@ Debug build에서 plugin 검증 단계가 실패해 command plugin으로 미리 
 `GeneratedSources`를 커밋하는 방식으로 전환했다. 일반 Xcode build와 archive는
 generator plugin 실행 권한에 의존하지 않는다.
 
-CI는 command plugin을 다시 실행하고 committed `GeneratedSources`와 diff를
-비교한다. 루트 `Package.resolved`와 Xcode workspace의 `Package.resolved`를 함께
-커밋해 SwiftPM과 Xcode의 의존성 해석을 고정한다.
+CI는 서버 저장소를 형제 디렉터리에 checkout하고 command plugin을 다시 실행한 뒤
+committed `GeneratedSources`와 diff를 비교한다. 루트 `Package.resolved`와 Xcode
+workspace의 `Package.resolved`를 함께 커밋해 SwiftPM과 Xcode의 의존성 해석을
+고정한다.
 
 ## Kakao 로그인 흐름
 
@@ -229,23 +231,27 @@ access token, callback code, PKCE verifier는 로그와 사용자용 오류 설�
 
 ## OpenAPI 갱신 절차
 
-macOS 저장소는 서버 checkout, tag, 환경 설정이나 OpenAPI 생성 과정에 관여하지
-않는다. 전달받은 JSON artifact만 다음 명령에 넘긴다.
+계약 원본은 형제 저장소의 `mosemo-server/openapi/openapi.json`이다. 서버 계약을
+갱신한 뒤 macOS 저장소에서 다음 명령을 실행한다.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-scripts/update_openapi.sh /path/to/exported-openapi.json
+scripts/update_openapi.sh
 ```
 
 스크립트는 다음 순서로 동작한다.
 
 1. JSON이 OpenAPI 3.1이며 필수 operation과 200/400/401/422 응답을 포함하는지 확인한다.
-2. 기존 snapshot과 `GeneratedSources`를 임시 위치에 백업한다.
-3. snapshot을 교체하고 command plugin으로 Swift 코드를 생성한다.
-4. `MosemoAPI` target build와 전체 `swift test`를 실행한다.
-5. 검증 실패 시 snapshot과 generated source를 이전 상태로 복구한다.
+2. 기존 `GeneratedSources`를 임시 위치에 백업한다.
+3. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
+4. command plugin으로 Swift 코드를 생성한다.
+5. `MosemoAPI` target build와 전체 `swift test`를 실행한다.
+6. 임시 링크를 제거한다.
+7. 검증 실패 시 generated source를 이전 상태로 복구한다.
 
-일반 앱 build와 CI는 외부 서버에서 명세를 다운로드하지 않는다.
+일반 앱 build는 커밋된 generated source를 사용하므로 서버 저장소를 요구하지 않는다.
+CI는 실행 중인 서버나 네트워크 endpoint에서 명세를 다운로드하지 않고, 별도로
+checkout한 서버 저장소의 계약 파일을 사용한다.
 
 ## 테스트와 완료 기준
 
@@ -276,10 +282,9 @@ Release archive가 통과했다. 실제 Kakao 계정을 사용하는 end-to-end 
 자동 검증에 포함하지 않았으며
 [Kakao 로그인 수동 runtime 검증](AUTH_RUNTIME_CHECKLIST.md)에 별도로 기록한다.
 
-현재 OpenAPI의 `ValidationErrorDetail.ctx`와 `input` nullable schema는 generator가
-지원하지 않아 경고와 함께 생략된다. wrapper는 422 본문을 해석하지 않고 status로
-매핑하므로 현재 인증 흐름에는 영향을 주지 않지만, snapshot 갱신 때 경고 변화는
-확인해야 한다.
+현재 OpenAPI의 `ValidationDetail`은 `loc`, `msg`, `type`만 공개하며 생성된
+Swift 타입도 같은 필드를 반영한다. wrapper는 422 본문을 해석하지 않고 HTTP
+status를 `validationFailed`로 매핑한다.
 
 ## 의도적으로 제외한 것
 
@@ -290,6 +295,6 @@ Release archive가 통과했다. 실제 Kakao 계정을 사용하는 end-to-end 
 - `ActivitySyncClient` 빈 인터페이스
 - 실제 Kakao 계정이 필요한 자동 end-to-end 테스트
 
-활동 전송 API가 snapshot에 추가되기 전에는 sync abstraction을 미리 만들지 않는다.
+활동 전송 API가 계약에 추가되기 전에는 sync abstraction을 미리 만들지 않는다.
 추후 구현할 때는 `CollectorCore` 이벤트를 API DTO로 명시적으로 변환하고 event ID,
 request idempotency, partial ACK와 재전송 규칙을 먼저 확정해야 한다.

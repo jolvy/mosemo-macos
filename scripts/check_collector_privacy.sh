@@ -5,7 +5,13 @@ script_directory=$(CDPATH= cd "$(dirname "$0")" && pwd)
 component_root=$(CDPATH= cd "$script_directory/.." && pwd)
 production_sources="$component_root/Sources"
 info_plist="$component_root/Info.plist"
+openapi_contract="$component_root/../mosemo-server/openapi/openapi.json"
 failed=0
+
+if [ ! -f "$openapi_contract" ]; then
+    printf 'FAIL: Server OpenAPI contract not found: %s\n' "$openapi_contract" >&2
+    exit 66
+fi
 
 check_absent() {
     label=$1
@@ -53,7 +59,7 @@ check_absent \
     "forbidden payload field names are absent from safe core models" \
     'fullURL|pageTitle|keyContents|clickCoordinates|mousePath|screenImage|pageBody|formValue' \
     "$production_sources/CollectorCore" \
-    "$production_sources/MosemoAPI/openapi.json"
+    "$openapi_contract"
 
 if [ "$failed" -ne 0 ]; then
     exit 1

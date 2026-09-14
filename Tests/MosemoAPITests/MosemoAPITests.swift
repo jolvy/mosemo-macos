@@ -47,7 +47,11 @@ final class MosemoAPITests: XCTestCase {
 
     func testAuthenticateMapsBadRequestWithoutInspectingDetail() async {
         let client = makeClient(exchange: { _ in
-            .badRequest(.init(body: .json(.init(detail: "changed message"))))
+            .badRequest(.init(body: .json(makeErrorResponse(
+                code: 400,
+                status: "AUTH_INVALID_CODE",
+                message: "changed message"
+            ))))
         })
 
         await assertAPIError(.invalidAuthorizationCode) {
@@ -60,7 +64,11 @@ final class MosemoAPITests: XCTestCase {
 
     func testAuthenticateMapsValidationFailure() async {
         let client = makeClient(exchange: { _ in
-            .unprocessableContent(.init(body: .json(.init(detail: []))))
+            .unprocessableContent(.init(body: .json(makeErrorResponse(
+                code: 422,
+                status: "VALIDATION_ERROR",
+                message: "validation failed"
+            ))))
         })
 
         await assertAPIError(.validationFailed) {
@@ -74,7 +82,7 @@ final class MosemoAPITests: XCTestCase {
     func testAuthenticateMapsMalformedBadRequestByStatus() async {
         let client = makeClient(exchange: { input in
             throw ClientError(
-                operationID: "exchange_token_api_v1_auth_token_post",
+                operationID: "authExchangeToken",
                 operationInput: input,
                 response: HTTPResponse(status: .badRequest),
                 causeDescription: "malformed error body",
@@ -98,7 +106,11 @@ final class MosemoAPITests: XCTestCase {
         let client = makeClient(
             tokenStore: tokenStore,
             getMe: { _ in
-                .unauthorized(.init(body: .json(.init(detail: "unauthorized"))))
+                .unauthorized(.init(body: .json(makeErrorResponse(
+                    code: 401,
+                    status: "AUTH_INVALID_ACCESS_TOKEN",
+                    message: "unauthorized"
+                ))))
             }
         )
 
@@ -118,7 +130,7 @@ final class MosemoAPITests: XCTestCase {
             tokenStore: tokenStore,
             getMe: { input in
                 throw ClientError(
-                    operationID: "get_me_api_v1_accounts_me_get",
+                    operationID: "accountsGetMe",
                     operationInput: input,
                     response: HTTPResponse(status: .unauthorized),
                     causeDescription: "malformed error body",
@@ -342,26 +354,39 @@ final class MosemoAPITests: XCTestCase {
     }
 }
 
+private func makeErrorResponse(
+    code: Int,
+    status: String,
+    message: String
+) -> Components.Schemas.ErrorResponse {
+    .init(error: .init(
+        code: code,
+        details: [],
+        message: message,
+        status: status
+    ))
+}
+
 private struct MockGeneratedAPI: APIProtocol {
     typealias Exchange = @Sendable (
-        Operations.ExchangeTokenApiV1AuthTokenPost.Input
-    ) async throws -> Operations.ExchangeTokenApiV1AuthTokenPost.Output
+        Operations.AuthExchangeToken.Input
+    ) async throws -> Operations.AuthExchangeToken.Output
     typealias GetMe = @Sendable (
-        Operations.GetMeApiV1AccountsMeGet.Input
-    ) async throws -> Operations.GetMeApiV1AccountsMeGet.Output
+        Operations.AccountsGetMe.Input
+    ) async throws -> Operations.AccountsGetMe.Output
 
     let exchange: Exchange
     let getMe: GetMe
 
-    func exchangeTokenApiV1AuthTokenPost(
-        _ input: Operations.ExchangeTokenApiV1AuthTokenPost.Input
-    ) async throws -> Operations.ExchangeTokenApiV1AuthTokenPost.Output {
+    func authExchangeToken(
+        _ input: Operations.AuthExchangeToken.Input
+    ) async throws -> Operations.AuthExchangeToken.Output {
         try await exchange(input)
     }
 
-    func getMeApiV1AccountsMeGet(
-        _ input: Operations.GetMeApiV1AccountsMeGet.Input
-    ) async throws -> Operations.GetMeApiV1AccountsMeGet.Output {
+    func accountsGetMe(
+        _ input: Operations.AccountsGetMe.Input
+    ) async throws -> Operations.AccountsGetMe.Output {
         try await getMe(input)
     }
 }

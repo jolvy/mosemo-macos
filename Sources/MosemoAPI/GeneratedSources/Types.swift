@@ -16,15 +16,15 @@ internal protocol APIProtocol: Sendable {
     /// Bearer 액세스 토큰으로 인증된 Mosemo 계정 정보를 조회합니다.
     ///
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
-    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)`.
-    func getMeApiV1AccountsMeGet(_ input: Operations.GetMeApiV1AccountsMeGet.Input) async throws -> Operations.GetMeApiV1AccountsMeGet.Output
+    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
+    func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output
     /// 액세스 토큰 발급
     ///
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/auth/token`.
-    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)`.
-    func exchangeTokenApiV1AuthTokenPost(_ input: Operations.ExchangeTokenApiV1AuthTokenPost.Input) async throws -> Operations.ExchangeTokenApiV1AuthTokenPost.Output
+    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)`.
+    func authExchangeToken(_ input: Operations.AuthExchangeToken.Input) async throws -> Operations.AuthExchangeToken.Output
 }
 
 /// Convenience overloads for operation inputs.
@@ -34,21 +34,21 @@ extension APIProtocol {
     /// Bearer 액세스 토큰으로 인증된 Mosemo 계정 정보를 조회합니다.
     ///
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
-    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)`.
-    internal func getMeApiV1AccountsMeGet(headers: Operations.GetMeApiV1AccountsMeGet.Input.Headers = .init()) async throws -> Operations.GetMeApiV1AccountsMeGet.Output {
-        try await getMeApiV1AccountsMeGet(Operations.GetMeApiV1AccountsMeGet.Input(headers: headers))
+    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
+    internal func accountsGetMe(headers: Operations.AccountsGetMe.Input.Headers = .init()) async throws -> Operations.AccountsGetMe.Output {
+        try await accountsGetMe(Operations.AccountsGetMe.Input(headers: headers))
     }
     /// 액세스 토큰 발급
     ///
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/auth/token`.
-    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)`.
-    internal func exchangeTokenApiV1AuthTokenPost(
-        headers: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Headers = .init(),
-        body: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Body
-    ) async throws -> Operations.ExchangeTokenApiV1AuthTokenPost.Output {
-        try await exchangeTokenApiV1AuthTokenPost(Operations.ExchangeTokenApiV1AuthTokenPost.Input(
+    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)`.
+    internal func authExchangeToken(
+        headers: Operations.AuthExchangeToken.Input.Headers = .init(),
+        body: Operations.AuthExchangeToken.Input.Body
+    ) async throws -> Operations.AuthExchangeToken.Output {
+        try await authExchangeToken(Operations.AuthExchangeToken.Input(
             headers: headers,
             body: body
         ))
@@ -72,15 +72,15 @@ internal enum Components {
         internal struct AccountResponse: Codable, Hashable, Sendable {
             /// Mosemo 계정의 고유 식별자입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/AccountResponse/account_id`.
+            /// - Remark: Generated from `#/components/schemas/AccountResponse/accountId`.
             internal var accountId: Swift.String
             /// 계정이 생성된 시각입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/AccountResponse/created_at`.
+            /// - Remark: Generated from `#/components/schemas/AccountResponse/createdAt`.
             internal var createdAt: Foundation.Date
             /// 외부 인증 제공자를 통해 마지막으로 인증한 시각입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/AccountResponse/last_authenticated_at`.
+            /// - Remark: Generated from `#/components/schemas/AccountResponse/lastAuthenticatedAt`.
             internal var lastAuthenticatedAt: Foundation.Date
             /// 계정 인증에 사용한 외부 인증 제공자입니다.
             ///
@@ -105,48 +105,109 @@ internal enum Components {
                 self.provider = provider
             }
             internal enum CodingKeys: String, CodingKey {
-                case accountId = "account_id"
-                case createdAt = "created_at"
-                case lastAuthenticatedAt = "last_authenticated_at"
+                case accountId
+                case createdAt
+                case lastAuthenticatedAt
                 case provider
             }
         }
-        /// Mosemo API가 통제된 오류를 반환할 때 사용하는 응답입니다.
+        /// 공개 오류 envelope 안의 공통 payload입니다.
         ///
-        /// - Remark: Generated from `#/components/schemas/ApiErrorResponse`.
-        internal struct ApiErrorResponse: Codable, Hashable, Sendable {
-            /// 클라이언트에 공개하는 오류 메시지입니다.
+        /// - Remark: Generated from `#/components/schemas/ErrorPayload`.
+        internal struct ErrorPayload: Codable, Hashable, Sendable {
+            /// 실제 HTTP response status와 같은 오류 코드입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ApiErrorResponse/detail`.
-            internal var detail: Swift.String
-            /// Creates a new `ApiErrorResponse`.
+            /// - Remark: Generated from `#/components/schemas/ErrorPayload/code`.
+            internal var code: Swift.Int
+            /// 검증 오류 상세 배열이며 일반 오류에서는 비어 있습니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ErrorPayload/details`.
+            internal var details: [Components.Schemas.ValidationDetail]
+            /// 개발자용 영문 오류 설명입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ErrorPayload/message`.
+            internal var message: Swift.String
+            /// 클라이언트가 분기할 애플리케이션 오류 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ErrorPayload/status`.
+            internal var status: Swift.String
+            /// Creates a new `ErrorPayload`.
             ///
             /// - Parameters:
-            ///   - detail: 클라이언트에 공개하는 오류 메시지입니다.
-            internal init(detail: Swift.String) {
-                self.detail = detail
+            ///   - code: 실제 HTTP response status와 같은 오류 코드입니다.
+            ///   - details: 검증 오류 상세 배열이며 일반 오류에서는 비어 있습니다.
+            ///   - message: 개발자용 영문 오류 설명입니다.
+            ///   - status: 클라이언트가 분기할 애플리케이션 오류 식별자입니다.
+            internal init(
+                code: Swift.Int,
+                details: [Components.Schemas.ValidationDetail],
+                message: Swift.String,
+                status: Swift.String
+            ) {
+                self.code = code
+                self.details = details
+                self.message = message
+                self.status = status
             }
             internal enum CodingKeys: String, CodingKey {
-                case detail
+                case code
+                case details
+                case message
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.code = try container.decode(
+                    Swift.Int.self,
+                    forKey: .code
+                )
+                self.details = try container.decode(
+                    [Components.Schemas.ValidationDetail].self,
+                    forKey: .details
+                )
+                self.message = try container.decode(
+                    Swift.String.self,
+                    forKey: .message
+                )
+                self.status = try container.decode(
+                    Swift.String.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "code",
+                    "details",
+                    "message",
+                    "status"
+                ])
             }
         }
-        /// FastAPI가 요청 입력값 검증 실패 시 반환하는 응답입니다.
+        /// Mosemo 공개 API가 반환하는 공통 오류 response입니다.
         ///
-        /// - Remark: Generated from `#/components/schemas/RequestValidationErrorResponse`.
-        internal struct RequestValidationErrorResponse: Codable, Hashable, Sendable {
-            /// 요청에서 발견된 입력값 검증 오류 목록입니다.
+        /// - Remark: Generated from `#/components/schemas/ErrorResponse`.
+        internal struct ErrorResponse: Codable, Hashable, Sendable {
+            /// 공개 오류 payload입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/RequestValidationErrorResponse/detail`.
-            internal var detail: [Components.Schemas.ValidationErrorDetail]
-            /// Creates a new `RequestValidationErrorResponse`.
+            /// - Remark: Generated from `#/components/schemas/ErrorResponse/error`.
+            internal var error: Components.Schemas.ErrorPayload
+            /// Creates a new `ErrorResponse`.
             ///
             /// - Parameters:
-            ///   - detail: 요청에서 발견된 입력값 검증 오류 목록입니다.
-            internal init(detail: [Components.Schemas.ValidationErrorDetail]) {
-                self.detail = detail
+            ///   - error: 공개 오류 payload입니다.
+            internal init(error: Components.Schemas.ErrorPayload) {
+                self.error = error
             }
             internal enum CodingKeys: String, CodingKey {
-                case detail
+                case error
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.error = try container.decode(
+                    Components.Schemas.ErrorPayload.self,
+                    forKey: .error
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "error"
+                ])
             }
         }
         /// 일회용 인증 코드를 Mosemo 액세스 토큰으로 교환하는 요청입니다.
@@ -159,17 +220,17 @@ internal enum Components {
             internal var code: Swift.String
             /// 로그인 요청의 code_challenge를 생성할 때 사용한 43~128자의 PKCE code verifier입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenRequest/code_verifier`.
+            /// - Remark: Generated from `#/components/schemas/TokenRequest/codeVerifier`.
             internal var codeVerifier: Swift.String
             /// 토큰 발급 방식이며 authorization_code만 허용합니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenRequest/grant_type`.
+            /// - Remark: Generated from `#/components/schemas/TokenRequest/grantType`.
             internal enum GrantTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
                 case authorizationCode = "authorization_code"
             }
             /// 토큰 발급 방식이며 authorization_code만 허용합니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenRequest/grant_type`.
+            /// - Remark: Generated from `#/components/schemas/TokenRequest/grantType`.
             internal var grantType: Components.Schemas.TokenRequest.GrantTypePayload
             /// Creates a new `TokenRequest`.
             ///
@@ -188,8 +249,28 @@ internal enum Components {
             }
             internal enum CodingKeys: String, CodingKey {
                 case code
-                case codeVerifier = "code_verifier"
-                case grantType = "grant_type"
+                case codeVerifier
+                case grantType
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.code = try container.decode(
+                    Swift.String.self,
+                    forKey: .code
+                )
+                self.codeVerifier = try container.decode(
+                    Swift.String.self,
+                    forKey: .codeVerifier
+                )
+                self.grantType = try container.decode(
+                    Components.Schemas.TokenRequest.GrantTypePayload.self,
+                    forKey: .grantType
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "code",
+                    "codeVerifier",
+                    "grantType"
+                ])
             }
         }
         /// Mosemo API 인증에 사용하는 액세스 토큰 응답입니다.
@@ -198,21 +279,21 @@ internal enum Components {
         internal struct TokenResponse: Codable, Hashable, Sendable {
             /// Authorization 헤더에 사용할 Mosemo 액세스 토큰입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenResponse/access_token`.
+            /// - Remark: Generated from `#/components/schemas/TokenResponse/accessToken`.
             internal var accessToken: Swift.String
             /// 액세스 토큰이 발급 시점부터 유효한 시간(초)입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenResponse/expires_in`.
+            /// - Remark: Generated from `#/components/schemas/TokenResponse/expiresIn`.
             internal var expiresIn: Swift.Int
             /// 액세스 토큰의 인증 방식이며 Bearer로 고정됩니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenResponse/token_type`.
+            /// - Remark: Generated from `#/components/schemas/TokenResponse/tokenType`.
             internal enum TokenTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
                 case bearer = "Bearer"
             }
             /// 액세스 토큰의 인증 방식이며 Bearer로 고정됩니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/TokenResponse/token_type`.
+            /// - Remark: Generated from `#/components/schemas/TokenResponse/tokenType`.
             internal var tokenType: Components.Schemas.TokenResponse.TokenTypePayload?
             /// Creates a new `TokenResponse`.
             ///
@@ -230,20 +311,20 @@ internal enum Components {
                 self.tokenType = tokenType
             }
             internal enum CodingKeys: String, CodingKey {
-                case accessToken = "access_token"
-                case expiresIn = "expires_in"
-                case tokenType = "token_type"
+                case accessToken
+                case expiresIn
+                case tokenType
             }
         }
-        /// 요청에서 발견된 개별 입력값 검증 오류입니다.
+        /// RequestValidationError에서 선택한 공개 검증 오류 정보입니다.
         ///
-        /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail`.
-        internal struct ValidationErrorDetail: Codable, Hashable, Sendable {
-            /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/LocPayload`.
+        /// - Remark: Generated from `#/components/schemas/ValidationDetail`.
+        internal struct ValidationDetail: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ValidationDetail/LocPayload`.
             internal struct LocPayloadPayload: Codable, Hashable, Sendable {
-                /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/LocPayload/value1`.
+                /// - Remark: Generated from `#/components/schemas/ValidationDetail/LocPayload/value1`.
                 internal var value1: Swift.String?
-                /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/LocPayload/value2`.
+                /// - Remark: Generated from `#/components/schemas/ValidationDetail/LocPayload/value2`.
                 internal var value2: Swift.Int?
                 /// Creates a new `LocPayloadPayload`.
                 ///
@@ -286,30 +367,30 @@ internal enum Components {
                     ])
                 }
             }
-            /// 오류가 발생한 요청 영역과 필드의 경로입니다.
+            /// Pydantic validation error의 loc 원문입니다. JSON에서는 문자열과 정수 segment의 배열입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/loc`.
-            internal typealias LocPayload = [Components.Schemas.ValidationErrorDetail.LocPayloadPayload]
-            /// 오류가 발생한 요청 영역과 필드의 경로입니다.
+            /// - Remark: Generated from `#/components/schemas/ValidationDetail/loc`.
+            internal typealias LocPayload = [Components.Schemas.ValidationDetail.LocPayloadPayload]
+            /// Pydantic validation error의 loc 원문입니다. JSON에서는 문자열과 정수 segment의 배열입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/loc`.
-            internal var loc: Components.Schemas.ValidationErrorDetail.LocPayload
-            /// 입력값이 유효하지 않은 이유입니다.
+            /// - Remark: Generated from `#/components/schemas/ValidationDetail/loc`.
+            internal var loc: Components.Schemas.ValidationDetail.LocPayload
+            /// Pydantic validation error의 msg 원문입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/msg`.
+            /// - Remark: Generated from `#/components/schemas/ValidationDetail/msg`.
             internal var msg: Swift.String
-            /// 검증 오류 유형을 식별하는 코드입니다.
+            /// Pydantic validation error의 type 원문 또는 서버 정의 오류 유형입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ValidationErrorDetail/type`.
+            /// - Remark: Generated from `#/components/schemas/ValidationDetail/type`.
             internal var _type: Swift.String
-            /// Creates a new `ValidationErrorDetail`.
+            /// Creates a new `ValidationDetail`.
             ///
             /// - Parameters:
-            ///   - loc: 오류가 발생한 요청 영역과 필드의 경로입니다.
-            ///   - msg: 입력값이 유효하지 않은 이유입니다.
-            ///   - _type: 검증 오류 유형을 식별하는 코드입니다.
+            ///   - loc: Pydantic validation error의 loc 원문입니다. JSON에서는 문자열과 정수 segment의 배열입니다.
+            ///   - msg: Pydantic validation error의 msg 원문입니다.
+            ///   - _type: Pydantic validation error의 type 원문 또는 서버 정의 오류 유형입니다.
             internal init(
-                loc: Components.Schemas.ValidationErrorDetail.LocPayload,
+                loc: Components.Schemas.ValidationDetail.LocPayload,
                 msg: Swift.String,
                 _type: Swift.String
             ) {
@@ -321,6 +402,26 @@ internal enum Components {
                 case loc
                 case msg
                 case _type = "type"
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.loc = try container.decode(
+                    Components.Schemas.ValidationDetail.LocPayload.self,
+                    forKey: .loc
+                )
+                self.msg = try container.decode(
+                    Swift.String.self,
+                    forKey: .msg
+                )
+                self._type = try container.decode(
+                    Swift.String.self,
+                    forKey: ._type
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "loc",
+                    "msg",
+                    "type"
+                ])
             }
         }
     }
@@ -341,27 +442,27 @@ internal enum Operations {
     /// Bearer 액세스 토큰으로 인증된 Mosemo 계정 정보를 조회합니다.
     ///
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
-    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)`.
-    internal enum GetMeApiV1AccountsMeGet {
-        internal static let id: Swift.String = "get_me_api_v1_accounts_me_get"
+    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
+    internal enum AccountsGetMe {
+        internal static let id: Swift.String = "accountsGetMe"
         internal struct Input: Sendable, Hashable {
             /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/header`.
             internal struct Headers: Sendable, Hashable {
-                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetMeApiV1AccountsMeGet.AcceptableContentType>]
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.AccountsGetMe.AcceptableContentType>]
                 /// Creates a new `Headers`.
                 ///
                 /// - Parameters:
                 ///   - accept:
-                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetMeApiV1AccountsMeGet.AcceptableContentType>] = .defaultValues()) {
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.AccountsGetMe.AcceptableContentType>] = .defaultValues()) {
                     self.accept = accept
                 }
             }
-            internal var headers: Operations.GetMeApiV1AccountsMeGet.Input.Headers
+            internal var headers: Operations.AccountsGetMe.Input.Headers
             /// Creates a new `Input`.
             ///
             /// - Parameters:
             ///   - headers:
-            internal init(headers: Operations.GetMeApiV1AccountsMeGet.Input.Headers = .init()) {
+            internal init(headers: Operations.AccountsGetMe.Input.Headers = .init()) {
                 self.headers = headers
             }
         }
@@ -385,26 +486,26 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.GetMeApiV1AccountsMeGet.Output.Ok.Body
+                internal var body: Operations.AccountsGetMe.Output.Ok.Body
                 /// Creates a new `Ok`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.GetMeApiV1AccountsMeGet.Output.Ok.Body) {
+                internal init(body: Operations.AccountsGetMe.Output.Ok.Body) {
                     self.body = body
                 }
             }
             /// 현재 인증된 계정의 공개 정보입니다.
             ///
-            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)/responses/200`.
+            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)/responses/200`.
             ///
             /// HTTP response code: `200 ok`.
-            case ok(Operations.GetMeApiV1AccountsMeGet.Output.Ok)
+            case ok(Operations.AccountsGetMe.Output.Ok)
             /// The associated value of the enum case if `self` is `.ok`.
             ///
             /// - Throws: An error if `self` is not `.ok`.
             /// - SeeAlso: `.ok`.
-            internal var ok: Operations.GetMeApiV1AccountsMeGet.Output.Ok {
+            internal var ok: Operations.AccountsGetMe.Output.Ok {
                 get throws {
                     switch self {
                     case let .ok(response):
@@ -427,26 +528,26 @@ internal enum Operations {
                     /// 클라이언트가 사용해야 하는 인증 방식입니다.
                     ///
                     /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/401/headers/WWW-Authenticate`.
-                    internal var wwwAuthenticate: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    internal var wwwAuthenticate: Operations.AccountsGetMe.Output.Unauthorized.Headers.WWWAuthenticatePayload?
                     /// Creates a new `Headers`.
                     ///
                     /// - Parameters:
                     ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
-                    internal init(wwwAuthenticate: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                    internal init(wwwAuthenticate: Operations.AccountsGetMe.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
                         self.wwwAuthenticate = wwwAuthenticate
                     }
                 }
                 /// Received HTTP response headers
-                internal var headers: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers
+                internal var headers: Operations.AccountsGetMe.Output.Unauthorized.Headers
                 /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/401/content`.
                 internal enum Body: Sendable, Hashable {
                     /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/401/content/application\/json`.
-                    case json(Components.Schemas.ApiErrorResponse)
+                    case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
                     /// - Throws: An error if `self` is not `.json`.
                     /// - SeeAlso: `.json`.
-                    internal var json: Components.Schemas.ApiErrorResponse {
+                    internal var json: Components.Schemas.ErrorResponse {
                         get throws {
                             switch self {
                             case let .json(body):
@@ -456,31 +557,31 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Body
+                internal var body: Operations.AccountsGetMe.Output.Unauthorized.Body
                 /// Creates a new `Unauthorized`.
                 ///
                 /// - Parameters:
                 ///   - headers: Received HTTP response headers
                 ///   - body: Received HTTP response body
                 internal init(
-                    headers: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers = .init(),
-                    body: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Body
+                    headers: Operations.AccountsGetMe.Output.Unauthorized.Headers = .init(),
+                    body: Operations.AccountsGetMe.Output.Unauthorized.Body
                 ) {
                     self.headers = headers
                     self.body = body
                 }
             }
-            /// 액세스 토큰이 누락되었거나 유효하지 않거나 만료되었거나, 토큰의 계정이 존재하지 않습니다.
+            /// Unauthorized
             ///
-            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)/responses/401`.
+            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)/responses/401`.
             ///
             /// HTTP response code: `401 unauthorized`.
-            case unauthorized(Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized)
+            case unauthorized(Operations.AccountsGetMe.Output.Unauthorized)
             /// The associated value of the enum case if `self` is `.unauthorized`.
             ///
             /// - Throws: An error if `self` is not `.unauthorized`.
             /// - SeeAlso: `.unauthorized`.
-            internal var unauthorized: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized {
+            internal var unauthorized: Operations.AccountsGetMe.Output.Unauthorized {
                 get throws {
                     switch self {
                     case let .unauthorized(response):
@@ -488,6 +589,180 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AccountsGetMe.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.AccountsGetMe.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.AccountsGetMe.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.AccountsGetMe.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.AccountsGetMe.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AccountsGetMe.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.AccountsGetMe.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.AccountsGetMe.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.AccountsGetMe.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.AccountsGetMe.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/accounts/me/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AccountsGetMe.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.AccountsGetMe.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.AccountsGetMe.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.AccountsGetMe.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
                             response: self
                         )
                     }
@@ -529,36 +804,36 @@ internal enum Operations {
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/auth/token`.
-    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)`.
-    internal enum ExchangeTokenApiV1AuthTokenPost {
-        internal static let id: Swift.String = "exchange_token_api_v1_auth_token_post"
+    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)`.
+    internal enum AuthExchangeToken {
+        internal static let id: Swift.String = "authExchangeToken"
         internal struct Input: Sendable, Hashable {
             /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/header`.
             internal struct Headers: Sendable, Hashable {
-                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ExchangeTokenApiV1AuthTokenPost.AcceptableContentType>]
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.AuthExchangeToken.AcceptableContentType>]
                 /// Creates a new `Headers`.
                 ///
                 /// - Parameters:
                 ///   - accept:
-                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ExchangeTokenApiV1AuthTokenPost.AcceptableContentType>] = .defaultValues()) {
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.AuthExchangeToken.AcceptableContentType>] = .defaultValues()) {
                     self.accept = accept
                 }
             }
-            internal var headers: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Headers
+            internal var headers: Operations.AuthExchangeToken.Input.Headers
             /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/requestBody`.
             internal enum Body: Sendable, Hashable {
                 /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/requestBody/content/application\/json`.
                 case json(Components.Schemas.TokenRequest)
             }
-            internal var body: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Body
+            internal var body: Operations.AuthExchangeToken.Input.Body
             /// Creates a new `Input`.
             ///
             /// - Parameters:
             ///   - headers:
             ///   - body:
             internal init(
-                headers: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Headers = .init(),
-                body: Operations.ExchangeTokenApiV1AuthTokenPost.Input.Body
+                headers: Operations.AuthExchangeToken.Input.Headers = .init(),
+                body: Operations.AuthExchangeToken.Input.Body
             ) {
                 self.headers = headers
                 self.body = body
@@ -575,7 +850,7 @@ internal enum Operations {
                     /// 응답을 저장하지 않도록 no-store로 설정됩니다.
                     ///
                     /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/200/headers/Cache-Control`.
-                    internal var cacheControl: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.CacheControlPayload?
+                    internal var cacheControl: Operations.AuthExchangeToken.Output.Ok.Headers.CacheControlPayload?
                     /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/200/headers/Pragma`.
                     internal enum PragmaPayload: String, Codable, Hashable, Sendable, CaseIterable {
                         case noCache = "no-cache"
@@ -583,22 +858,22 @@ internal enum Operations {
                     /// 이전 HTTP 캐시와의 호환을 위해 no-cache로 설정됩니다.
                     ///
                     /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/200/headers/Pragma`.
-                    internal var pragma: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.PragmaPayload?
+                    internal var pragma: Operations.AuthExchangeToken.Output.Ok.Headers.PragmaPayload?
                     /// Creates a new `Headers`.
                     ///
                     /// - Parameters:
                     ///   - cacheControl: 응답을 저장하지 않도록 no-store로 설정됩니다.
                     ///   - pragma: 이전 HTTP 캐시와의 호환을 위해 no-cache로 설정됩니다.
                     internal init(
-                        cacheControl: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.CacheControlPayload? = nil,
-                        pragma: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.PragmaPayload? = nil
+                        cacheControl: Operations.AuthExchangeToken.Output.Ok.Headers.CacheControlPayload? = nil,
+                        pragma: Operations.AuthExchangeToken.Output.Ok.Headers.PragmaPayload? = nil
                     ) {
                         self.cacheControl = cacheControl
                         self.pragma = pragma
                     }
                 }
                 /// Received HTTP response headers
-                internal var headers: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers
+                internal var headers: Operations.AuthExchangeToken.Output.Ok.Headers
                 /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/200/content`.
                 internal enum Body: Sendable, Hashable {
                     /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/200/content/application\/json`.
@@ -617,15 +892,15 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Body
+                internal var body: Operations.AuthExchangeToken.Output.Ok.Body
                 /// Creates a new `Ok`.
                 ///
                 /// - Parameters:
                 ///   - headers: Received HTTP response headers
                 ///   - body: Received HTTP response body
                 internal init(
-                    headers: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers = .init(),
-                    body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Body
+                    headers: Operations.AuthExchangeToken.Output.Ok.Headers = .init(),
+                    body: Operations.AuthExchangeToken.Output.Ok.Body
                 ) {
                     self.headers = headers
                     self.body = body
@@ -633,15 +908,15 @@ internal enum Operations {
             }
             /// Mosemo Bearer 액세스 토큰입니다.
             ///
-            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)/responses/200`.
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/200`.
             ///
             /// HTTP response code: `200 ok`.
-            case ok(Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok)
+            case ok(Operations.AuthExchangeToken.Output.Ok)
             /// The associated value of the enum case if `self` is `.ok`.
             ///
             /// - Throws: An error if `self` is not `.ok`.
             /// - SeeAlso: `.ok`.
-            internal var ok: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok {
+            internal var ok: Operations.AuthExchangeToken.Output.Ok {
                 get throws {
                     switch self {
                     case let .ok(response):
@@ -658,12 +933,12 @@ internal enum Operations {
                 /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/400/content`.
                 internal enum Body: Sendable, Hashable {
                     /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/400/content/application\/json`.
-                    case json(Components.Schemas.ApiErrorResponse)
+                    case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
                     /// - Throws: An error if `self` is not `.json`.
                     /// - SeeAlso: `.json`.
-                    internal var json: Components.Schemas.ApiErrorResponse {
+                    internal var json: Components.Schemas.ErrorResponse {
                         get throws {
                             switch self {
                             case let .json(body):
@@ -673,26 +948,26 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.BadRequest.Body
+                internal var body: Operations.AuthExchangeToken.Output.BadRequest.Body
                 /// Creates a new `BadRequest`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.BadRequest.Body) {
+                internal init(body: Operations.AuthExchangeToken.Output.BadRequest.Body) {
                     self.body = body
                 }
             }
-            /// 일회용 인증 코드가 없거나 만료되었거나 이미 사용되었거나, PKCE code verifier가 유효하지 않습니다.
+            /// Bad Request
             ///
-            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)/responses/400`.
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/400`.
             ///
             /// HTTP response code: `400 badRequest`.
-            case badRequest(Operations.ExchangeTokenApiV1AuthTokenPost.Output.BadRequest)
+            case badRequest(Operations.AuthExchangeToken.Output.BadRequest)
             /// The associated value of the enum case if `self` is `.badRequest`.
             ///
             /// - Throws: An error if `self` is not `.badRequest`.
             /// - SeeAlso: `.badRequest`.
-            internal var badRequest: Operations.ExchangeTokenApiV1AuthTokenPost.Output.BadRequest {
+            internal var badRequest: Operations.AuthExchangeToken.Output.BadRequest {
                 get throws {
                     switch self {
                     case let .badRequest(response):
@@ -705,16 +980,16 @@ internal enum Operations {
                     }
                 }
             }
-            internal struct UnprocessableContent: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/422/content`.
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/404/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/422/content/application\/json`.
-                    case json(Components.Schemas.RequestValidationErrorResponse)
+                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
                     /// - Throws: An error if `self` is not `.json`.
                     /// - SeeAlso: `.json`.
-                    internal var json: Components.Schemas.RequestValidationErrorResponse {
+                    internal var json: Components.Schemas.ErrorResponse {
                         get throws {
                             switch self {
                             case let .json(body):
@@ -724,26 +999,149 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.UnprocessableContent.Body
+                internal var body: Operations.AuthExchangeToken.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.AuthExchangeToken.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.AuthExchangeToken.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.AuthExchangeToken.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.AuthExchangeToken.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AuthExchangeToken.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.AuthExchangeToken.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.AuthExchangeToken.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.AuthExchangeToken.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.AuthExchangeToken.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AuthExchangeToken.Output.UnprocessableContent.Body
                 /// Creates a new `UnprocessableContent`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.UnprocessableContent.Body) {
+                internal init(body: Operations.AuthExchangeToken.Output.UnprocessableContent.Body) {
                     self.body = body
                 }
             }
-            /// 요청 본문의 필수 필드 또는 grant_type이 유효하지 않습니다.
+            /// Unprocessable Content
             ///
-            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)/responses/422`.
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/422`.
             ///
             /// HTTP response code: `422 unprocessableContent`.
-            case unprocessableContent(Operations.ExchangeTokenApiV1AuthTokenPost.Output.UnprocessableContent)
+            case unprocessableContent(Operations.AuthExchangeToken.Output.UnprocessableContent)
             /// The associated value of the enum case if `self` is `.unprocessableContent`.
             ///
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
-            internal var unprocessableContent: Operations.ExchangeTokenApiV1AuthTokenPost.Output.UnprocessableContent {
+            internal var unprocessableContent: Operations.AuthExchangeToken.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):
@@ -751,6 +1149,57 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/auth/token/POST/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.AuthExchangeToken.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.AuthExchangeToken.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.AuthExchangeToken.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.AuthExchangeToken.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
                             response: self
                         )
                     }

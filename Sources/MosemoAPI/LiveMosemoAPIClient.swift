@@ -92,7 +92,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
                 grantType: .authorizationCode
             )
             let response = try await anonymousClient
-                .exchangeTokenApiV1AuthTokenPost(body: .json(request))
+                .authExchangeToken(body: .json(request))
 
             switch response {
             case .ok(let response):
@@ -108,8 +108,14 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
                 throw MosemoAPIError.invalidAuthorizationCode
             case .unprocessableContent:
                 throw MosemoAPIError.validationFailed
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
             case .undocumented(let statusCode, _):
-                throw Self.error(forUndocumentedStatus: statusCode)
+                throw Self.error(forHTTPStatus: statusCode)
             }
 
             return try await currentAccount()
@@ -120,14 +126,20 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
 
     public func currentAccount() async throws -> Account {
         do {
-            let response = try await authenticatedClient.getMeApiV1AccountsMeGet()
+            let response = try await authenticatedClient.accountsGetMe()
             switch response {
             case .ok(let response):
                 return try Self.account(from: response.body.json)
             case .unauthorized:
                 throw MosemoAPIError.authenticationRequired
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
             case .undocumented(let statusCode, _):
-                throw Self.error(forUndocumentedStatus: statusCode)
+                throw Self.error(forHTTPStatus: statusCode)
             }
         } catch {
             let mappedError = Self.mapCurrentAccount(error)
@@ -166,7 +178,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
     }
 
     private static func error(
-        forUndocumentedStatus statusCode: Int
+        forHTTPStatus statusCode: Int
     ) -> MosemoAPIError {
         if (500...599).contains(statusCode) {
             return MosemoAPIError.serverError(statusCode: statusCode)
@@ -215,7 +227,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
                 return mapURL(urlError)
             }
             if let statusCode {
-                return Self.error(forUndocumentedStatus: statusCode)
+                return Self.error(forHTTPStatus: statusCode)
             }
             return .unexpectedResponse(
                 statusCode: clientError.response?.status.code ?? 0
@@ -225,7 +237,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
             return mapURL(urlError)
         }
         if let statusCode {
-            return Self.error(forUndocumentedStatus: statusCode)
+            return Self.error(forHTTPStatus: statusCode)
         }
         return .unexpectedResponse(statusCode: 0)
     }

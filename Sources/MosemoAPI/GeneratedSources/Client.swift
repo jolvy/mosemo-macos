@@ -10,6 +10,33 @@ import struct Foundation.Data
 import struct Foundation.Date
 #endif
 import HTTPTypes
+/// Mosemo 공개 API입니다.
+///
+/// ## 공개 JSON 및 시간 계약
+///
+/// - 공개 JSON 요청과 응답의 필드명은 camelCase를 사용합니다.
+/// - 성공 응답은 공통 `data`, `result`, `success` envelope 없이 도메인 데이터를 직접 반환합니다.
+/// - 관측 시각 요청은 `YYYY-MM-DDTHH:MM:SS[.ffffff]Z` 형식이며,
+///   소수 초는 0~6자리까지 사용할 수 있습니다.
+/// - JSON 응답의 서버 시각은 UTC 정수 초 `YYYY-MM-DDTHH:MM:SSZ` 형식입니다.
+///   Python 값에서는 마이크로초를 보존하고 JSON 직렬화에서만 반올림 없이 절삭합니다.
+/// - 관측 시각을 시간 블록으로 구성하는 규칙과 블록 경계는 서버가 결정합니다.
+///
+/// ## 공개 오류 계약
+///
+/// - 애플리케이션이 생성하는 JSON 오류는 `error` 안에 `status`, `code`, `message`,
+///   `details`를 담는 공통 envelope를 사용합니다.
+/// - `error.code`는 HTTP status와 같고, `error.status`는 클라이언트가 분기할
+///   애플리케이션 오류 식별자입니다. validation detail은 RequestValidationError의
+///   `loc`, `msg`, `type` 원문만 가집니다.
+/// - 404·405·500은 모든 v1 public operation의 공통 JSON 오류이며, 422는 실제 요청
+///   입력 검증이 있는 operation에만 선언합니다.
+/// - 애플리케이션이 처리하지 못한 예외는 `500 INTERNAL_SERVER_ERROR` envelope로
+///   반환하며, 원본 예외 정보는 응답에 포함하지 않습니다.
+/// - 응답 전송이 시작된 뒤 발생한 오류, proxy가 자체 생성한 오류, OAuth
+///   custom-scheme redirect는 이 JSON 오류 계약의 범위 밖입니다.
+///
+/// macOS 생성 클라이언트 갱신은 이 서버 계약 작업의 범위 밖입니다.
 internal struct Client: APIProtocol {
     /// The underlying HTTP client.
     private let client: UniversalClient
@@ -42,11 +69,11 @@ internal struct Client: APIProtocol {
     /// Bearer 액세스 토큰으로 인증된 Mosemo 계정 정보를 조회합니다.
     ///
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
-    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(get_me_api_v1_accounts_me_get)`.
-    internal func getMeApiV1AccountsMeGet(_ input: Operations.GetMeApiV1AccountsMeGet.Input) async throws -> Operations.GetMeApiV1AccountsMeGet.Output {
+    /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
+    internal func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output {
         try await client.send(
             input: input,
-            forOperation: Operations.GetMeApiV1AccountsMeGet.id,
+            forOperation: Operations.AccountsGetMe.id,
             serializer: { input in
                 let path = try converter.renderedPath(
                     template: "/api/v1/accounts/me",
@@ -67,7 +94,7 @@ internal struct Client: APIProtocol {
                 switch response.status.code {
                 case 200:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.GetMeApiV1AccountsMeGet.Output.Ok.Body
+                    let body: Operations.AccountsGetMe.Output.Ok.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -88,13 +115,13 @@ internal struct Client: APIProtocol {
                     }
                     return .ok(.init(body: body))
                 case 401:
-                    let headers: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers = .init(wwwAuthenticate: try converter.getOptionalHeaderFieldAsURI(
+                    let headers: Operations.AccountsGetMe.Output.Unauthorized.Headers = .init(wwwAuthenticate: try converter.getOptionalHeaderFieldAsURI(
                         in: response.headerFields,
                         name: "WWW-Authenticate",
-                        as: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Headers.WWWAuthenticatePayload.self
+                        as: Operations.AccountsGetMe.Output.Unauthorized.Headers.WWWAuthenticatePayload.self
                     ))
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.GetMeApiV1AccountsMeGet.Output.Unauthorized.Body
+                    let body: Operations.AccountsGetMe.Output.Unauthorized.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -104,7 +131,7 @@ internal struct Client: APIProtocol {
                     switch chosenContentType {
                     case "application/json":
                         body = try await converter.getResponseBodyAsJSON(
-                            Components.Schemas.ApiErrorResponse.self,
+                            Components.Schemas.ErrorResponse.self,
                             from: responseBody,
                             transforming: { value in
                                 .json(value)
@@ -117,6 +144,80 @@ internal struct Client: APIProtocol {
                         headers: headers,
                         body: body
                     ))
+                case 404:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AccountsGetMe.Output.NotFound.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .notFound(.init(body: body))
+                case 405:
+                    let headers: Operations.AccountsGetMe.Output.MethodNotAllowed.Headers = .init(allow: try converter.getOptionalHeaderFieldAsURI(
+                        in: response.headerFields,
+                        name: "Allow",
+                        as: Swift.String.self
+                    ))
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AccountsGetMe.Output.MethodNotAllowed.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .methodNotAllowed(.init(
+                        headers: headers,
+                        body: body
+                    ))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AccountsGetMe.Output.InternalServerError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
                 default:
                     return .undocumented(
                         statusCode: response.status.code,
@@ -134,11 +235,11 @@ internal struct Client: APIProtocol {
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/auth/token`.
-    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(exchange_token_api_v1_auth_token_post)`.
-    internal func exchangeTokenApiV1AuthTokenPost(_ input: Operations.ExchangeTokenApiV1AuthTokenPost.Input) async throws -> Operations.ExchangeTokenApiV1AuthTokenPost.Output {
+    /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)`.
+    internal func authExchangeToken(_ input: Operations.AuthExchangeToken.Input) async throws -> Operations.AuthExchangeToken.Output {
         try await client.send(
             input: input,
-            forOperation: Operations.ExchangeTokenApiV1AuthTokenPost.id,
+            forOperation: Operations.AuthExchangeToken.id,
             serializer: { input in
                 let path = try converter.renderedPath(
                     template: "/api/v1/auth/token",
@@ -167,20 +268,20 @@ internal struct Client: APIProtocol {
             deserializer: { response, responseBody in
                 switch response.status.code {
                 case 200:
-                    let headers: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers = .init(
+                    let headers: Operations.AuthExchangeToken.Output.Ok.Headers = .init(
                         cacheControl: try converter.getOptionalHeaderFieldAsURI(
                             in: response.headerFields,
                             name: "Cache-Control",
-                            as: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.CacheControlPayload.self
+                            as: Operations.AuthExchangeToken.Output.Ok.Headers.CacheControlPayload.self
                         ),
                         pragma: try converter.getOptionalHeaderFieldAsURI(
                             in: response.headerFields,
                             name: "Pragma",
-                            as: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Headers.PragmaPayload.self
+                            as: Operations.AuthExchangeToken.Output.Ok.Headers.PragmaPayload.self
                         )
                     )
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.Ok.Body
+                    let body: Operations.AuthExchangeToken.Output.Ok.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -205,7 +306,7 @@ internal struct Client: APIProtocol {
                     ))
                 case 400:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.BadRequest.Body
+                    let body: Operations.AuthExchangeToken.Output.BadRequest.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -215,7 +316,7 @@ internal struct Client: APIProtocol {
                     switch chosenContentType {
                     case "application/json":
                         body = try await converter.getResponseBodyAsJSON(
-                            Components.Schemas.ApiErrorResponse.self,
+                            Components.Schemas.ErrorResponse.self,
                             from: responseBody,
                             transforming: { value in
                                 .json(value)
@@ -225,9 +326,9 @@ internal struct Client: APIProtocol {
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
                     return .badRequest(.init(body: body))
-                case 422:
+                case 404:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ExchangeTokenApiV1AuthTokenPost.Output.UnprocessableContent.Body
+                    let body: Operations.AuthExchangeToken.Output.NotFound.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -237,7 +338,59 @@ internal struct Client: APIProtocol {
                     switch chosenContentType {
                     case "application/json":
                         body = try await converter.getResponseBodyAsJSON(
-                            Components.Schemas.RequestValidationErrorResponse.self,
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .notFound(.init(body: body))
+                case 405:
+                    let headers: Operations.AuthExchangeToken.Output.MethodNotAllowed.Headers = .init(allow: try converter.getOptionalHeaderFieldAsURI(
+                        in: response.headerFields,
+                        name: "Allow",
+                        as: Swift.String.self
+                    ))
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AuthExchangeToken.Output.MethodNotAllowed.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .methodNotAllowed(.init(
+                        headers: headers,
+                        body: body
+                    ))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AuthExchangeToken.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
                             from: responseBody,
                             transforming: { value in
                                 .json(value)
@@ -247,6 +400,28 @@ internal struct Client: APIProtocol {
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
                     return .unprocessableContent(.init(body: body))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.AuthExchangeToken.Output.InternalServerError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
                 default:
                     return .undocumented(
                         statusCode: response.status.code,

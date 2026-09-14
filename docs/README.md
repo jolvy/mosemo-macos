@@ -70,10 +70,10 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Sources/MosemoApp/ReturnAnchorStore.swift` | 메모리 전용 앱·창·Chrome 탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
 | `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
-| `Sources/MosemoAPI/` | OpenAPI snapshot, internal 생성 코드, Keychain·오류·모델 경계 |
+| `Sources/MosemoAPI/` | internal 생성 코드, generator 설정, Keychain·오류·모델 경계 |
 | `Tests/CollectorCoreTests/` | OS API와 분리된 Core 조건·경계 XCTest |
 | `Tests/MosemoAPITests/` | fake generated API를 사용한 인증·오류·PKCE 단위 테스트 |
-| `scripts/update_openapi.sh` | 전달받은 OpenAPI artifact 교체와 생성·테스트 검증 |
+| `scripts/update_openapi.sh` | 서버 OpenAPI 계약으로부터 생성·테스트 검증 |
 | `scripts/check_collector_privacy.sh` | CollectorCore 네트워크 경계와 화면 캡처·영속 기록·금지 필드 정적 검사 |
 | `scripts/check_safe_diagnostics.sh` | 복사한 안전 진단에서 금지 데이터 검사 |
 | `scripts/sample_collector_process.sh` | 장시간 CPU·RSS 표본 CSV 생성 |
@@ -131,20 +131,15 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   archive
 ```
 
-## OpenAPI snapshot 갱신
-
-서버에서 export한 artifact만 입력으로 받는다. 앱 빌드나 CI는 서버 저장소 또는
-실행 중인 서버에서 명세를 내려받지 않는다.
+## OpenAPI client 갱신
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-scripts/update_openapi.sh /path/to/exported-openapi.json
+scripts/update_openapi.sh
 ```
 
-스크립트는 JSON과 필수 인증 operation을 확인하고 snapshot을 교체한 뒤 command
-plugin으로 `GeneratedSources`를 갱신하고 `MosemoAPI` 컴파일과 전체 `swift test`를
-실행한다. Xcode build plugin 검증에 의존하지 않도록 생성 파일은 커밋한다.
-검증이 실패하면 기존 snapshot을 복원한다.
+자세한 내용은 [OpenAPI 갱신 절차](OPENAPI_AUTH_ARCHITECTURE.md#openapi-갱신-절차)를
+참고한다.
 
 ## 필요한 macOS 권한
 

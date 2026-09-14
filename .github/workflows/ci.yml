@@ -7,10 +7,23 @@ on:
 jobs:
   verify:
     runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mosemo-macos
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out macOS client
+        uses: actions/checkout@v4
+        with:
+          path: mosemo-macos
+
+      - name: Check out server OpenAPI contract
+        uses: actions/checkout@v4
+        with:
+          repository: jolvy/mosemo
+          path: mosemo-server
+          persist-credentials: false
 
       - name: Toolchain
         run: |
@@ -20,15 +33,10 @@ jobs:
       - name: Resolve exact dependencies
         run: swift package resolve
 
-      - name: Verify committed OpenAPI generation
+      - name: Generate and verify OpenAPI client
         run: |
-          swift package --allow-writing-to-package-directory \
-            generate-code-from-openapi \
-            --target MosemoAPI
+          scripts/update_openapi.sh
           git diff --exit-code -- Sources/MosemoAPI/GeneratedSources
-
-      - name: Unit tests and generated client compilation
-        run: swift test
 
       - name: Privacy boundary
         run: scripts/check_collector_privacy.sh
