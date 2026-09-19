@@ -8,14 +8,25 @@ fi
 
 script_directory=$(CDPATH= cd "$(dirname "$0")" && pwd)
 component_root=$(CDPATH= cd "$script_directory/.." && pwd)
-source_contract="$component_root/../mosemo-server/openapi/openapi.json"
+source_contract="$component_root/../openapi.json"
+server_contract="$component_root/../mosemo-server/openapi/openapi.json"
 generator_input="$component_root/Sources/MosemoAPI/openapi.json"
 generated_sources="$component_root/Sources/MosemoAPI/GeneratedSources"
 developer_directory=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 
 if [ ! -f "$source_contract" ]; then
-    printf 'Server OpenAPI contract not found: %s\n' "$source_contract" >&2
+    printf 'OpenAPI contract not found: %s\n' "$source_contract" >&2
     exit 66
+fi
+
+if [ ! -f "$server_contract" ]; then
+    printf 'Server OpenAPI snapshot not found: %s\n' "$server_contract" >&2
+    exit 66
+fi
+
+if ! cmp -s "$source_contract" "$server_contract"; then
+    printf 'OpenAPI contract differs from the server snapshot: %s\n' "$source_contract" >&2
+    exit 65
 fi
 
 if [ -e "$generator_input" ] || [ -L "$generator_input" ]; then
@@ -68,7 +79,17 @@ jq -e '
     (.paths["/api/v1/accounts/me"].get.operationId
         == "accountsGetMe") and
     (.paths["/api/v1/accounts/me"].get.responses["200"] != null) and
-    (.paths["/api/v1/accounts/me"].get.responses["401"] != null)
+    (.paths["/api/v1/accounts/me"].get.responses["401"] != null) and
+    (.paths["/api/v1/devices"].post.operationId == "devicesCreate") and
+    (.paths["/api/v1/devices"].post.parameters | any(
+        .name == "Idempotency-Key" and .in == "header" and
+        .required == true and .schema.format == "uuid"
+    )) and
+    (.paths["/api/v1/devices"].post.responses["201"].content["application/json"].schema."$ref"
+        == "#/components/schemas/DeviceCreateResponse") and
+    (.components.schemas.DeviceCreateResponse.properties.deviceId.format == "uuid") and
+    (.paths["/api/v1/devices"].post.responses["401"] != null) and
+    (.paths["/api/v1/devices"].post.responses["422"] != null)
 ' "$source_contract" >/dev/null
 
 if [ -d "$generated_sources" ]; then
@@ -78,7 +99,7 @@ fi
 generation_started=1
 
 input_installed=1
-ln -s ../../../mosemo-server/openapi/openapi.json "$generator_input"
+ln -s ../../../openapi.json "$generator_input"
 
 (
     cd "$component_root"

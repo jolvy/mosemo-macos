@@ -7,3 +7,4 @@ filter:
   operations:
     - accountsGetMe
     - authExchangeToken
+    - devicesCreate

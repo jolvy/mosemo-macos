@@ -2,8 +2,8 @@
 
 이 문서는 서버가 제공한 OpenAPI artifact를 Mosemo macOS 앱에서 사용하는
 구조와 Kakao 로그인 경계를 설명한다. 서버 계약의 설계·변경·배포는 이 저장소의
-범위가 아니며, 형제 저장소의 `mosemo-server/openapi/openapi.json`을 확정된
-입력으로 취급한다.
+범위가 아니다. 상위 `openapi.json`을 클라이언트 계약으로 사용하며, 생성 전에
+형제 저장소의 `mosemo-server/openapi/openapi.json`과 일치하는지 확인한다.
 
 관련 결정의 배경은 다음 ADR에 보존한다.
 
@@ -19,8 +19,8 @@
 3. 브라우저 OAuth, 일회용 코드 교환, Bearer 인증과 자격 증명 보관의 책임을
    분리한다.
 
-현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회뿐이다.
-활동 이벤트 전송과 로컬 spool은 아직 구현 범위가 아니다.
+현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회와
+Device 등록 API다. 활동 이벤트 전송과 로컬 spool은 아직 구현 범위가 아니다.
 
 ## 모듈 구조
 
@@ -70,12 +70,13 @@ public protocol MosemoAPIClient: Sendable {
     ) async throws -> Account
 
     func currentAccount() async throws -> Account
+    func registerDevice(idempotencyKey: UUID) async throws -> Device
     func signOut() async throws
 }
 ```
 
 모듈 밖에 공개하는 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
-`AccountProvider`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback 처리
+`AccountProvider`, `Device`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback 처리
 타입이다. 생성된 `Client`, `APIProtocol`, `Components.Schemas.*`는
 `internal`이며 앱 UI와
 `CollectorCore`에서 직접 사용할 수 없다. raw access token도 public API의
@@ -84,17 +85,20 @@ public protocol MosemoAPIClient: Sendable {
 서버 DTO의 account UUID, provider, 생성 시각과 마지막 인증 시각은
 `LiveMosemoAPIClient`가 앱의 `Account`로 명시적으로 변환한다. 서버 스키마가
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
+Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
+`deviceId`를 UUIDv7으로 검증한 뒤 `Device(id:)`로 반환한다. 이 API 계층은
+멱등 키 생성·저장이나 로그인 후 자동 등록을 수행하지 않는다.
 
 ## OpenAPI 계약과 생성 코드
 
 | 항목 | 현재 값 |
 | --- | --- |
-| 입력 | `../mosemo-server/openapi/openapi.json` |
+| 입력 | `../openapi.json` (서버 스냅샷과 일치 확인) |
 | 설정 | `Sources/MosemoAPI/openapi-generator-config.yaml` |
 | 생성 모드 | `types`, `client` |
 | 접근 수준 | `internal` |
 | 이름 전략 | `idiomatic` |
-| 포함 operation | token 교환, 현재 계정 조회 |
+| 포함 operation | token 교환, 현재 계정 조회, Device 등록 |
 | generator | `1.13.0` |
 | runtime | `1.12.0` |
 | URLSession transport | `1.3.0` |
@@ -102,15 +106,17 @@ public protocol MosemoAPIClient: Sendable {
 브라우저가 소유하는 login/callback endpoint는 생성 operation에서 제외한다.
 `/api/v1/auth/kakao/login` URL은 wrapper가 만들고 callback은
 `ASWebAuthenticationSession`이 수신한다. 생성 client가 호출하는 endpoint는
-`POST /api/v1/auth/token`과 `GET /api/v1/accounts/me`뿐이다.
+`POST /api/v1/auth/token`, `GET /api/v1/accounts/me`,
+`POST /api/v1/devices`다.
 
 초기에는 build-tool plugin에서 빌드할 때마다 코드를 생성하려 했다. 실제 Xcode
 Debug build에서 plugin 검증 단계가 실패해 command plugin으로 미리 생성한
 `GeneratedSources`를 커밋하는 방식으로 전환했다. 일반 Xcode build와 archive는
 generator plugin 실행 권한에 의존하지 않는다.
 
-CI는 서버 저장소를 형제 디렉터리에 checkout하고 command plugin을 다시 실행한 뒤
-committed `GeneratedSources`와 diff를 비교한다. 루트 `Package.resolved`와 Xcode
+CI는 서버 저장소를 형제 디렉터리에 checkout해 상위 계약 파일을 준비하고,
+command plugin을 다시 실행한 뒤 committed `GeneratedSources`와 diff를 비교한다.
+루트 `Package.resolved`와 Xcode
 workspace의 `Package.resolved`를 함께 커밋해 SwiftPM과 Xcode의 의존성 해석을
 고정한다.
 
@@ -165,12 +171,12 @@ callback은 scheme·host·path가 모두 정확히 일치해야 한다. `code`�
 
 ## token과 HTTP 처리
 
-token 교환에는 익명 generated client를, 현재 계정 조회에는 인증 generated
-client를 사용한다. 인증 middleware는 매 요청마다 Keychain 값을 읽어 유효기간을
+token 교환에는 익명 generated client를, 현재 계정 조회와 Device 등록에는 인증
+generated client를 사용한다. 인증 middleware는 매 요청마다 Keychain 값을 읽어 유효기간을
 확인하고 `Authorization: Bearer ...` 헤더를 추가한다.
 
 Keychain에는 raw token과 서버의 `expires_in`으로 계산한 `expiresAt`을 함께
-저장한다. 만료된 token 또는 `/accounts/me`의 401 응답에서는 Keychain을 비우고
+저장한다. 만료된 token 또는 인증 요청의 401 응답에서는 Keychain을 비우고
 `authenticationRequired`를 반환한다. 로그아웃도 서버 호출 없이 로컬 Keychain
 자격 증명을 삭제한다.
 
@@ -191,6 +197,9 @@ UI는 HTTP status나 생성 response enum을 직접 판단하지 않는다.
 | token 400 | `invalidAuthorizationCode` | 재시도하지 않음 |
 | token 422 | `validationFailed` | 재시도하지 않음 |
 | account 401 | `authenticationRequired` | Keychain 삭제 |
+| Device 등록 401 | `authenticationRequired` | Keychain 삭제 |
+| Device 등록 422 | `validationFailed` | 재시도하지 않음 |
+| Device 등록 201의 잘못된 `deviceId` | `unexpectedResponse(statusCode: 201)` | UUIDv7 검증 |
 | 5xx | `serverError(statusCode:)` | 자동 재시도 없음 |
 | timeout | `timedOut` | 자동 재시도 없음 |
 | 기타 URL 오류 | `networkUnavailable` | 자동 재시도 없음 |
@@ -231,17 +240,18 @@ access token, callback code, PKCE verifier는 로그와 사용자용 오류 설�
 
 ## OpenAPI 갱신 절차
 
-계약 원본은 형제 저장소의 `mosemo-server/openapi/openapi.json`이다. 서버 계약을
-갱신한 뒤 macOS 저장소에서 다음 명령을 실행한다.
+상위 `openapi.json`을 계약으로 사용한다. 서버 스냅샷이 갱신되면 macOS
+저장소에서 다음 명령을 실행한다.
 
 ```sh
+cp ../mosemo-server/openapi/openapi.json ../openapi.json
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 scripts/update_openapi.sh
 ```
 
 스크립트는 다음 순서로 동작한다.
 
-1. JSON이 OpenAPI 3.1이며 필수 operation과 200/400/401/422 응답을 포함하는지 확인한다.
+1. 상위 계약이 서버 스냅샷과 같고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header를 포함하는지 확인한다.
 2. 기존 `GeneratedSources`를 임시 위치에 백업한다.
 3. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
 4. command plugin으로 Swift 코드를 생성한다.
@@ -251,7 +261,7 @@ scripts/update_openapi.sh
 
 일반 앱 build는 커밋된 generated source를 사용하므로 서버 저장소를 요구하지 않는다.
 CI는 실행 중인 서버나 네트워크 endpoint에서 명세를 다운로드하지 않고, 별도로
-checkout한 서버 저장소의 계약 파일을 사용한다.
+checkout한 서버 저장소의 계약 파일을 상위 계약으로 복사한다.
 
 ## 테스트와 완료 기준
 
@@ -259,6 +269,7 @@ checkout한 서버 저장소의 계약 파일을 사용한다.
 다음 경계를 검증한다.
 
 - token 200·400·422와 account 200·401 매핑
+- Device 등록의 요청 경로·Bearer·멱등 키·빈 본문·201 응답과 오류 매핑
 - 형식이 깨진 400·401 본문의 status 기반 처리
 - Bearer header 삽입, token 만료와 401 정리, 로그아웃
 - Keychain 실제 round trip

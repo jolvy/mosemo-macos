@@ -22,3 +22,11 @@ public struct Account: Equatable, Sendable {
         self.lastAuthenticatedAt = lastAuthenticatedAt
     }
 }
+
+public struct Device: Equatable, Sendable {
+    public let id: UUID
+
+    public init(id: UUID) {
+        self.id = id
+    }
+}

@@ -35,6 +35,7 @@ jobs:
 
       - name: Generate and verify OpenAPI client
         run: |
+          cp ../mosemo-server/openapi/openapi.json ../openapi.json
           scripts/update_openapi.sh
           git diff --exit-code -- Sources/MosemoAPI/GeneratedSources
 

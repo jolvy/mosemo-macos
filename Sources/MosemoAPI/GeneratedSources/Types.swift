@@ -25,6 +25,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/auth/token`.
     /// - Remark: Generated from `#/paths//api/v1/auth/token/post(authExchangeToken)`.
     func authExchangeToken(_ input: Operations.AuthExchangeToken.Input) async throws -> Operations.AuthExchangeToken.Output
+    /// Device 등록
+    ///
+    /// 인증된 계정에 앱 설치를 Device로 등록하고 서버가 발급한 식별자를 반환합니다. 같은 계정과 Idempotency-Key의 재시도는 최초 식별자를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/devices`.
+    /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
+    func devicesCreate(_ input: Operations.DevicesCreate.Input) async throws -> Operations.DevicesCreate.Output
 }
 
 /// Convenience overloads for operation inputs.
@@ -52,6 +59,15 @@ extension APIProtocol {
             headers: headers,
             body: body
         ))
+    }
+    /// Device 등록
+    ///
+    /// 인증된 계정에 앱 설치를 Device로 등록하고 서버가 발급한 식별자를 반환합니다. 같은 계정과 Idempotency-Key의 재시도는 최초 식별자를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/devices`.
+    /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
+    internal func devicesCreate(headers: Operations.DevicesCreate.Input.Headers) async throws -> Operations.DevicesCreate.Output {
+        try await devicesCreate(Operations.DevicesCreate.Input(headers: headers))
     }
 }
 
@@ -86,6 +102,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/AccountResponse/provider`.
             internal var provider: Components.Schemas.AccountProvider
+            /// 날짜 조회에 사용하는 계정의 지원 시간대입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AccountResponse/timezone`.
+            internal var timezone: Components.Schemas.Timezone
             /// Creates a new `AccountResponse`.
             ///
             /// - Parameters:
@@ -93,22 +113,45 @@ internal enum Components {
             ///   - createdAt: 계정이 생성된 시각입니다.
             ///   - lastAuthenticatedAt: 외부 인증 제공자를 통해 마지막으로 인증한 시각입니다.
             ///   - provider: 계정 인증에 사용한 외부 인증 제공자입니다.
+            ///   - timezone: 날짜 조회에 사용하는 계정의 지원 시간대입니다.
             internal init(
                 accountId: Swift.String,
                 createdAt: Foundation.Date,
                 lastAuthenticatedAt: Foundation.Date,
-                provider: Components.Schemas.AccountProvider
+                provider: Components.Schemas.AccountProvider,
+                timezone: Components.Schemas.Timezone
             ) {
                 self.accountId = accountId
                 self.createdAt = createdAt
                 self.lastAuthenticatedAt = lastAuthenticatedAt
                 self.provider = provider
+                self.timezone = timezone
             }
             internal enum CodingKeys: String, CodingKey {
                 case accountId
                 case createdAt
                 case lastAuthenticatedAt
                 case provider
+                case timezone
+            }
+        }
+        /// Device 등록 결과입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/DeviceCreateResponse`.
+        internal struct DeviceCreateResponse: Codable, Hashable, Sendable {
+            /// 서버가 발급한 Device 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DeviceCreateResponse/deviceId`.
+            internal var deviceId: Swift.String
+            /// Creates a new `DeviceCreateResponse`.
+            ///
+            /// - Parameters:
+            ///   - deviceId: 서버가 발급한 Device 식별자입니다.
+            internal init(deviceId: Swift.String) {
+                self.deviceId = deviceId
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case deviceId
             }
         }
         /// 공개 오류 envelope 안의 공통 payload입니다.
@@ -209,6 +252,14 @@ internal enum Components {
                     "error"
                 ])
             }
+        }
+        /// IANA timezones accepted by the public API.
+        ///
+        /// - Remark: Generated from `#/components/schemas/Timezone`.
+        internal enum Timezone: String, Codable, Hashable, Sendable, CaseIterable {
+            case asiaSeoul = "Asia/Seoul"
+            case americaNewYork = "America/New_York"
+            case utc = "UTC"
         }
         /// 일회용 인증 코드를 Mosemo 액세스 토큰으로 교환하는 요청입니다.
         ///
@@ -1193,6 +1244,428 @@ internal enum Operations {
             /// - Throws: An error if `self` is not `.internalServerError`.
             /// - SeeAlso: `.internalServerError`.
             internal var internalServerError: Operations.AuthExchangeToken.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Device 등록
+    ///
+    /// 인증된 계정에 앱 설치를 Device로 등록하고 서버가 발급한 식별자를 반환합니다. 같은 계정과 Idempotency-Key의 재시도는 최초 식별자를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/devices`.
+    /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
+    internal enum DevicesCreate {
+        internal static let id: Swift.String = "devicesCreate"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/devices/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                /// 하나의 Device 등록 시도를 식별하는 UUID입니다. 응답을 받기 전 재시도에는 같은 값을 사용합니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/header/Idempotency-Key`.
+                internal var idempotencyKey: Swift.String
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.DevicesCreate.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - idempotencyKey: 하나의 Device 등록 시도를 식별하는 UUID입니다. 응답을 받기 전 재시도에는 같은 값을 사용합니다.
+                ///   - accept:
+                internal init(
+                    idempotencyKey: Swift.String,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.DevicesCreate.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.idempotencyKey = idempotencyKey
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.DevicesCreate.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.DevicesCreate.Input.Headers) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/201/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.DeviceCreateResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.DeviceCreateResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.DevicesCreate.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// 생성되었거나 동일한 재시도로 확인된 Device입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.DevicesCreate.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            internal var created: Operations.DevicesCreate.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.DevicesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.DevicesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.DevicesCreate.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.DevicesCreate.Output.Unauthorized.Headers = .init(),
+                    body: Operations.DevicesCreate.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.DevicesCreate.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.DevicesCreate.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.DevicesCreate.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.DevicesCreate.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.DevicesCreate.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.DevicesCreate.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.DevicesCreate.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.DevicesCreate.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.DevicesCreate.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.DevicesCreate.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.DevicesCreate.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.DevicesCreate.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.DevicesCreate.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/devices/POST/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.DevicesCreate.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.DevicesCreate.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.DevicesCreate.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.DevicesCreate.Output.InternalServerError {
                 get throws {
                     switch self {
                     case let .internalServerError(response):

@@ -33,12 +33,10 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
             authenticatedClient: Client(
                 serverURL: baseURL,
                 transport: transport,
-                middlewares: [
-                    BearerAuthenticationMiddleware(
-                        tokenStore: tokenStore,
-                        now: now
-                    ),
-                ]
+                middlewares: [BearerAuthenticationMiddleware(
+                    tokenStore: tokenStore,
+                    now: now
+                )]
             ),
             tokenStore: tokenStore,
             now: now
@@ -150,6 +148,43 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         }
     }
 
+    public func registerDevice(
+        idempotencyKey: UUID
+    ) async throws -> Device {
+        do {
+            let response = try await authenticatedClient.devicesCreate(
+                headers: .init(idempotencyKey: idempotencyKey.uuidString)
+            )
+            switch response {
+            case .created(let response):
+                guard let id = UUID(uuidString: try response.body.json.deviceId),
+                    Self.isVersion7(id)
+                else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 201)
+                }
+                return Device(id: id)
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent:
+                throw MosemoAPIError.validationFailed
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mappedError = Self.mapDeviceCreate(error)
+            if mappedError == .authenticationRequired {
+                try await tokenStore.delete()
+            }
+            throw mappedError
+        }
+    }
+
     public func signOut() async throws {
         do {
             try await tokenStore.delete()
@@ -212,6 +247,21 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         return mapCommon(error, statusCode: nil)
     }
 
+    private static func mapDeviceCreate(_ error: Error) -> MosemoAPIError {
+        if let clientError = error as? ClientError,
+           let statusCode = clientError.response?.status.code {
+            switch statusCode {
+            case 401:
+                return .authenticationRequired
+            case 422:
+                return .validationFailed
+            default:
+                return mapCommon(clientError, statusCode: statusCode)
+            }
+        }
+        return mapCommon(error, statusCode: nil)
+    }
+
     private static func mapCommon(
         _ error: Error,
         statusCode: Int?
@@ -244,5 +294,11 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
 
     private static func mapURL(_ error: URLError) -> MosemoAPIError {
         error.code == .timedOut ? .timedOut : .networkUnavailable
+    }
+
+    private static func isVersion7(_ id: UUID) -> Bool {
+        withUnsafeBytes(of: id.uuid) { bytes in
+            bytes[6] >> 4 == 7 && bytes[8] >> 6 == 2
+        }
     }
 }

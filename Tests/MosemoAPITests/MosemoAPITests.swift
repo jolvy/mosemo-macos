@@ -26,7 +26,8 @@ final class MosemoAPITests: XCTestCase {
                     accountId: accountID.uuidString,
                     createdAt: createdAt,
                     lastAuthenticatedAt: authenticatedAt,
-                    provider: .kakao
+                    provider: .kakao,
+                    timezone: .asiaSeoul
                 ))))
             }
         )
@@ -144,6 +145,289 @@ final class MosemoAPITests: XCTestCase {
         }
         let storedToken = await tokenStore.currentToken()
         XCTAssertNil(storedToken)
+    }
+
+    func testRegisterDeviceMapsCreatedResponse() async throws {
+        let deviceID = UUID(
+            uuidString: "01890F8E-7B5A-7CC0-98C7-8F3E12345678"
+        )!
+        let client = makeClient(devicesCreate: { _ in
+            .created(.init(body: .json(.init(deviceId: deviceID.uuidString))))
+        })
+
+        let device = try await client.registerDevice(idempotencyKey: UUID())
+
+        XCTAssertEqual(device, Device(id: deviceID))
+    }
+
+    func testRegisterDeviceRejectsInvalidDeviceID() async {
+        for id in [
+            "not-a-uuid",
+            "550E8400-E29B-41D4-A716-446655440000",
+        ] {
+            let client = makeClient(devicesCreate: { _ in
+                .created(.init(body: .json(.init(deviceId: id))))
+            })
+
+            await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+                _ = try await client.registerDevice(idempotencyKey: UUID())
+            }
+        }
+    }
+
+    func testRegisterDeviceRejectsMalformedCreatedResponse() async {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "registration-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        for data in [Data(), Data("{}".utf8), Data(#"{"deviceId":12}"#.utf8)] {
+            let transport = RecordingClientTransport { _, _, _, _ in
+                (
+                    HTTPResponse(
+                        status: .created,
+                        headerFields: [.contentType: "application/json"]
+                    ),
+                    HTTPBody(data)
+                )
+            }
+            let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+            await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+                _ = try await client.registerDevice(idempotencyKey: UUID())
+            }
+        }
+    }
+
+    func testRegisterDeviceClearsTokenOnUnauthorized() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "invalid-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let client = makeClient(
+            tokenStore: tokenStore,
+            devicesCreate: { _ in
+                .unauthorized(.init(body: .json(makeErrorResponse(
+                    code: 401,
+                    status: "AUTH_INVALID_ACCESS_TOKEN",
+                    message: "expired"
+                ))))
+            }
+        )
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+
+        let storedToken = await tokenStore.currentToken()
+        XCTAssertNil(storedToken)
+    }
+
+    func testRegisterDeviceClearsTokenOnMalformedUnauthorizedResponse() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "invalid-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (
+                HTTPResponse(
+                    status: .unauthorized,
+                    headerFields: [.contentType: "application/json"]
+                ),
+                HTTPBody(Data("{}".utf8))
+            )
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+
+        let storedToken = await tokenStore.currentToken()
+        XCTAssertNil(storedToken)
+    }
+
+    func testRegisterDeviceMapsValidationFailure() async {
+        let client = makeClient(devicesCreate: { _ in
+            .unprocessableContent(.init(body: .json(makeErrorResponse(
+                code: 422,
+                status: "INVALID_ARGUMENT",
+                message: "invalid key"
+            ))))
+        })
+
+        await assertAPIError(.validationFailed) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+    }
+
+    func testRegisterDeviceMapsMalformedValidationFailure() async {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "registration-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (
+                HTTPResponse(
+                    status: .unprocessableContent,
+                    headerFields: [.contentType: "application/json"]
+                ),
+                HTTPBody(Data("{}".utf8))
+            )
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        await assertAPIError(.validationFailed) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+    }
+
+    func testRegisterDeviceMapsCommonStatuses() async {
+        let cases: [(Int, MosemoAPIError)] = [
+            (404, .unexpectedResponse(statusCode: 404)),
+            (405, .unexpectedResponse(statusCode: 405)),
+            (418, .unexpectedResponse(statusCode: 418)),
+            (500, .serverError(statusCode: 500)),
+            (503, .serverError(statusCode: 503)),
+        ]
+
+        for (statusCode, expectedError) in cases {
+            let client = makeClient(devicesCreate: { _ in
+                deviceOutput(statusCode: statusCode)
+            })
+
+            await assertAPIError(expectedError) {
+                _ = try await client.registerDevice(idempotencyKey: UUID())
+            }
+        }
+    }
+
+    func testRegisterDeviceMapsTransportErrors() async {
+        let cases: [(URLError.Code, MosemoAPIError)] = [
+            (.timedOut, .timedOut),
+            (.notConnectedToInternet, .networkUnavailable),
+        ]
+
+        for (code, expectedError) in cases {
+            let client = makeClient(devicesCreate: { _ in
+                throw URLError(code)
+            })
+
+            await assertAPIError(expectedError) {
+                _ = try await client.registerDevice(idempotencyKey: UUID())
+            }
+        }
+    }
+
+    func testGeneratedDeviceCreateSendsExactRequest() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "registration-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let recorder = RequestRecorder()
+        let responseData = makeDeviceResponse(
+            id: "01890F8E-7B5A-7CC0-98C7-8F3E12345678"
+        )
+        let transport = RecordingClientTransport { request, body, baseURL, operationID in
+            await recorder.record(
+                request: request,
+                hasBody: body != nil,
+                baseURL: baseURL,
+                operationID: operationID
+            )
+            return (
+                HTTPResponse(
+                    status: .created,
+                    headerFields: [.contentType: "application/json"]
+                ),
+                HTTPBody(responseData)
+            )
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+        let repeatedKey = UUID(
+            uuidString: "550E8400-E29B-41D4-A716-446655440000"
+        )!
+        let differentKey = UUID(
+            uuidString: "550E8400-E29B-41D4-A716-446655440001"
+        )!
+
+        _ = try await client.registerDevice(idempotencyKey: repeatedKey)
+        _ = try await client.registerDevice(idempotencyKey: repeatedKey)
+        _ = try await client.registerDevice(idempotencyKey: differentKey)
+
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.count, 3)
+        let idempotencyKeyHeader = try XCTUnwrap(
+            HTTPField.Name("Idempotency-Key")
+        )
+        for (request, expectedKey) in zip(
+            requests,
+            [repeatedKey, repeatedKey, differentKey]
+        ) {
+            XCTAssertEqual(request.request.method, .post)
+            XCTAssertEqual(request.request.path, "/api/v1/devices")
+            XCTAssertEqual(
+                request.request.headerFields[.authorization],
+                "Bearer registration-token"
+            )
+            XCTAssertEqual(
+                request.request.headerFields[idempotencyKeyHeader],
+                expectedKey.uuidString
+            )
+            XCTAssertEqual(request.request.headerFields[.accept], "application/json")
+            XCTAssertNil(request.request.headerFields[.contentType])
+            XCTAssertFalse(request.hasBody)
+            XCTAssertEqual(request.baseURL, baseURL)
+            XCTAssertEqual(request.operationID, "devicesCreate")
+        }
+    }
+
+    func testGeneratedDeviceCreateStopsWithoutToken() async {
+        let recorder = RequestRecorder()
+        let transport = RecordingClientTransport { request, body, baseURL, operationID in
+            await recorder.record(
+                request: request,
+                hasBody: body != nil,
+                baseURL: baseURL,
+                operationID: operationID
+            )
+            return (HTTPResponse(status: .created), nil)
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(),
+            transport: transport
+        )
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+
+        let requests = await recorder.requests()
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    func testGeneratedDeviceCreateDoesNotRetryTransportFailure() async {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "registration-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let recorder = RequestRecorder()
+        let transport = RecordingClientTransport { request, body, baseURL, operationID in
+            await recorder.record(
+                request: request,
+                hasBody: body != nil,
+                baseURL: baseURL,
+                operationID: operationID
+            )
+            throw URLError(.networkConnectionLost)
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        await assertAPIError(.networkUnavailable) {
+            _ = try await client.registerDevice(idempotencyKey: UUID())
+        }
+
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.count, 1)
     }
 
     func testUndocumentedServerResponseMapsStatusCode() async {
@@ -330,12 +614,47 @@ final class MosemoAPITests: XCTestCase {
         },
         getMe: @escaping MockGeneratedAPI.GetMe = { _ in
             .undocumented(statusCode: 500, .init())
+        },
+        devicesCreate: @escaping MockGeneratedAPI.DevicesCreate = { _ in
+            .undocumented(statusCode: 500, .init())
         }
     ) -> LiveMosemoAPIClient {
         LiveMosemoAPIClient(
             baseURL: baseURL,
-            anonymousClient: MockGeneratedAPI(exchange: exchange, getMe: getMe),
-            authenticatedClient: MockGeneratedAPI(exchange: exchange, getMe: getMe),
+            anonymousClient: MockGeneratedAPI(
+                exchange: exchange,
+                getMe: getMe,
+                createDevice: devicesCreate
+            ),
+            authenticatedClient: MockGeneratedAPI(
+                exchange: exchange,
+                getMe: getMe,
+                createDevice: devicesCreate
+            ),
+            tokenStore: tokenStore,
+            now: { self.now }
+        )
+    }
+
+    private func makeTransportClient(
+        tokenStore: MemoryAccessTokenStore,
+        transport: any ClientTransport
+    ) -> LiveMosemoAPIClient {
+        LiveMosemoAPIClient(
+            baseURL: baseURL,
+            anonymousClient: MockGeneratedAPI(
+                exchange: { _ in .undocumented(statusCode: 500, .init()) },
+                getMe: { _ in .undocumented(statusCode: 500, .init()) },
+                createDevice: { _ in .undocumented(statusCode: 500, .init()) }
+            ),
+            authenticatedClient: Client(
+                serverURL: baseURL,
+                transport: transport,
+                middlewares: [BearerAuthenticationMiddleware(
+                    tokenStore: tokenStore,
+                    now: { self.now }
+                )]
+            ),
             tokenStore: tokenStore,
             now: { self.now }
         )
@@ -367,6 +686,28 @@ private func makeErrorResponse(
     ))
 }
 
+private func makeDeviceResponse(id: String) -> Data {
+    Data(#"{"deviceId":"\#(id)"}"#.utf8)
+}
+
+private func deviceOutput(statusCode: Int) -> Operations.DevicesCreate.Output {
+    let error = makeErrorResponse(
+        code: statusCode,
+        status: "TEST_ERROR",
+        message: "test error"
+    )
+    switch statusCode {
+    case 404:
+        return .notFound(.init(body: .json(error)))
+    case 405:
+        return .methodNotAllowed(.init(body: .json(error)))
+    case 500:
+        return .internalServerError(.init(body: .json(error)))
+    default:
+        return .undocumented(statusCode: statusCode, .init())
+    }
+}
+
 private struct MockGeneratedAPI: APIProtocol {
     typealias Exchange = @Sendable (
         Operations.AuthExchangeToken.Input
@@ -374,9 +715,13 @@ private struct MockGeneratedAPI: APIProtocol {
     typealias GetMe = @Sendable (
         Operations.AccountsGetMe.Input
     ) async throws -> Operations.AccountsGetMe.Output
+    typealias DevicesCreate = @Sendable (
+        Operations.DevicesCreate.Input
+    ) async throws -> Operations.DevicesCreate.Output
 
     let exchange: Exchange
     let getMe: GetMe
+    let createDevice: DevicesCreate
 
     func authExchangeToken(
         _ input: Operations.AuthExchangeToken.Input
@@ -388,6 +733,59 @@ private struct MockGeneratedAPI: APIProtocol {
         _ input: Operations.AccountsGetMe.Input
     ) async throws -> Operations.AccountsGetMe.Output {
         try await getMe(input)
+    }
+
+    func devicesCreate(
+        _ input: Operations.DevicesCreate.Input
+    ) async throws -> Operations.DevicesCreate.Output {
+        try await createDevice(input)
+    }
+}
+
+private struct RecordedRequest: Sendable {
+    let request: HTTPRequest
+    let hasBody: Bool
+    let baseURL: URL
+    let operationID: String
+}
+
+private actor RequestRecorder {
+    private var values: [RecordedRequest] = []
+
+    func record(
+        request: HTTPRequest,
+        hasBody: Bool,
+        baseURL: URL,
+        operationID: String
+    ) {
+        values.append(RecordedRequest(
+            request: request,
+            hasBody: hasBody,
+            baseURL: baseURL,
+            operationID: operationID
+        ))
+    }
+
+    func requests() -> [RecordedRequest] {
+        values
+    }
+}
+
+private struct RecordingClientTransport: ClientTransport {
+    let sendBlock: @Sendable (
+        HTTPRequest,
+        HTTPBody?,
+        URL,
+        String
+    ) async throws -> (HTTPResponse, HTTPBody?)
+
+    func send(
+        _ request: HTTPRequest,
+        body: HTTPBody?,
+        baseURL: URL,
+        operationID: String
+    ) async throws -> (HTTPResponse, HTTPBody?) {
+        try await sendBlock(request, body, baseURL, operationID)
     }
 }
 

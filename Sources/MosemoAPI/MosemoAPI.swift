@@ -9,5 +9,6 @@ public protocol MosemoAPIClient: Sendable {
     ) async throws -> Account
 
     func currentAccount() async throws -> Account
+    func registerDevice(idempotencyKey: UUID) async throws -> Device
     func signOut() async throws
 }
