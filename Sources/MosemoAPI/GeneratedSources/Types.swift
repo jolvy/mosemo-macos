@@ -18,6 +18,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
     /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
     func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output
+    /// 활동 레코드 생성
+    ///
+    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
+    func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output
     /// 액세스 토큰 발급
     ///
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
@@ -44,6 +51,21 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
     internal func accountsGetMe(headers: Operations.AccountsGetMe.Input.Headers = .init()) async throws -> Operations.AccountsGetMe.Output {
         try await accountsGetMe(Operations.AccountsGetMe.Input(headers: headers))
+    }
+    /// 활동 레코드 생성
+    ///
+    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
+    internal func activitiesCreate(
+        headers: Operations.ActivitiesCreate.Input.Headers = .init(),
+        body: Operations.ActivitiesCreate.Input.Body
+    ) async throws -> Operations.ActivitiesCreate.Output {
+        try await activitiesCreate(Operations.ActivitiesCreate.Input(
+            headers: headers,
+            body: body
+        ))
     }
     /// 액세스 토큰 발급
     ///
@@ -78,6 +100,76 @@ internal enum Servers {}
 internal enum Components {
     /// Types generated from the `#/components/schemas` section of the OpenAPI document.
     internal enum Schemas {
+        /// A value that does not exist at the observation point.
+        ///
+        /// - Remark: Generated from `#/components/schemas/AbsentValue`.
+        internal struct AbsentValue: Codable, Hashable, Sendable {
+            /// 관찰 시점에 해당 값이 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AbsentValue/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case absent = "absent"
+            }
+            /// 관찰 시점에 해당 값이 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AbsentValue/status`.
+            internal var status: Components.Schemas.AbsentValue.StatusPayload
+            /// Creates a new `AbsentValue`.
+            ///
+            /// - Parameters:
+            ///   - status: 관찰 시점에 해당 값이 없었음을 나타냅니다.
+            internal init(status: Components.Schemas.AbsentValue.StatusPayload) {
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.status = try container.decode(
+                    Components.Schemas.AbsentValue.StatusPayload.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "status"
+                ])
+            }
+        }
+        /// An observation where the focused application has no window.
+        ///
+        /// - Remark: Generated from `#/components/schemas/AbsentWindow`.
+        internal struct AbsentWindow: Codable, Hashable, Sendable {
+            /// 포커싱된 앱에 창이 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AbsentWindow/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case absent = "absent"
+            }
+            /// 포커싱된 앱에 창이 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AbsentWindow/status`.
+            internal var status: Components.Schemas.AbsentWindow.StatusPayload
+            /// Creates a new `AbsentWindow`.
+            ///
+            /// - Parameters:
+            ///   - status: 포커싱된 앱에 창이 없었음을 나타냅니다.
+            internal init(status: Components.Schemas.AbsentWindow.StatusPayload) {
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.status = try container.decode(
+                    Components.Schemas.AbsentWindow.StatusPayload.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "status"
+                ])
+            }
+        }
         /// - Remark: Generated from `#/components/schemas/AccountProvider`.
         internal enum AccountProvider: String, Codable, Hashable, Sendable, CaseIterable {
             case kakao = "KAKAO"
@@ -133,6 +225,997 @@ internal enum Components {
                 case lastAuthenticatedAt
                 case provider
                 case timezone
+            }
+        }
+        /// 활동 레코드 저장 결과입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse`.
+        internal struct ActivityCreateResponse: Codable, Hashable, Sendable {
+            /// 저장하거나 중복 확인한 활동 이벤트 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/eventId`.
+            internal var eventId: Swift.String
+            /// 활동 레코드가 서버에 최초 저장된 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/receivedAt`.
+            internal var receivedAt: Foundation.Date
+            /// 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case accepted = "accepted"
+            }
+            /// 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/status`.
+            internal var status: Components.Schemas.ActivityCreateResponse.StatusPayload
+            /// Creates a new `ActivityCreateResponse`.
+            ///
+            /// - Parameters:
+            ///   - eventId: 저장하거나 중복 확인한 활동 이벤트 식별자입니다.
+            ///   - receivedAt: 활동 레코드가 서버에 최초 저장된 시각입니다.
+            ///   - status: 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            internal init(
+                eventId: Swift.String,
+                receivedAt: Foundation.Date,
+                status: Components.Schemas.ActivityCreateResponse.StatusPayload
+            ) {
+                self.eventId = eventId
+                self.receivedAt = receivedAt
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case eventId
+                case receivedAt
+                case status
+            }
+        }
+        /// A complete snapshot of the focused activity at one point in time.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ActivityObservation`.
+        internal struct ActivityObservation: Codable, Hashable, Sendable {
+            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/context`.
+            internal enum ContextPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ActivityObservation/context/DetailedActivityContext`.
+                case detailed(Components.Schemas.DetailedActivityContext)
+                /// - Remark: Generated from `#/components/schemas/ActivityObservation/context/OpaqueActivityContext`.
+                case opaque(Components.Schemas.OpaqueActivityContext)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "detailed":
+                        self = .detailed(try .init(from: decoder))
+                    case "opaque":
+                        self = .opaque(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .detailed(value):
+                        try value.encode(to: encoder)
+                    case let .opaque(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/context`.
+            internal var context: Components.Schemas.ActivityObservation.ContextPayload
+            /// 서버에 등록된 Device 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/deviceId`.
+            internal var deviceId: Swift.String
+            /// 레코드 중복 제거에 사용하는 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/eventId`.
+            internal var eventId: Swift.String
+            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/observedAt`.
+            internal var observedAt: Foundation.Date
+            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/recordType`.
+            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case activityObservation = "activity_observation"
+            }
+            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/recordType`.
+            internal var recordType: Components.Schemas.ActivityObservation.RecordTypePayload
+            /// Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/sequence`.
+            internal var sequence: Swift.Int
+            /// 관찰 당시의 지원 시간대 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/timezoneId`.
+            internal var timezoneId: Components.Schemas.Timezone
+            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/utcOffsetMinutes`.
+            internal var utcOffsetMinutes: Swift.Int
+            /// Creates a new `ActivityObservation`.
+            ///
+            /// - Parameters:
+            ///   - context: 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///   - deviceId: 서버에 등록된 Device 식별자입니다.
+            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///   - recordType: 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
+            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            internal init(
+                context: Components.Schemas.ActivityObservation.ContextPayload,
+                deviceId: Swift.String,
+                eventId: Swift.String,
+                observedAt: Foundation.Date,
+                recordType: Components.Schemas.ActivityObservation.RecordTypePayload,
+                sequence: Swift.Int,
+                timezoneId: Components.Schemas.Timezone,
+                utcOffsetMinutes: Swift.Int
+            ) {
+                self.context = context
+                self.deviceId = deviceId
+                self.eventId = eventId
+                self.observedAt = observedAt
+                self.recordType = recordType
+                self.sequence = sequence
+                self.timezoneId = timezoneId
+                self.utcOffsetMinutes = utcOffsetMinutes
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case deviceId
+                case eventId
+                case observedAt
+                case recordType
+                case sequence
+                case timezoneId
+                case utcOffsetMinutes
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.context = try container.decode(
+                    Components.Schemas.ActivityObservation.ContextPayload.self,
+                    forKey: .context
+                )
+                self.deviceId = try container.decode(
+                    Swift.String.self,
+                    forKey: .deviceId
+                )
+                self.eventId = try container.decode(
+                    Swift.String.self,
+                    forKey: .eventId
+                )
+                self.observedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .observedAt
+                )
+                self.recordType = try container.decode(
+                    Components.Schemas.ActivityObservation.RecordTypePayload.self,
+                    forKey: .recordType
+                )
+                self.sequence = try container.decode(
+                    Swift.Int.self,
+                    forKey: .sequence
+                )
+                self.timezoneId = try container.decode(
+                    Components.Schemas.Timezone.self,
+                    forKey: .timezoneId
+                )
+                self.utcOffsetMinutes = try container.decode(
+                    Swift.Int.self,
+                    forKey: .utcOffsetMinutes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "context",
+                    "deviceId",
+                    "eventId",
+                    "observedAt",
+                    "recordType",
+                    "sequence",
+                    "timezoneId",
+                    "utcOffsetMinutes"
+                ])
+            }
+        }
+        /// Application identifiers observed independently by the client.
+        ///
+        /// - Remark: Generated from `#/components/schemas/AppContext`.
+        internal struct AppContext: Codable, Hashable, Sendable {
+            /// 포커싱된 앱의 bundle ID 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AppContext/bundleId`.
+            internal enum BundleIdPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/AppContext/bundleId/AbsentValue`.
+                case absent(Components.Schemas.AbsentValue)
+                /// - Remark: Generated from `#/components/schemas/AppContext/bundleId/CapturedString`.
+                case captured(Components.Schemas.CapturedString)
+                /// - Remark: Generated from `#/components/schemas/AppContext/bundleId/UnavailableValue`.
+                case unavailable(Components.Schemas.UnavailableValue)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "absent":
+                        self = .absent(try .init(from: decoder))
+                    case "captured":
+                        self = .captured(try .init(from: decoder))
+                    case "unavailable":
+                        self = .unavailable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .absent(value):
+                        try value.encode(to: encoder)
+                    case let .captured(value):
+                        try value.encode(to: encoder)
+                    case let .unavailable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 포커싱된 앱의 bundle ID 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AppContext/bundleId`.
+            internal var bundleId: Components.Schemas.AppContext.BundleIdPayload
+            /// 포커싱된 앱의 표시 이름 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AppContext/name`.
+            internal enum NamePayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/AppContext/name/AbsentValue`.
+                case absent(Components.Schemas.AbsentValue)
+                /// - Remark: Generated from `#/components/schemas/AppContext/name/CapturedString`.
+                case captured(Components.Schemas.CapturedString)
+                /// - Remark: Generated from `#/components/schemas/AppContext/name/UnavailableValue`.
+                case unavailable(Components.Schemas.UnavailableValue)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "absent":
+                        self = .absent(try .init(from: decoder))
+                    case "captured":
+                        self = .captured(try .init(from: decoder))
+                    case "unavailable":
+                        self = .unavailable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .absent(value):
+                        try value.encode(to: encoder)
+                    case let .captured(value):
+                        try value.encode(to: encoder)
+                    case let .unavailable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 포커싱된 앱의 표시 이름 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AppContext/name`.
+            internal var name: Components.Schemas.AppContext.NamePayload
+            /// Creates a new `AppContext`.
+            ///
+            /// - Parameters:
+            ///   - bundleId: 포커싱된 앱의 bundle ID 상태와 값입니다.
+            ///   - name: 포커싱된 앱의 표시 이름 상태와 값입니다.
+            internal init(
+                bundleId: Components.Schemas.AppContext.BundleIdPayload,
+                name: Components.Schemas.AppContext.NamePayload
+            ) {
+                self.bundleId = bundleId
+                self.name = name
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case bundleId
+                case name
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.bundleId = try container.decode(
+                    Components.Schemas.AppContext.BundleIdPayload.self,
+                    forKey: .bundleId
+                )
+                self.name = try container.decode(
+                    Components.Schemas.AppContext.NamePayload.self,
+                    forKey: .name
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "bundleId",
+                    "name"
+                ])
+            }
+        }
+        /// Browser tab and URL values observed independently by the client.
+        ///
+        /// - Remark: Generated from `#/components/schemas/BrowserWebContext`.
+        internal struct BrowserWebContext: Codable, Hashable, Sendable {
+            /// 브라우저에서 관찰한 웹 문맥임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case browser = "browser"
+            }
+            /// 브라우저에서 관찰한 웹 문맥임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/kind`.
+            internal var kind: Components.Schemas.BrowserWebContext.KindPayload
+            /// 포커싱된 브라우저 탭 제목의 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle`.
+            internal enum TabTitlePayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle/AbsentValue`.
+                case absent(Components.Schemas.AbsentValue)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle/CapturedText`.
+                case captured(Components.Schemas.CapturedText)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle/RedactedValue`.
+                case redacted(Components.Schemas.RedactedValue)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle/UnavailableValue`.
+                case unavailable(Components.Schemas.UnavailableValue)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "absent":
+                        self = .absent(try .init(from: decoder))
+                    case "captured":
+                        self = .captured(try .init(from: decoder))
+                    case "redacted":
+                        self = .redacted(try .init(from: decoder))
+                    case "unavailable":
+                        self = .unavailable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .absent(value):
+                        try value.encode(to: encoder)
+                    case let .captured(value):
+                        try value.encode(to: encoder)
+                    case let .redacted(value):
+                        try value.encode(to: encoder)
+                    case let .unavailable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 포커싱된 브라우저 탭 제목의 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/tabTitle`.
+            internal var tabTitle: Components.Schemas.BrowserWebContext.TabTitlePayload
+            /// 포커싱된 브라우저 탭 URL의 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url`.
+            internal enum UrlPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url/AbsentValue`.
+                case absent(Components.Schemas.AbsentValue)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url/CapturedString`.
+                case captured(Components.Schemas.CapturedString)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url/RedactedValue`.
+                case redacted(Components.Schemas.RedactedValue)
+                /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url/UnavailableValue`.
+                case unavailable(Components.Schemas.UnavailableValue)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "absent":
+                        self = .absent(try .init(from: decoder))
+                    case "captured":
+                        self = .captured(try .init(from: decoder))
+                    case "redacted":
+                        self = .redacted(try .init(from: decoder))
+                    case "unavailable":
+                        self = .unavailable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .absent(value):
+                        try value.encode(to: encoder)
+                    case let .captured(value):
+                        try value.encode(to: encoder)
+                    case let .redacted(value):
+                        try value.encode(to: encoder)
+                    case let .unavailable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 포커싱된 브라우저 탭 URL의 상태와 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BrowserWebContext/url`.
+            internal var url: Components.Schemas.BrowserWebContext.UrlPayload
+            /// Creates a new `BrowserWebContext`.
+            ///
+            /// - Parameters:
+            ///   - kind: 브라우저에서 관찰한 웹 문맥임을 나타냅니다.
+            ///   - tabTitle: 포커싱된 브라우저 탭 제목의 상태와 값입니다.
+            ///   - url: 포커싱된 브라우저 탭 URL의 상태와 값입니다.
+            internal init(
+                kind: Components.Schemas.BrowserWebContext.KindPayload,
+                tabTitle: Components.Schemas.BrowserWebContext.TabTitlePayload,
+                url: Components.Schemas.BrowserWebContext.UrlPayload
+            ) {
+                self.kind = kind
+                self.tabTitle = tabTitle
+                self.url = url
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+                case tabTitle
+                case url
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.kind = try container.decode(
+                    Components.Schemas.BrowserWebContext.KindPayload.self,
+                    forKey: .kind
+                )
+                self.tabTitle = try container.decode(
+                    Components.Schemas.BrowserWebContext.TabTitlePayload.self,
+                    forKey: .tabTitle
+                )
+                self.url = try container.decode(
+                    Components.Schemas.BrowserWebContext.UrlPayload.self,
+                    forKey: .url
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "kind",
+                    "tabTitle",
+                    "url"
+                ])
+            }
+        }
+        /// A string value captured by the client.
+        ///
+        /// - Remark: Generated from `#/components/schemas/CapturedString`.
+        internal struct CapturedString: Codable, Hashable, Sendable {
+            /// 값을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedString/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case captured = "captured"
+            }
+            /// 값을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedString/status`.
+            internal var status: Components.Schemas.CapturedString.StatusPayload
+            /// 클라이언트가 수집한 원문 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedString/value`.
+            internal var value: Swift.String
+            /// Creates a new `CapturedString`.
+            ///
+            /// - Parameters:
+            ///   - status: 값을 정상적으로 수집했음을 나타냅니다.
+            ///   - value: 클라이언트가 수집한 원문 값입니다.
+            internal init(
+                status: Components.Schemas.CapturedString.StatusPayload,
+                value: Swift.String
+            ) {
+                self.status = status
+                self.value = value
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+                case value
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.status = try container.decode(
+                    Components.Schemas.CapturedString.StatusPayload.self,
+                    forKey: .status
+                )
+                self.value = try container.decode(
+                    Swift.String.self,
+                    forKey: .value
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "status",
+                    "value"
+                ])
+            }
+        }
+        /// Captured display text, including optional truncation metadata.
+        ///
+        /// - Remark: Generated from `#/components/schemas/CapturedText`.
+        internal struct CapturedText: Codable, Hashable, Sendable {
+            /// 잘리기 전 원문의 UTF-8 바이트 길이입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedText/originalByteLength`.
+            internal var originalByteLength: Swift.Int?
+            /// 값을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedText/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case captured = "captured"
+            }
+            /// 값을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedText/status`.
+            internal var status: Components.Schemas.CapturedText.StatusPayload
+            /// 원문 앞부분만 보관했는지를 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedText/truncated`.
+            internal var truncated: Swift.Bool?
+            /// 클라이언트가 수집한 원문 값입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedText/value`.
+            internal var value: Swift.String
+            /// Creates a new `CapturedText`.
+            ///
+            /// - Parameters:
+            ///   - originalByteLength: 잘리기 전 원문의 UTF-8 바이트 길이입니다.
+            ///   - status: 값을 정상적으로 수집했음을 나타냅니다.
+            ///   - truncated: 원문 앞부분만 보관했는지를 나타냅니다.
+            ///   - value: 클라이언트가 수집한 원문 값입니다.
+            internal init(
+                originalByteLength: Swift.Int? = nil,
+                status: Components.Schemas.CapturedText.StatusPayload,
+                truncated: Swift.Bool? = nil,
+                value: Swift.String
+            ) {
+                self.originalByteLength = originalByteLength
+                self.status = status
+                self.truncated = truncated
+                self.value = value
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case originalByteLength
+                case status
+                case truncated
+                case value
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.originalByteLength = try container.decodeIfPresent(
+                    Swift.Int.self,
+                    forKey: .originalByteLength
+                )
+                self.status = try container.decode(
+                    Components.Schemas.CapturedText.StatusPayload.self,
+                    forKey: .status
+                )
+                self.truncated = try container.decodeIfPresent(
+                    Swift.Bool.self,
+                    forKey: .truncated
+                )
+                self.value = try container.decode(
+                    Swift.String.self,
+                    forKey: .value
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "originalByteLength",
+                    "status",
+                    "truncated",
+                    "value"
+                ])
+            }
+        }
+        /// A focused window and its captured title.
+        ///
+        /// - Remark: Generated from `#/components/schemas/CapturedWindow`.
+        internal struct CapturedWindow: Codable, Hashable, Sendable {
+            /// 포커스 창과 제목을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedWindow/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case captured = "captured"
+            }
+            /// 포커스 창과 제목을 정상적으로 수집했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedWindow/status`.
+            internal var status: Components.Schemas.CapturedWindow.StatusPayload
+            /// 포커스 창의 제목입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CapturedWindow/title`.
+            internal var title: Components.Schemas.CapturedText
+            /// Creates a new `CapturedWindow`.
+            ///
+            /// - Parameters:
+            ///   - status: 포커스 창과 제목을 정상적으로 수집했음을 나타냅니다.
+            ///   - title: 포커스 창의 제목입니다.
+            internal init(
+                status: Components.Schemas.CapturedWindow.StatusPayload,
+                title: Components.Schemas.CapturedText
+            ) {
+                self.status = status
+                self.title = title
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+                case title
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.status = try container.decode(
+                    Components.Schemas.CapturedWindow.StatusPayload.self,
+                    forKey: .status
+                )
+                self.title = try container.decode(
+                    Components.Schemas.CapturedText.self,
+                    forKey: .title
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "status",
+                    "title"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/CollectionState`.
+        internal enum CollectionState: String, Codable, Hashable, Sendable, CaseIterable {
+            case active = "active"
+            case suspended = "suspended"
+        }
+        /// A change in whether the client can observe activity.
+        ///
+        /// - Remark: Generated from `#/components/schemas/CollectionStateChanged`.
+        internal struct CollectionStateChanged: Codable, Hashable, Sendable {
+            /// 서버에 등록된 Device 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/deviceId`.
+            internal var deviceId: Swift.String
+            /// 레코드 중복 제거에 사용하는 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/eventId`.
+            internal var eventId: Swift.String
+            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/observedAt`.
+            internal var observedAt: Foundation.Date
+            /// 수집 상태가 변경된 이유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/reason`.
+            internal var reason: Swift.String
+            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/recordType`.
+            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case collectionStateChanged = "collection_state_changed"
+            }
+            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/recordType`.
+            internal var recordType: Components.Schemas.CollectionStateChanged.RecordTypePayload
+            /// Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/sequence`.
+            internal var sequence: Swift.Int
+            /// 변경된 활동 수집 가능 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/state`.
+            internal var state: Components.Schemas.CollectionState
+            /// 관찰 당시의 지원 시간대 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/timezoneId`.
+            internal var timezoneId: Components.Schemas.Timezone
+            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/utcOffsetMinutes`.
+            internal var utcOffsetMinutes: Swift.Int
+            /// Creates a new `CollectionStateChanged`.
+            ///
+            /// - Parameters:
+            ///   - deviceId: 서버에 등록된 Device 식별자입니다.
+            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///   - reason: 수집 상태가 변경된 이유입니다.
+            ///   - recordType: 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///   - state: 변경된 활동 수집 가능 상태입니다.
+            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
+            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            internal init(
+                deviceId: Swift.String,
+                eventId: Swift.String,
+                observedAt: Foundation.Date,
+                reason: Swift.String,
+                recordType: Components.Schemas.CollectionStateChanged.RecordTypePayload,
+                sequence: Swift.Int,
+                state: Components.Schemas.CollectionState,
+                timezoneId: Components.Schemas.Timezone,
+                utcOffsetMinutes: Swift.Int
+            ) {
+                self.deviceId = deviceId
+                self.eventId = eventId
+                self.observedAt = observedAt
+                self.reason = reason
+                self.recordType = recordType
+                self.sequence = sequence
+                self.state = state
+                self.timezoneId = timezoneId
+                self.utcOffsetMinutes = utcOffsetMinutes
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case deviceId
+                case eventId
+                case observedAt
+                case reason
+                case recordType
+                case sequence
+                case state
+                case timezoneId
+                case utcOffsetMinutes
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.deviceId = try container.decode(
+                    Swift.String.self,
+                    forKey: .deviceId
+                )
+                self.eventId = try container.decode(
+                    Swift.String.self,
+                    forKey: .eventId
+                )
+                self.observedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .observedAt
+                )
+                self.reason = try container.decode(
+                    Swift.String.self,
+                    forKey: .reason
+                )
+                self.recordType = try container.decode(
+                    Components.Schemas.CollectionStateChanged.RecordTypePayload.self,
+                    forKey: .recordType
+                )
+                self.sequence = try container.decode(
+                    Swift.Int.self,
+                    forKey: .sequence
+                )
+                self.state = try container.decode(
+                    Components.Schemas.CollectionState.self,
+                    forKey: .state
+                )
+                self.timezoneId = try container.decode(
+                    Components.Schemas.Timezone.self,
+                    forKey: .timezoneId
+                )
+                self.utcOffsetMinutes = try container.decode(
+                    Swift.Int.self,
+                    forKey: .utcOffsetMinutes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "deviceId",
+                    "eventId",
+                    "observedAt",
+                    "reason",
+                    "recordType",
+                    "sequence",
+                    "state",
+                    "timezoneId",
+                    "utcOffsetMinutes"
+                ])
+            }
+        }
+        /// A privacy-filtered activity context with observable identifiers.
+        ///
+        /// - Remark: Generated from `#/components/schemas/DetailedActivityContext`.
+        internal struct DetailedActivityContext: Codable, Hashable, Sendable {
+            /// 포커싱된 앱의 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/app`.
+            internal var app: Components.Schemas.AppContext
+            /// 식별 가능한 상세 활동 문맥임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case detailed = "detailed"
+            }
+            /// 식별 가능한 상세 활동 문맥임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/kind`.
+            internal var kind: Components.Schemas.DetailedActivityContext.KindPayload
+            /// 브라우저 웹 활동의 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/web`.
+            internal enum WebPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/web/BrowserWebContext`.
+                case browser(Components.Schemas.BrowserWebContext)
+                /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/web/NotApplicableWebContext`.
+                case notApplicable(Components.Schemas.NotApplicableWebContext)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "browser":
+                        self = .browser(try .init(from: decoder))
+                    case "not_applicable":
+                        self = .notApplicable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .browser(value):
+                        try value.encode(to: encoder)
+                    case let .notApplicable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 브라우저 웹 활동의 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/web`.
+            internal var web: Components.Schemas.DetailedActivityContext.WebPayload
+            /// 포커스 창의 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/window`.
+            internal enum WindowPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/window/AbsentWindow`.
+                case absent(Components.Schemas.AbsentWindow)
+                /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/window/CapturedWindow`.
+                case captured(Components.Schemas.CapturedWindow)
+                /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/window/UnavailableWindow`.
+                case unavailable(Components.Schemas.UnavailableWindow)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "absent":
+                        self = .absent(try .init(from: decoder))
+                    case "captured":
+                        self = .captured(try .init(from: decoder))
+                    case "unavailable":
+                        self = .unavailable(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .absent(value):
+                        try value.encode(to: encoder)
+                    case let .captured(value):
+                        try value.encode(to: encoder)
+                    case let .unavailable(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 포커스 창의 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DetailedActivityContext/window`.
+            internal var window: Components.Schemas.DetailedActivityContext.WindowPayload
+            /// Creates a new `DetailedActivityContext`.
+            ///
+            /// - Parameters:
+            ///   - app: 포커싱된 앱의 관찰 문맥입니다.
+            ///   - kind: 식별 가능한 상세 활동 문맥임을 나타냅니다.
+            ///   - web: 브라우저 웹 활동의 관찰 문맥입니다.
+            ///   - window: 포커스 창의 관찰 문맥입니다.
+            internal init(
+                app: Components.Schemas.AppContext,
+                kind: Components.Schemas.DetailedActivityContext.KindPayload,
+                web: Components.Schemas.DetailedActivityContext.WebPayload,
+                window: Components.Schemas.DetailedActivityContext.WindowPayload
+            ) {
+                self.app = app
+                self.kind = kind
+                self.web = web
+                self.window = window
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case app
+                case kind
+                case web
+                case window
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.app = try container.decode(
+                    Components.Schemas.AppContext.self,
+                    forKey: .app
+                )
+                self.kind = try container.decode(
+                    Components.Schemas.DetailedActivityContext.KindPayload.self,
+                    forKey: .kind
+                )
+                self.web = try container.decode(
+                    Components.Schemas.DetailedActivityContext.WebPayload.self,
+                    forKey: .web
+                )
+                self.window = try container.decode(
+                    Components.Schemas.DetailedActivityContext.WindowPayload.self,
+                    forKey: .window
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "app",
+                    "kind",
+                    "web",
+                    "window"
+                ])
             }
         }
         /// Device 등록 결과입니다.
@@ -253,6 +1336,126 @@ internal enum Components {
                 ])
             }
         }
+        /// A non-browser application context.
+        ///
+        /// - Remark: Generated from `#/components/schemas/NotApplicableWebContext`.
+        internal struct NotApplicableWebContext: Codable, Hashable, Sendable {
+            /// 포커싱된 앱에 웹 문맥을 적용할 수 없음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/NotApplicableWebContext/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case notApplicable = "not_applicable"
+            }
+            /// 포커싱된 앱에 웹 문맥을 적용할 수 없음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/NotApplicableWebContext/kind`.
+            internal var kind: Components.Schemas.NotApplicableWebContext.KindPayload
+            /// Creates a new `NotApplicableWebContext`.
+            ///
+            /// - Parameters:
+            ///   - kind: 포커싱된 앱에 웹 문맥을 적용할 수 없음을 나타냅니다.
+            internal init(kind: Components.Schemas.NotApplicableWebContext.KindPayload) {
+                self.kind = kind
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.kind = try container.decode(
+                    Components.Schemas.NotApplicableWebContext.KindPayload.self,
+                    forKey: .kind
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "kind"
+                ])
+            }
+        }
+        /// A normal observation whose identifying details were removed.
+        ///
+        /// - Remark: Generated from `#/components/schemas/OpaqueActivityContext`.
+        internal struct OpaqueActivityContext: Codable, Hashable, Sendable {
+            /// 식별 정보를 제거한 정상 활동 관찰임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityContext/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case opaque = "opaque"
+            }
+            /// 식별 정보를 제거한 정상 활동 관찰임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityContext/kind`.
+            internal var kind: Components.Schemas.OpaqueActivityContext.KindPayload
+            /// Creates a new `OpaqueActivityContext`.
+            ///
+            /// - Parameters:
+            ///   - kind: 식별 정보를 제거한 정상 활동 관찰임을 나타냅니다.
+            internal init(kind: Components.Schemas.OpaqueActivityContext.KindPayload) {
+                self.kind = kind
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.kind = try container.decode(
+                    Components.Schemas.OpaqueActivityContext.KindPayload.self,
+                    forKey: .kind
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "kind"
+                ])
+            }
+        }
+        /// A value intentionally removed by the client privacy policy.
+        ///
+        /// - Remark: Generated from `#/components/schemas/RedactedValue`.
+        internal struct RedactedValue: Codable, Hashable, Sendable {
+            /// 값을 저장하지 않은 개인정보 정책상의 이유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RedactedValue/reason`.
+            internal var reason: Swift.String
+            /// 개인정보 정책에 따라 값을 저장하지 않았음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RedactedValue/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case redacted = "redacted"
+            }
+            /// 개인정보 정책에 따라 값을 저장하지 않았음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RedactedValue/status`.
+            internal var status: Components.Schemas.RedactedValue.StatusPayload
+            /// Creates a new `RedactedValue`.
+            ///
+            /// - Parameters:
+            ///   - reason: 값을 저장하지 않은 개인정보 정책상의 이유입니다.
+            ///   - status: 개인정보 정책에 따라 값을 저장하지 않았음을 나타냅니다.
+            internal init(
+                reason: Swift.String,
+                status: Components.Schemas.RedactedValue.StatusPayload
+            ) {
+                self.reason = reason
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case reason
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.reason = try container.decode(
+                    Swift.String.self,
+                    forKey: .reason
+                )
+                self.status = try container.decode(
+                    Components.Schemas.RedactedValue.StatusPayload.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "reason",
+                    "status"
+                ])
+            }
+        }
         /// IANA timezones accepted by the public API.
         ///
         /// - Remark: Generated from `#/components/schemas/Timezone`.
@@ -365,6 +1568,106 @@ internal enum Components {
                 case accessToken
                 case expiresIn
                 case tokenType
+            }
+        }
+        /// A value that the client could not read.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UnavailableValue`.
+        internal struct UnavailableValue: Codable, Hashable, Sendable {
+            /// 값을 읽을 수 없었던 이유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableValue/reason`.
+            internal var reason: Swift.String
+            /// 해당 값을 읽을 수 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableValue/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unavailable = "unavailable"
+            }
+            /// 해당 값을 읽을 수 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableValue/status`.
+            internal var status: Components.Schemas.UnavailableValue.StatusPayload
+            /// Creates a new `UnavailableValue`.
+            ///
+            /// - Parameters:
+            ///   - reason: 값을 읽을 수 없었던 이유입니다.
+            ///   - status: 해당 값을 읽을 수 없었음을 나타냅니다.
+            internal init(
+                reason: Swift.String,
+                status: Components.Schemas.UnavailableValue.StatusPayload
+            ) {
+                self.reason = reason
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case reason
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.reason = try container.decode(
+                    Swift.String.self,
+                    forKey: .reason
+                )
+                self.status = try container.decode(
+                    Components.Schemas.UnavailableValue.StatusPayload.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "reason",
+                    "status"
+                ])
+            }
+        }
+        /// A window that the client could not inspect.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UnavailableWindow`.
+        internal struct UnavailableWindow: Codable, Hashable, Sendable {
+            /// 포커스 창을 읽을 수 없었던 이유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableWindow/reason`.
+            internal var reason: Swift.String
+            /// 포커스 창을 읽을 수 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableWindow/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unavailable = "unavailable"
+            }
+            /// 포커스 창을 읽을 수 없었음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnavailableWindow/status`.
+            internal var status: Components.Schemas.UnavailableWindow.StatusPayload
+            /// Creates a new `UnavailableWindow`.
+            ///
+            /// - Parameters:
+            ///   - reason: 포커스 창을 읽을 수 없었던 이유입니다.
+            ///   - status: 포커스 창을 읽을 수 없었음을 나타냅니다.
+            internal init(
+                reason: Swift.String,
+                status: Components.Schemas.UnavailableWindow.StatusPayload
+            ) {
+                self.reason = reason
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case reason
+                case status
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.reason = try container.decode(
+                    Swift.String.self,
+                    forKey: .reason
+                )
+                self.status = try container.decode(
+                    Components.Schemas.UnavailableWindow.StatusPayload.self,
+                    forKey: .status
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "reason",
+                    "status"
+                ])
             }
         }
         /// RequestValidationError에서 선택한 공개 검증 오류 정보입니다.
@@ -814,6 +2117,594 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 활동 레코드 생성
+    ///
+    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
+    internal enum ActivitiesCreate {
+        internal static let id: Swift.String = "activitiesCreate"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/activities/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesCreate.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesCreate.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ActivitiesCreate.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json`.
+                internal enum JsonPayload: Codable, Hashable, Sendable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json/ActivityObservation`.
+                    case activityObservation(Components.Schemas.ActivityObservation)
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json/CollectionStateChanged`.
+                    case collectionStateChanged(Components.Schemas.CollectionStateChanged)
+                    internal enum CodingKeys: String, CodingKey {
+                        case recordType
+                    }
+                    internal init(from decoder: any Swift.Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        let discriminator = try container.decode(
+                            Swift.String.self,
+                            forKey: .recordType
+                        )
+                        switch discriminator {
+                        case "activity_observation":
+                            self = .activityObservation(try .init(from: decoder))
+                        case "collection_state_changed":
+                            self = .collectionStateChanged(try .init(from: decoder))
+                        default:
+                            throw Swift.DecodingError.unknownOneOfDiscriminator(
+                                discriminatorKey: CodingKeys.recordType,
+                                discriminatorValue: discriminator,
+                                codingPath: decoder.codingPath
+                            )
+                        }
+                    }
+                    internal func encode(to encoder: any Swift.Encoder) throws {
+                        switch self {
+                        case let .activityObservation(value):
+                            try value.encode(to: encoder)
+                        case let .collectionStateChanged(value):
+                            try value.encode(to: encoder)
+                        }
+                    }
+                }
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/content/application\/json`.
+                case json(Operations.ActivitiesCreate.Input.Body.JsonPayload)
+            }
+            internal var body: Operations.ActivitiesCreate.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                headers: Operations.ActivitiesCreate.Input.Headers = .init(),
+                body: Operations.ActivitiesCreate.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/201/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.ActivityCreateResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ActivityCreateResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesCreate.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// 저장되었거나 동일한 재전송으로 확인된 활동 레코드입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.ActivitiesCreate.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            internal var created: Operations.ActivitiesCreate.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.ActivitiesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesCreate.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesCreate.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesCreate.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ActivitiesCreate.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.ActivitiesCreate.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesCreate.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.ActivitiesCreate.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.ActivitiesCreate.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesCreate.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesCreate.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesCreate.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.ActivitiesCreate.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.ActivitiesCreate.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesCreate.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.ActivitiesCreate.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.ActivitiesCreate.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesCreate.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ActivitiesCreate.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.ActivitiesCreate.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesCreate.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.ActivitiesCreate.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.ActivitiesCreate.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct ServiceUnavailable: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers/Retry-After`.
+                    internal enum RetryAfterPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case _1 = "1"
+                    }
+                    /// 같은 eventId와 body로 재시도하기 전 대기할 초입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers/Retry-After`.
+                    internal var retryAfter: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers.RetryAfterPayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - retryAfter: 같은 eventId와 body로 재시도하기 전 대기할 초입니다.
+                    internal init(retryAfter: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers.RetryAfterPayload? = nil) {
+                        self.retryAfter = retryAfter
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesCreate.Output.ServiceUnavailable.Body
+                /// Creates a new `ServiceUnavailable`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers = .init(),
+                    body: Operations.ActivitiesCreate.Output.ServiceUnavailable.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Service Unavailable
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/503`.
+            ///
+            /// HTTP response code: `503 serviceUnavailable`.
+            case serviceUnavailable(Operations.ActivitiesCreate.Output.ServiceUnavailable)
+            /// The associated value of the enum case if `self` is `.serviceUnavailable`.
+            ///
+            /// - Throws: An error if `self` is not `.serviceUnavailable`.
+            /// - SeeAlso: `.serviceUnavailable`.
+            internal var serviceUnavailable: Operations.ActivitiesCreate.Output.ServiceUnavailable {
+                get throws {
+                    switch self {
+                    case let .serviceUnavailable(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "serviceUnavailable",
                             response: self
                         )
                     }

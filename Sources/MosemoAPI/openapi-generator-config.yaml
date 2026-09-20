@@ -6,5 +6,6 @@ namingStrategy: idiomatic
 filter:
   operations:
     - accountsGetMe
+    - activitiesCreate
     - authExchangeToken
     - devicesCreate

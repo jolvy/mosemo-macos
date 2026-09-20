@@ -70,6 +70,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 jq -e '
+    . as $document |
     (.openapi | type == "string" and startswith("3.1.")) and
     (.paths["/api/v1/auth/token"].post.operationId
         == "authExchangeToken") and
@@ -89,8 +90,25 @@ jq -e '
         == "#/components/schemas/DeviceCreateResponse") and
     (.components.schemas.DeviceCreateResponse.properties.deviceId.format == "uuid") and
     (.paths["/api/v1/devices"].post.responses["401"] != null) and
-    (.paths["/api/v1/devices"].post.responses["422"] != null)
+    (.paths["/api/v1/devices"].post.responses["422"] != null) and
+    (.paths["/api/v1/activities"].post.operationId == "activitiesCreate") and
+    (["201", "401", "404", "405", "409", "422", "500"]
+        | all(. as $status
+            | $document.paths["/api/v1/activities"].post.responses[$status] != null)) and
+    (.components.schemas.CapturedText.required
+        | index("originalByteLength") == null) and
+    (.components.schemas.CapturedText.properties.originalByteLength.anyOf
+        | map(.type) | sort == ["integer", "null"])
 ' "$source_contract" >/dev/null
+
+normalized_contract="$temporary_directory/openapi.json"
+jq '
+    (.components.schemas.CapturedText.properties.originalByteLength) |= (
+        . as $property
+        | ($property.anyOf | map(select(.type == "integer")) | first) as $integer
+        | ($property | del(.anyOf)) + $integer
+    )
+' "$source_contract" > "$normalized_contract"
 
 if [ -d "$generated_sources" ]; then
     cp -R "$generated_sources" "$previous_generated_sources"
@@ -99,7 +117,7 @@ fi
 generation_started=1
 
 input_installed=1
-ln -s ../../../openapi.json "$generator_input"
+ln -s "$normalized_contract" "$generator_input"
 
 (
     cd "$component_root"

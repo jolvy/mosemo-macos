@@ -460,6 +460,468 @@ final class MosemoAPITests: XCTestCase {
         }
     }
 
+    func testCreateActivityMapsDetailedBrowserObservation() async throws {
+        let metadata = makeActivityMetadata()
+        let receivedAt = now.addingTimeInterval(5)
+        let record = ActivityRecord.observation(.init(
+            metadata: metadata,
+            context: .detailed(.init(
+                app: .init(bundleID: .captured("com.example.app"), name: .absent),
+                window: .unavailable(reason: "permission_missing"),
+                web: .browser(.init(
+                    tabTitle: .captured(.init(
+                        value: "A title",
+                        truncated: true,
+                        originalByteLength: 42
+                    )),
+                    url: .redacted(reason: "privacy_rule")
+                ))
+            ))
+        ))
+        let client = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body else {
+                XCTFail("Expected an activity observation")
+                return .undocumented(statusCode: 500, .init())
+            }
+
+            XCTAssertEqual(observation.deviceId, metadata.deviceRegistrationID.uuidString)
+            XCTAssertEqual(observation.eventId, metadata.eventID.uuidString)
+            XCTAssertEqual(observation.sequence, 7)
+            XCTAssertEqual(observation.observedAt, metadata.observedAt)
+            XCTAssertEqual(observation.timezoneId, .asiaSeoul)
+            XCTAssertEqual(observation.utcOffsetMinutes, 540)
+            XCTAssertEqual(observation.recordType, .activityObservation)
+
+            guard case .detailed(let context) = observation.context else {
+                XCTFail("Expected detailed context")
+                return .undocumented(statusCode: 500, .init())
+            }
+            guard case .captured(let bundleID) = context.app.bundleId else {
+                XCTFail("Expected captured bundle ID")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(bundleID.value, "com.example.app")
+            guard case .absent = context.app.name else {
+                XCTFail("Expected absent app name")
+                return .undocumented(statusCode: 500, .init())
+            }
+            guard case .unavailable(let window) = context.window else {
+                XCTFail("Expected unavailable window")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(window.reason, "permission_missing")
+            guard case .browser(let browser) = context.web,
+                  case .captured(let title) = browser.tabTitle,
+                  case .redacted(let url) = browser.url else {
+                XCTFail("Expected captured title and redacted URL")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(title.value, "A title")
+            XCTAssertEqual(title.truncated, true)
+            XCTAssertEqual(title.originalByteLength, 42)
+            XCTAssertEqual(url.reason, "privacy_rule")
+
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: receivedAt,
+                status: .accepted
+            ))))
+        })
+
+        let result = try await client.createActivity(record)
+
+        XCTAssertEqual(result, ActivityCreateResult(
+            eventID: metadata.eventID,
+            receivedAt: receivedAt
+        ))
+    }
+
+    func testCreateActivityMapsOpaqueObservation() async throws {
+        let metadata = makeActivityMetadata()
+        let client = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body,
+                  case .opaque(let context) = observation.context else {
+                XCTFail("Expected opaque activity observation")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(context.kind, .opaque)
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+
+        _ = try await client.createActivity(.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        )))
+    }
+
+    func testCreateActivityMapsNonBrowserAndOptionalTextLength() async throws {
+        let metadata = makeActivityMetadata()
+        let client = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body,
+                  case .detailed(let context) = observation.context,
+                  case .unavailable(let bundleID) = context.app.bundleId,
+                  case .captured(let name) = context.app.name,
+                  case .captured(let window) = context.window,
+                  case .notApplicable = context.web else {
+                XCTFail("Expected non-browser detailed context")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(bundleID.reason, "bundle_unavailable")
+            XCTAssertEqual(name.value, "Example")
+            XCTAssertEqual(window.title.value, "Window")
+            XCTAssertNil(window.title.originalByteLength)
+
+            let encoded = try JSONEncoder().encode(observation)
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+            )
+            XCTAssertEqual(object["recordType"] as? String, "activity_observation")
+            let contextObject = try XCTUnwrap(object["context"] as? [String: Any])
+            let windowObject = try XCTUnwrap(contextObject["window"] as? [String: Any])
+            let titleObject = try XCTUnwrap(windowObject["title"] as? [String: Any])
+            XCTAssertNil(titleObject["originalByteLength"])
+
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+
+        _ = try await client.createActivity(.observation(.init(
+            metadata: metadata,
+            context: .detailed(.init(
+                app: .init(
+                    bundleID: .unavailable(reason: "bundle_unavailable"),
+                    name: .captured("Example")
+                ),
+                window: .captured(title: .init(value: "Window")),
+                web: .notApplicable
+            ))
+        )))
+    }
+
+    func testCreateActivityMapsRemainingDetailedValueStates() async throws {
+        let metadata = makeActivityMetadata()
+        let redactedTitleClient = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body,
+                  case .detailed(let context) = observation.context,
+                  case .absent = context.app.bundleId,
+                  case .unavailable(let name) = context.app.name,
+                  case .absent = context.window,
+                  case .browser(let browser) = context.web,
+                  case .redacted(let title) = browser.tabTitle,
+                  case .captured(let url) = browser.url else {
+                XCTFail("Expected remaining detailed value states")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(name.reason, "name_unavailable")
+            XCTAssertEqual(title.reason, "title_private")
+            XCTAssertEqual(url.value, "https://example.com")
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+        let unavailableURLClient = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body,
+                  case .detailed(let context) = observation.context,
+                  case .browser(let browser) = context.web,
+                  case .absent = browser.tabTitle,
+                  case .unavailable(let url) = browser.url else {
+                XCTFail("Expected absent tab title and unavailable URL")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(url.reason, "automation_denied")
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+
+        _ = try await redactedTitleClient.createActivity(.observation(.init(
+            metadata: metadata,
+            context: .detailed(.init(
+                app: .init(
+                    bundleID: .absent,
+                    name: .unavailable(reason: "name_unavailable")
+                ),
+                window: .absent,
+                web: .browser(.init(
+                    tabTitle: .redacted(reason: "title_private"),
+                    url: .captured("https://example.com")
+                ))
+            ))
+        )))
+        _ = try await unavailableURLClient.createActivity(.observation(.init(
+            metadata: metadata,
+            context: .detailed(.init(
+                app: .init(bundleID: .absent, name: .absent),
+                window: .absent,
+                web: .browser(.init(
+                    tabTitle: .absent,
+                    url: .unavailable(reason: "automation_denied")
+                ))
+            ))
+        )))
+    }
+
+    func testCreateActivityMapsCollectionStateChange() async throws {
+        let metadata = makeActivityMetadata()
+        let client = makeClient(createActivity: { input in
+            guard case .json(.collectionStateChanged(let change)) = input.body else {
+                XCTFail("Expected collection state change")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(change.deviceId, metadata.deviceRegistrationID.uuidString)
+            XCTAssertEqual(change.eventId, metadata.eventID.uuidString)
+            XCTAssertEqual(change.recordType, .collectionStateChanged)
+            XCTAssertEqual(change.state, .suspended)
+            XCTAssertEqual(change.reason, "system_sleep")
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+
+        _ = try await client.createActivity(.collectionStateChanged(.init(
+            metadata: metadata,
+            state: .suspended,
+            reason: "system_sleep"
+        )))
+    }
+
+    func testCreateActivityReturnsSameServerResultForExplicitRetry() async throws {
+        let metadata = makeActivityMetadata()
+        let calls = CallCounter()
+        let receivedAt = now.addingTimeInterval(10)
+        let client = makeClient(createActivity: { _ in
+            await calls.increment()
+            return .created(.init(body: .json(.init(
+                eventId: metadata.eventID.uuidString,
+                receivedAt: receivedAt,
+                status: .accepted
+            ))))
+        })
+        let record = ActivityRecord.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        ))
+
+        let first = try await client.createActivity(record)
+        let retry = try await client.createActivity(record)
+
+        XCTAssertEqual(first, retry)
+        XCTAssertEqual(first.receivedAt, receivedAt)
+        let callCount = await calls.value()
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testCreateActivityRejectsInvalidOrMismatchedResponseEventID() async {
+        let metadata = makeActivityMetadata()
+        let invalidClient = makeClient(createActivity: { _ in
+            .created(.init(body: .json(.init(
+                eventId: "not-a-uuid",
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+        let mismatchedClient = makeClient(createActivity: { _ in
+            .created(.init(body: .json(.init(
+                eventId: UUID().uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+        let record = ActivityRecord.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        ))
+
+        await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+            _ = try await invalidClient.createActivity(record)
+        }
+        await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+            _ = try await mismatchedClient.createActivity(record)
+        }
+    }
+
+    func testCreateActivityClearsTokenOnUnauthorized() async throws {
+        let metadata = makeActivityMetadata()
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "stored-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let client = makeClient(
+            tokenStore: tokenStore,
+            createActivity: { _ in
+                .unauthorized(.init(body: .json(makeErrorResponse(
+                    code: 401,
+                    status: "AUTH_INVALID_ACCESS_TOKEN",
+                    message: "unauthorized"
+                ))))
+            }
+        )
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.createActivity(.observation(.init(
+                metadata: metadata,
+                context: .opaque
+            )))
+        }
+        let storedToken = await tokenStore.currentToken()
+        XCTAssertNil(storedToken)
+    }
+
+    func testCreateActivityPreservesAuthenticationRequiredWhenTokenDeleteFails() async {
+        let tokenStore = FailingDeleteTokenStore()
+        let client = makeClient(
+            tokenStore: tokenStore,
+            createActivity: { _ in
+                .unauthorized(.init(body: .json(makeErrorResponse(
+                    code: 401,
+                    status: "AUTH_INVALID_ACCESS_TOKEN",
+                    message: "unauthorized"
+                ))))
+            }
+        )
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.createActivity(.observation(.init(
+                metadata: self.makeActivityMetadata(),
+                context: .opaque
+            )))
+        }
+    }
+
+    func testCreateActivityMapsDeviceNotFound() async {
+        let metadata = makeActivityMetadata()
+        let client = makeClient(createActivity: { _ in
+            .notFound(.init(body: .json(makeErrorResponse(
+                code: 404,
+                status: "ACTIVITY_DEVICE_NOT_FOUND",
+                message: "device not found"
+            ))))
+        })
+
+        await assertAPIError(.activityDeviceNotFound) {
+            _ = try await client.createActivity(.observation(.init(
+                metadata: metadata,
+                context: .opaque
+            )))
+        }
+    }
+
+    func testCreateActivityMapsBothConflictReasonsWithoutRetrying() async {
+        let metadata = makeActivityMetadata()
+        let cases: [(String, MosemoAPIError)] = [
+            ("ACTIVITY_EVENT_ID_CONFLICT", .activityEventIDConflict),
+            ("ACTIVITY_SEQUENCE_CONFLICT", .activitySequenceConflict),
+        ]
+
+        for (status, expectedError) in cases {
+            let calls = CallCounter()
+            let client = makeClient(createActivity: { _ in
+                await calls.increment()
+                return .conflict(.init(body: .json(makeErrorResponse(
+                    code: 409,
+                    status: status,
+                    message: "conflict"
+                ))))
+            })
+
+            await assertAPIError(expectedError) {
+                _ = try await client.createActivity(.observation(.init(
+                    metadata: metadata,
+                    context: .opaque
+                )))
+            }
+            let callCount = await calls.value()
+            XCTAssertEqual(callCount, 1)
+        }
+    }
+
+    func testCreateActivityMapsValidationServerAndUndocumentedErrors() async {
+        let metadata = makeActivityMetadata()
+        let record = ActivityRecord.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        ))
+        let validationClient = makeClient(createActivity: { _ in
+            .unprocessableContent(.init(body: .json(makeErrorResponse(
+                code: 422,
+                status: "INVALID_ARGUMENT",
+                message: "validation failed"
+            ))))
+        })
+        let serverClient = makeClient(createActivity: { _ in
+            .internalServerError(.init(body: .json(makeErrorResponse(
+                code: 500,
+                status: "INTERNAL_SERVER_ERROR",
+                message: "server error"
+            ))))
+        })
+        let undocumentedClient = makeClient(createActivity: { _ in
+            .undocumented(statusCode: 503, .init())
+        })
+        let methodClient = makeClient(createActivity: { _ in
+            .methodNotAllowed(.init(body: .json(makeErrorResponse(
+                code: 405,
+                status: "REQUEST_METHOD_NOT_ALLOWED",
+                message: "method not allowed"
+            ))))
+        })
+
+        await assertAPIError(.validationFailed) {
+            _ = try await validationClient.createActivity(record)
+        }
+        await assertAPIError(.serverError(statusCode: 500)) {
+            _ = try await serverClient.createActivity(record)
+        }
+        await assertAPIError(.serverError(statusCode: 503)) {
+            _ = try await undocumentedClient.createActivity(record)
+        }
+        await assertAPIError(.unexpectedResponse(statusCode: 405)) {
+            _ = try await methodClient.createActivity(record)
+        }
+    }
+
+    func testCreateActivityMapsTransportErrorsWithoutRetrying() async {
+        let metadata = makeActivityMetadata()
+        let record = ActivityRecord.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        ))
+        let timeoutCalls = CallCounter()
+        let timeoutClient = makeClient(createActivity: { _ in
+            await timeoutCalls.increment()
+            throw URLError(.timedOut)
+        })
+        let networkCalls = CallCounter()
+        let networkClient = makeClient(createActivity: { _ in
+            await networkCalls.increment()
+            throw URLError(.notConnectedToInternet)
+        })
+
+        await assertAPIError(.timedOut) {
+            _ = try await timeoutClient.createActivity(record)
+        }
+        await assertAPIError(.networkUnavailable) {
+            _ = try await networkClient.createActivity(record)
+        }
+        let timeoutCallCount = await timeoutCalls.value()
+        let networkCallCount = await networkCalls.value()
+        XCTAssertEqual(timeoutCallCount, 1)
+        XCTAssertEqual(networkCallCount, 1)
+    }
+
     func testAuthenticationMiddlewareAddsBearerHeader() async throws {
         let tokenStore = MemoryAccessTokenStore(token: .init(
             value: "header-token",
@@ -608,7 +1070,7 @@ final class MosemoAPITests: XCTestCase {
     }
 
     private func makeClient(
-        tokenStore: MemoryAccessTokenStore = MemoryAccessTokenStore(),
+        tokenStore: any AccessTokenStoring = MemoryAccessTokenStore(),
         exchange: @escaping MockGeneratedAPI.Exchange = { _ in
             .undocumented(statusCode: 500, .init())
         },
@@ -617,6 +1079,9 @@ final class MosemoAPITests: XCTestCase {
         },
         devicesCreate: @escaping MockGeneratedAPI.DevicesCreate = { _ in
             .undocumented(statusCode: 500, .init())
+        },
+        createActivity: @escaping MockGeneratedAPI.CreateActivity = { _ in
+            .undocumented(statusCode: 500, .init())
         }
     ) -> LiveMosemoAPIClient {
         LiveMosemoAPIClient(
@@ -624,12 +1089,14 @@ final class MosemoAPITests: XCTestCase {
             anonymousClient: MockGeneratedAPI(
                 exchange: exchange,
                 getMe: getMe,
-                createDevice: devicesCreate
+                createDevice: devicesCreate,
+                createActivity: createActivity
             ),
             authenticatedClient: MockGeneratedAPI(
                 exchange: exchange,
                 getMe: getMe,
-                createDevice: devicesCreate
+                createDevice: devicesCreate,
+                createActivity: createActivity
             ),
             tokenStore: tokenStore,
             now: { self.now }
@@ -645,7 +1112,8 @@ final class MosemoAPITests: XCTestCase {
             anonymousClient: MockGeneratedAPI(
                 exchange: { _ in .undocumented(statusCode: 500, .init()) },
                 getMe: { _ in .undocumented(statusCode: 500, .init()) },
-                createDevice: { _ in .undocumented(statusCode: 500, .init()) }
+                createDevice: { _ in .undocumented(statusCode: 500, .init()) },
+                createActivity: { _ in .undocumented(statusCode: 500, .init()) }
             ),
             authenticatedClient: Client(
                 serverURL: baseURL,
@@ -657,6 +1125,17 @@ final class MosemoAPITests: XCTestCase {
             ),
             tokenStore: tokenStore,
             now: { self.now }
+        )
+    }
+
+    private func makeActivityMetadata() -> ActivityRecordMetadata {
+        ActivityRecordMetadata(
+            deviceRegistrationID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            eventID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            sequence: 7,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_100),
+            timezoneID: "Asia/Seoul",
+            utcOffsetMinutes: 540
         )
     }
 
@@ -718,10 +1197,14 @@ private struct MockGeneratedAPI: APIProtocol {
     typealias DevicesCreate = @Sendable (
         Operations.DevicesCreate.Input
     ) async throws -> Operations.DevicesCreate.Output
+    typealias CreateActivity = @Sendable (
+        Operations.ActivitiesCreate.Input
+    ) async throws -> Operations.ActivitiesCreate.Output
 
     let exchange: Exchange
     let getMe: GetMe
     let createDevice: DevicesCreate
+    let createActivity: CreateActivity
 
     func authExchangeToken(
         _ input: Operations.AuthExchangeToken.Input
@@ -739,6 +1222,11 @@ private struct MockGeneratedAPI: APIProtocol {
         _ input: Operations.DevicesCreate.Input
     ) async throws -> Operations.DevicesCreate.Output {
         try await createDevice(input)
+    }
+    func activitiesCreate(
+        _ input: Operations.ActivitiesCreate.Input
+    ) async throws -> Operations.ActivitiesCreate.Output {
+        try await createActivity(input)
     }
 }
 
@@ -813,6 +1301,21 @@ private actor MemoryAccessTokenStore: AccessTokenStoring {
     }
 }
 
+private actor FailingDeleteTokenStore: AccessTokenStoring {
+    func load() -> StoredAccessToken? {
+        StoredAccessToken(
+            value: "expired-token",
+            expiresAt: Date().addingTimeInterval(60)
+        )
+    }
+
+    func save(_ token: StoredAccessToken) {}
+
+    func delete() throws {
+        throw MosemoAPIError.credentialStorageFailed
+    }
+}
+
 private actor HeaderRecorder {
     private var value: String?
 
@@ -822,6 +1325,18 @@ private actor HeaderRecorder {
 
     func authorization() -> String? {
         value
+    }
+}
+
+private actor CallCounter {
+    private var count = 0
+
+    func increment() {
+        count += 1
+    }
+
+    func value() -> Int {
+        count
     }
 }
 

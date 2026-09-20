@@ -2,6 +2,9 @@ public enum MosemoAPIError: Error, Equatable, Sendable {
     case authenticationRequired
     case invalidAuthorizationCode
     case validationFailed
+    case activityDeviceNotFound
+    case activityEventIDConflict
+    case activitySequenceConflict
     case serverError(statusCode: Int)
     case networkUnavailable
     case timedOut

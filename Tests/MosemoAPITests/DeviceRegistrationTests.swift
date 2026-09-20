@@ -102,7 +102,7 @@ final class DeviceRegistrationTests: XCTestCase {
         let manager = DeviceRegistrationManager(stateStore: store)
 
         _ = try await manager.ensureRegistered(for: firstAccount, using: client)
-        client.setAccountID(secondAccount.id)
+        await client.setAccountID(secondAccount.id)
         _ = try await manager.ensureRegistered(for: secondAccount, using: client)
 
         let observed = await client.observedRegistrations()
@@ -193,8 +193,8 @@ final class DeviceRegistrationTests: XCTestCase {
 
         try await store.save(state, for: firstAccount.id)
 
-        let firstState = await store.load(for: firstAccount.id)
-        let secondState = await store.load(for: secondAccount.id)
+        let firstState = try await store.load(for: firstAccount.id)
+        let secondState = try await store.load(for: secondAccount.id)
         XCTAssertEqual(firstState, state)
         XCTAssertEqual(
             secondState,
@@ -307,6 +307,10 @@ private actor RecordingDeviceClient: MosemoAPIClient {
         case .failure(let error):
             throw error
         }
+    }
+
+    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult {
+        fatalError("Not used by device registration tests")
     }
 
     func signOut() async throws {
