@@ -142,7 +142,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         } catch {
             let mappedError = Self.mapCurrentAccount(error)
             if mappedError == .authenticationRequired {
-                try await tokenStore.delete()
+                try? await tokenStore.delete()
             }
             throw mappedError
         }
@@ -179,7 +179,65 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         } catch {
             let mappedError = Self.mapDeviceCreate(error)
             if mappedError == .authenticationRequired {
-                try await tokenStore.delete()
+                try? await tokenStore.delete()
+            }
+            throw mappedError
+        }
+    }
+
+    public func createActivity(
+        _ record: ActivityRecord
+    ) async throws -> ActivityCreateResult {
+        let request = try ActivityRequestMapper.request(from: record)
+
+        do {
+            let response = try await authenticatedClient.activitiesCreate(
+                body: .json(request.payload)
+            )
+            switch response {
+            case .created(let response):
+                let result = try response.body.json
+                guard let eventID = UUID(uuidString: result.eventId),
+                      eventID == request.eventID else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 201)
+                }
+                return ActivityCreateResult(
+                    eventID: eventID,
+                    receivedAt: result.receivedAt
+                )
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .notFound(let response):
+                let error = try response.body.json.error
+                guard error.status == "ACTIVITY_DEVICE_NOT_FOUND" else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 404)
+                }
+                throw MosemoAPIError.activityDeviceNotFound
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .conflict(let response):
+                let error = try response.body.json.error
+                switch error.status {
+                case "ACTIVITY_EVENT_ID_CONFLICT":
+                    throw MosemoAPIError.activityEventIDConflict
+                case "ACTIVITY_SEQUENCE_CONFLICT":
+                    throw MosemoAPIError.activitySequenceConflict
+                default:
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 409)
+                }
+            case .unprocessableContent:
+                throw MosemoAPIError.validationFailed
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .serviceUnavailable:
+                throw Self.error(forHTTPStatus: 503)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mappedError = Self.mapActivity(error)
+            if mappedError == .authenticationRequired {
+                try? await tokenStore.delete()
             }
             throw mappedError
         }
@@ -248,6 +306,21 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
     }
 
     private static func mapDeviceCreate(_ error: Error) -> MosemoAPIError {
+        if let clientError = error as? ClientError,
+           let statusCode = clientError.response?.status.code {
+            switch statusCode {
+            case 401:
+                return .authenticationRequired
+            case 422:
+                return .validationFailed
+            default:
+                return mapCommon(clientError, statusCode: statusCode)
+            }
+        }
+        return mapCommon(error, statusCode: nil)
+    }
+
+    private static func mapActivity(_ error: Error) -> MosemoAPIError {
         if let clientError = error as? ClientError,
            let statusCode = clientError.response?.status.code {
             switch statusCode {

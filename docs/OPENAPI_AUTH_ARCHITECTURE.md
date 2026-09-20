@@ -19,8 +19,9 @@
 3. 브라우저 OAuth, 일회용 코드 교환, Bearer 인증과 자격 증명 보관의 책임을
    분리한다.
 
-현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회와
-Device 등록 API다. 활동 이벤트 전송과 로컬 spool은 아직 구현 범위가 아니다.
+현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회,
+Device 등록과 활동 레코드 등록 API다. Collector 연결과 로컬 spool은 아직 구현
+범위가 아니다.
 
 ## 모듈 구조
 
@@ -71,6 +72,7 @@ public protocol MosemoAPIClient: Sendable {
 
     func currentAccount() async throws -> Account
     func registerDevice(idempotencyKey: UUID) async throws -> Device
+    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult
     func signOut() async throws
 }
 ```
@@ -87,7 +89,10 @@ public protocol MosemoAPIClient: Sendable {
 서버 DTO의 account UUID, provider, 생성 시각과 마지막 인증 시각은
 `LiveMosemoAPIClient`가 앱의 `Account`로 명시적으로 변환한다. 서버 스키마가
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
-Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
+활동 모델은 `ActivityRecordMetadata`에 서버 발급 Device UUID, event ID, sequence,
+관측 시각, timezone ID와 UTC offset을 담는다. `ActivityRequestMapper`가 이 공개
+모델과 상세·opaque 컨텍스트를 generated DTO로 변환하며, Collector와 네트워크
+계층을 분리한다. Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
 `deviceId`를 UUIDv7으로 검증한 뒤 `Device(id:)`로 반환한다. 이 API 계층은
 `DeviceRegistrationManager`가 계정 UUID별 Keychain 상태를 읽고, pending
 멱등 키를 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를
@@ -102,7 +107,7 @@ Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보�
 | 생성 모드 | `types`, `client` |
 | 접근 수준 | `internal` |
 | 이름 전략 | `idiomatic` |
-| 포함 operation | token 교환, 현재 계정 조회, Device 등록 |
+| 포함 operation | token 교환, 현재 계정 조회, Device 등록, 활동 레코드 생성 |
 | generator | `1.13.0` |
 | runtime | `1.12.0` |
 | URLSession transport | `1.3.0` |
@@ -111,7 +116,7 @@ Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보�
 `/api/v1/auth/kakao/login` URL은 wrapper가 만들고 callback은
 `ASWebAuthenticationSession`이 수신한다. 생성 client가 호출하는 endpoint는
 `POST /api/v1/auth/token`, `GET /api/v1/accounts/me`,
-`POST /api/v1/devices`다.
+`POST /api/v1/devices`, `POST /api/v1/activities`다.
 
 초기에는 build-tool plugin에서 빌드할 때마다 코드를 생성하려 했다. 실제 Xcode
 Debug build에서 plugin 검증 단계가 실패해 command plugin으로 미리 생성한
@@ -252,7 +257,8 @@ Release 설정이 비어 있거나 잘못되면 앱을 crash시키지 않고 로
 
 access token, callback code, PKCE verifier는 로그와 사용자용 오류 설명에 넣지
 않는다. 활동 payload에는 원문 URL·제목·키 입력 내용·클릭 좌표 등의 금지 필드를
-추가할 수 없다. 현재 인증 연동은 수집 이벤트를 서버에 전송하지 않는다.
+추가할 수 없다. 활동 API는 개인정보 필터링이 끝난 공개 활동 모델만 받으며
+Collector와의 호출 연결은 후속 작업이다.
 
 이 경계는 `scripts/check_collector_privacy.sh`에서 정적으로 확인한다.
 
@@ -269,7 +275,8 @@ scripts/update_openapi.sh
 
 스크립트는 다음 순서로 동작한다.
 
-1. 상위 계약이 서버 스냅샷과 같고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header를 포함하는지 확인한다.
+1. 상위 계약이 서버 스냅샷과 같고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header·활동 응답을 포함하는지 확인한다.
+   `CapturedText.originalByteLength`는 정확히 `integer | null` 조합이어야 한다.
 2. 기존 `GeneratedSources`를 임시 위치에 백업한다.
 3. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
 4. command plugin으로 Swift 코드를 생성한다.
@@ -292,6 +299,8 @@ checkout한 서버 저장소의 계약 파일을 상위 계약으로 복사한�
 - Bearer header 삽입, token 만료와 401 정리, 로그아웃
 - Keychain 실제 round trip
 - generated account DTO에서 앱 `Account`로의 변환
+- 활동 observation·collection state DTO 변환, discriminator와 값 상태, 201 event ID 검증
+- 활동 401·404·409·422·500 및 네트워크 오류 매핑과 자동 재시도 없음
 - RFC 7636 PKCE vector와 무작위 verifier 형식
 - login URL과 callback 성공·오류·취소·중복 값 검증
 - Device 등록 상태의 최초 저장, 성공 후 재실행, 응답 유실 재시도, 계정별 분리,
@@ -322,10 +331,10 @@ status를 `validationFailed`로 매핑한다.
 - 서버 OpenAPI 계약의 작성·배포
 - refresh token과 token refresh
 - 범용 HTTP 재시도 정책
-- 활동 이벤트 업로드, batching, spool, ACK 처리
+- Collector 이벤트 변환과 호출 연결, sequence 생성, batching, spool, ACK 처리
 - `ActivitySyncClient` 빈 인터페이스
 - 실제 Kakao 계정이 필요한 자동 end-to-end 테스트
 
-활동 전송 API가 계약에 추가되기 전에는 sync abstraction을 미리 만들지 않는다.
-추후 구현할 때는 `CollectorCore` 이벤트를 API DTO로 명시적으로 변환하고 event ID,
-request idempotency, partial ACK와 재전송 규칙을 먼저 확정해야 한다.
+추후 구현할 때는 `CollectorCore` 이벤트를 공개 활동 모델로 명시적으로 변환하고,
+저장된 Device UUID를 `ActivityRecordMetadata.deviceRegistrationID`에 주입한다.
+event ID와 sequence는 호출 전에 확정해 재전송에서도 동일하게 유지해야 한다.
