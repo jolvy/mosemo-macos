@@ -15,6 +15,8 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 
 ## 설계 문서
 
+- [macOS 활동 라벨 검토와 집계 PRD](PRD_MACOS_ACTIVITY_LABELING.md): 제안 표시,
+  사용자 확정, 라벨 타임라인과 대시보드의 앱 동작
 - [macOS OpenAPI·인증 아키텍처](OPENAPI_AUTH_ARCHITECTURE.md): 모듈 경계,
   생성 코드 관리, Kakao 로그인, Keychain, 오류·Privacy·CI 정책
 - [ADR-0001: OpenAPI 생성 코드를 MosemoAPI 내부에 둔다](adr/0001-keep-generated-openapi-inside-mosemo-api.md)
