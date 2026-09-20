@@ -173,8 +173,10 @@ final class DeviceRegistrationTests: XCTestCase {
         async let first = manager.ensureRegistered(for: account, using: client)
         async let second = manager.ensureRegistered(for: account, using: client)
 
-        XCTAssertEqual(try await first, device)
-        XCTAssertEqual(try await second, device)
+        let firstDevice = try await first
+        let secondDevice = try await second
+        XCTAssertEqual(firstDevice, device)
+        XCTAssertEqual(secondDevice, device)
         let observed = await client.observedRegistrations()
         XCTAssertEqual(observed.count, 1)
     }

@@ -75,6 +75,11 @@ let package = Package(
             ],
             path: "Tests/MosemoAPITests"
         ),
+        .testTarget(
+            name: "MosemoAppTests",
+            dependencies: ["MosemoApp", "MosemoAPI"],
+            path: "Tests/MosemoAppTests"
+        ),
     ],
     swiftLanguageModes: [.v5]
 )
