@@ -94,8 +94,9 @@ public actor KeychainDeviceRegistrationStateStore: DeviceRegistrationStateStorin
     }
 }
 
-public struct DeviceRegistrationManager: Sendable {
+public actor DeviceRegistrationManager {
     private let stateStore: any DeviceRegistrationStateStoring
+    private var inFlight: [UUID: Task<Device, Error>] = [:]
 
     public init(stateStore: any DeviceRegistrationStateStoring) {
         self.stateStore = stateStore
@@ -105,6 +106,27 @@ public struct DeviceRegistrationManager: Sendable {
     public func ensureRegistered(
         for account: Account,
         using client: any MosemoAPIClient
+    ) async throws -> Device {
+        if let existingTask = inFlight[account.id] {
+            return try await existingTask.value
+        }
+
+        let task = Task { [stateStore] in
+            try await Self.register(
+                account: account,
+                using: client,
+                stateStore: stateStore
+            )
+        }
+        inFlight[account.id] = task
+        defer { inFlight[account.id] = nil }
+        return try await task.value
+    }
+
+    private static func register(
+        account: Account,
+        using client: any MosemoAPIClient,
+        stateStore: any DeviceRegistrationStateStoring
     ) async throws -> Device {
         let state = try await stateStore.load(for: account.id)
         if let deviceID = state.deviceID {
