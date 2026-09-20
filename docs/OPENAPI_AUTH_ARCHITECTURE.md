@@ -34,7 +34,7 @@ flowchart LR
         Live --> Anonymous[Anonymous generated Client]
         Live --> Authenticated[Authenticated generated Client]
         Authenticated --> Middleware[Bearer middleware]
-        Middleware --> Keychain[Keychain token store]
+        Middleware --> Keychain[Keychain token and device state]
         Anonymous --> Transport[OpenAPI URLSession transport]
         Authenticated --> Transport
         Generated[Generated APIProtocol and DTOs] --- Anonymous
@@ -76,8 +76,10 @@ public protocol MosemoAPIClient: Sendable {
 ```
 
 모듈 밖에 공개하는 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
-`AccountProvider`, `Device`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback 처리
-타입이다. 생성된 `Client`, `APIProtocol`, `Components.Schemas.*`는
+`AccountProvider`, `Device`, `DeviceRegistrationState`,
+`DeviceRegistrationStateStoring`, `KeychainDeviceRegistrationStateStore`,
+`DeviceRegistrationManager`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback
+처리 타입이다. 생성된 `Client`, `APIProtocol`, `Components.Schemas.*`는
 `internal`이며 앱 UI와
 `CollectorCore`에서 직접 사용할 수 없다. raw access token도 public API의
 반환값이 아니다.
@@ -87,7 +89,9 @@ public protocol MosemoAPIClient: Sendable {
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
 Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
 `deviceId`를 UUIDv7으로 검증한 뒤 `Device(id:)`로 반환한다. 이 API 계층은
-멱등 키 생성·저장이나 로그인 후 자동 등록을 수행하지 않는다.
+`DeviceRegistrationManager`가 계정 UUID별 Keychain 상태를 읽고, pending
+멱등 키를 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를
+정리한다. `LiveMosemoAPIClient` 자체는 멱등 키를 생성하거나 재시도하지 않는다.
 
 ## OpenAPI 계약과 생성 코드
 
@@ -147,7 +151,19 @@ sequenceDiagram
     API->>Server: GET /api/v1/accounts/me + Bearer
     Server-->>API: account DTO
     API-->>Auth: Account
-    Auth-->>User: 로그인 상태 표시
+    Auth->>Keychain: account별 Device 상태 조회
+    alt 저장된 deviceId 없음
+        Keychain-->>Auth: pending key 또는 없음
+        Auth->>Keychain: 없으면 UUID 멱등 키 저장
+        Auth->>API: registerDevice(idempotencyKey)
+        API->>Server: POST /api/v1/devices + Bearer
+        Server-->>API: deviceId
+        API-->>Auth: Device
+        Auth->>Keychain: deviceId 저장 및 pending key 정리
+    else 저장된 deviceId 있음
+        Keychain-->>Auth: Device 재사용
+    end
+    Auth-->>User: 로그인 및 Device 등록 상태 표시
 ```
 
 고정 식별자는 다음과 같다.
@@ -178,7 +194,9 @@ generated client를 사용한다. 인증 middleware는 매 요청마다 Keychain
 Keychain에는 raw token과 서버의 `expires_in`으로 계산한 `expiresAt`을 함께
 저장한다. 만료된 token 또는 인증 요청의 401 응답에서는 Keychain을 비우고
 `authenticationRequired`를 반환한다. 로그아웃도 서버 호출 없이 로컬 Keychain
-자격 증명을 삭제한다.
+자격 증명을 삭제하지만, 계정별 Device 등록 상태는 유지해 같은 계정의
+재로그인에서 Device를 재사용한다. Device 등록 상태의 pending 멱등 키는
+전송 실패·응답 유실·앱 재시작 뒤에도 같은 계정과 함께 보존한다.
 
 초기 버전에는 refresh token이 없다. 따라서 401을 재시도하지 않으며 사용자가
 다시 로그인해야 한다. 일회용 authorization code를 사용하는 token 교환도 자동
@@ -197,12 +215,12 @@ UI는 HTTP status나 생성 response enum을 직접 판단하지 않는다.
 | token 400 | `invalidAuthorizationCode` | 재시도하지 않음 |
 | token 422 | `validationFailed` | 재시도하지 않음 |
 | account 401 | `authenticationRequired` | Keychain 삭제 |
-| Device 등록 401 | `authenticationRequired` | Keychain 삭제 |
+| Device 등록 401 | `authenticationRequired` | token 삭제, pending 등록 상태 보존 |
 | Device 등록 422 | `validationFailed` | 재시도하지 않음 |
 | Device 등록 201의 잘못된 `deviceId` | `unexpectedResponse(statusCode: 201)` | UUIDv7 검증 |
-| 5xx | `serverError(statusCode:)` | 자동 재시도 없음 |
-| timeout | `timedOut` | 자동 재시도 없음 |
-| 기타 URL 오류 | `networkUnavailable` | 자동 재시도 없음 |
+| 5xx | `serverError(statusCode:)` | 인증 및 pending 등록 상태 보존 |
+| timeout | `timedOut` | 인증 및 pending 등록 상태 보존 |
+| 기타 URL 오류 | `networkUnavailable` | 인증 및 pending 등록 상태 보존 |
 | 예상하지 못한 HTTP 응답 | `unexpectedResponse(statusCode:)` | status 보존 |
 | Keychain 실패 | `credentialStorageFailed` | 자격 증명 상태를 성공으로 표시하지 않음 |
 
@@ -276,6 +294,8 @@ checkout한 서버 저장소의 계약 파일을 상위 계약으로 복사한�
 - generated account DTO에서 앱 `Account`로의 변환
 - RFC 7636 PKCE vector와 무작위 verifier 형식
 - login URL과 callback 성공·오류·취소·중복 값 검증
+- Device 등록 상태의 최초 저장, 성공 후 재실행, 응답 유실 재시도, 계정별 분리,
+  401·일시적 실패 보존
 - timeout과 network 오류 변환
 
 CI 완료 조건은 다음과 같다.

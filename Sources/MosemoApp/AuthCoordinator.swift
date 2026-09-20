@@ -11,6 +11,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
     @Published private(set) var isAuthenticating = false
 
     private let client: (any MosemoAPIClient)?
+    private let deviceRegistrationManager: DeviceRegistrationManager
     private var webAuthenticationSession: ASWebAuthenticationSession?
     private var pendingCodeVerifier: String?
     private var hasRestoredSession = false
@@ -24,9 +25,14 @@ final class AuthCoordinator: NSObject, ObservableObject {
 
     init(
         client: (any MosemoAPIClient)?,
-        configurationMessage: String? = nil
+        configurationMessage: String? = nil,
+        deviceRegistrationStateStore: any DeviceRegistrationStateStoring =
+            KeychainDeviceRegistrationStateStore()
     ) {
         self.client = client
+        deviceRegistrationManager = DeviceRegistrationManager(
+            stateStore: deviceRegistrationStateStore
+        )
         statusMessage = configurationMessage ?? "로그인이 필요합니다."
         super.init()
     }
@@ -37,8 +43,12 @@ final class AuthCoordinator: NSObject, ObservableObject {
 
         guard let client else { return }
         do {
-            account = try await client.currentAccount()
-            statusMessage = "로그인되어 있습니다."
+            let restoredAccount = try await client.currentAccount()
+            await completeAuthentication(
+                restoredAccount,
+                using: client,
+                successMessage: "로그인되어 있습니다."
+            )
         } catch MosemoAPIError.authenticationRequired {
             account = nil
             statusMessage = "로그인이 필요합니다."
@@ -133,16 +143,40 @@ final class AuthCoordinator: NSObject, ObservableObject {
         do {
             let authorizationCode = try AuthenticationCallback
                 .authorizationCode(from: callbackURL)
-            account = try await client.authenticate(
+            let authenticatedAccount = try await client.authenticate(
                 authorizationCode: authorizationCode,
                 codeVerifier: verifier
             )
-            statusMessage = "로그인했습니다."
+            await completeAuthentication(
+                authenticatedAccount,
+                using: client,
+                successMessage: "로그인했습니다."
+            )
         } catch AuthenticationCallbackError.cancelled {
             statusMessage = "로그인을 취소했습니다."
         } catch {
             account = nil
             statusMessage = Self.message(for: error)
+        }
+    }
+
+    private func completeAuthentication(
+        _ authenticatedAccount: Account,
+        using client: any MosemoAPIClient,
+        successMessage: String
+    ) async {
+        account = authenticatedAccount
+        do {
+            _ = try await deviceRegistrationManager.ensureRegistered(
+                for: authenticatedAccount,
+                using: client
+            )
+            statusMessage = successMessage
+        } catch MosemoAPIError.authenticationRequired {
+            account = nil
+            statusMessage = "로그인이 필요합니다."
+        } catch {
+            statusMessage = "Device 등록에 실패했습니다. 다시 시도해 주세요."
         }
     }
 
