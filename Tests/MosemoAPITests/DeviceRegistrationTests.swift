@@ -48,7 +48,7 @@ final class DeviceRegistrationTests: XCTestCase {
         XCTAssertTrue(observed.isEmpty)
     }
 
-    func testPendingKeyIsReusedAfterTransientFailure() async throws {
+    func testPendingKeyIsReusedAfterResponseLossAndManagerRecreation() async throws {
         let account = makeAccount()
         let store = MemoryDeviceRegistrationStateStore()
         let deviceID = UUID()
@@ -56,7 +56,7 @@ final class DeviceRegistrationTests: XCTestCase {
             accountID: account.id,
             stateStore: store,
             outcomes: [
-                .failure(.networkUnavailable),
+                .responseLost(Device(id: deviceID)),
                 .success(Device(id: deviceID)),
             ]
         )
@@ -67,8 +67,14 @@ final class DeviceRegistrationTests: XCTestCase {
         }
         let pendingState = await store.state(for: account.id)
         let firstKey = try XCTUnwrap(pendingState.pendingIdempotencyKey)
+        let acceptedDevice = await client.acceptedDevice(for: firstKey)
+        XCTAssertEqual(
+            acceptedDevice,
+            Device(id: deviceID)
+        )
 
-        _ = try await manager.ensureRegistered(for: account, using: client)
+        let retryManager = DeviceRegistrationManager(stateStore: store)
+        _ = try await retryManager.ensureRegistered(for: account, using: client)
 
         let observed = await client.observedRegistrations()
         XCTAssertEqual(observed.map(\.key), [firstKey, firstKey])
@@ -152,6 +158,27 @@ final class DeviceRegistrationTests: XCTestCase {
         XCTAssertNotNil(state.pendingIdempotencyKey)
     }
 
+    func testConcurrentRegistrationCallsShareOneAPIRequest() async throws {
+        let account = makeAccount()
+        let store = MemoryDeviceRegistrationStateStore()
+        let device = Device(id: UUID())
+        let client = RecordingDeviceClient(
+            accountID: account.id,
+            stateStore: store,
+            outcomes: [.success(device), .success(device)],
+            delayNanoseconds: 50_000_000
+        )
+        let manager = DeviceRegistrationManager(stateStore: store)
+
+        async let first = manager.ensureRegistered(for: account, using: client)
+        async let second = manager.ensureRegistered(for: account, using: client)
+
+        XCTAssertEqual(try await first, device)
+        XCTAssertEqual(try await second, device)
+        let observed = await client.observedRegistrations()
+        XCTAssertEqual(observed.count, 1)
+    }
+
     func testKeychainStoreScopesStateByAccount() async throws {
         let service = "io.mosemo.app.tests.device-registration.\(UUID().uuidString)"
         let store = KeychainDeviceRegistrationStateStore(service: service)
@@ -216,6 +243,12 @@ private actor MemoryDeviceRegistrationStateStore: DeviceRegistrationStateStoring
 }
 
 private actor RecordingDeviceClient: MosemoAPIClient {
+    enum RegistrationOutcome: Sendable {
+        case success(Device)
+        case responseLost(Device)
+        case failure(MosemoAPIError)
+    }
+
     struct Observation: Sendable {
         let key: UUID
         let state: DeviceRegistrationState
@@ -223,17 +256,21 @@ private actor RecordingDeviceClient: MosemoAPIClient {
 
     private var accountID: UUID
     private let stateStore: MemoryDeviceRegistrationStateStore
-    private var outcomes: [Result<Device, MosemoAPIError>]
+    private var outcomes: [RegistrationOutcome]
+    private let delayNanoseconds: UInt64
     private var observations: [Observation] = []
+    private var acceptedDevices: [UUID: Device] = [:]
 
     init(
         accountID: UUID,
         stateStore: MemoryDeviceRegistrationStateStore,
-        outcomes: [Result<Device, MosemoAPIError>]
+        outcomes: [RegistrationOutcome],
+        delayNanoseconds: UInt64 = 0
     ) {
         self.accountID = accountID
         self.stateStore = stateStore
         self.outcomes = outcomes
+        self.delayNanoseconds = delayNanoseconds
     }
 
     nonisolated func makeKakaoLoginURL(codeChallenge: String) throws -> URL {
@@ -252,11 +289,22 @@ private actor RecordingDeviceClient: MosemoAPIClient {
     }
 
     func registerDevice(idempotencyKey: UUID) async throws -> Device {
+        if delayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: delayNanoseconds)
+        }
         observations.append(Observation(
             key: idempotencyKey,
             state: await stateStore.load(for: accountID)
         ))
-        return try outcomes.removeFirst().get()
+        switch outcomes.removeFirst() {
+        case .success(let device):
+            return device
+        case .responseLost(let device):
+            acceptedDevices[idempotencyKey] = device
+            throw MosemoAPIError.networkUnavailable
+        case .failure(let error):
+            throw error
+        }
     }
 
     func signOut() async throws {
@@ -265,6 +313,10 @@ private actor RecordingDeviceClient: MosemoAPIClient {
 
     func observedRegistrations() -> [Observation] {
         observations
+    }
+
+    func acceptedDevice(for key: UUID) -> Device? {
+        acceptedDevices[key]
     }
 
     func setAccountID(_ accountID: UUID) {
