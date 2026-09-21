@@ -36,9 +36,19 @@ check_absent \
     "$production_sources/CollectorCore"
 
 check_absent \
-    "database APIs are absent from production sources" \
+    "database APIs are absent from the UI and domain layers" \
     'SQLite|CoreData|NSPersistentContainer' \
-    "$production_sources"
+    "$production_sources/CollectorCore" \
+    "$production_sources/MosemoApp"
+
+if rg -n --glob '*.swift' 'SQLite|CoreData|NSPersistentContainer' \
+    "$production_sources/MosemoAPI" \
+    | rg -v '/SQLiteStorage\.swift:'; then
+    printf 'FAIL: database APIs are confined to SQLiteStorage.swift\n' >&2
+    failed=1
+else
+    printf 'PASS: database APIs are confined to SQLiteStorage.swift\n'
+fi
 
 check_absent \
     "persistent file and preference writes are absent" \

@@ -1,3 +1,4 @@
+import Foundation
 import CollectorCore
 import MosemoAPI
 import SwiftUI
@@ -13,12 +14,26 @@ struct MosemoApp: App {
 
         if let baseURL = AppConfiguration.apiBaseURL {
             do {
-                let client = try LiveMosemoAPIClient(baseURL: baseURL)
-                _auth = StateObject(wrappedValue: AuthCoordinator(client: client))
-            } catch {
+                let storage = try AppConfiguration.apiStorage()
+                let client = try LiveMosemoAPIClient(
+                    baseURL: baseURL,
+                    storage: storage
+                )
+                let deviceRegistrationStateStore = try storage
+                    .makeDeviceRegistrationStateStore()
+                _auth = StateObject(wrappedValue: AuthCoordinator(
+                    client: client,
+                    deviceRegistrationStateStore: deviceRegistrationStateStore
+                ))
+            } catch let error as URLError where error.code == .badURL {
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: nil,
                     configurationMessage: "API 서버 주소가 올바르지 않습니다."
+                ))
+            } catch {
+                _auth = StateObject(wrappedValue: AuthCoordinator(
+                    client: nil,
+                    configurationMessage: "앱 저장소를 초기화할 수 없습니다."
                 ))
             }
         } else {
@@ -150,6 +165,33 @@ private enum AppConfiguration {
         return URL(string: "http://localhost:8000")
         #else
         return nil
+        #endif
+    }
+
+    static func apiStorage() throws -> MosemoAPIStorage {
+        #if DEBUG
+        let applicationSupport = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let appDirectory = applicationSupport.appendingPathComponent(
+            "io.mosemo.app",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: appDirectory,
+            withIntermediateDirectories: true
+        )
+        return .sqlite(
+            databaseURL: appDirectory.appendingPathComponent(
+                "local-state.sqlite",
+                isDirectory: false
+            )
+        )
+        #else
+        return .keychain
         #endif
     }
 }

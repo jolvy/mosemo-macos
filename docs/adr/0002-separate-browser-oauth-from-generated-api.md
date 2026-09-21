@@ -22,5 +22,7 @@ redirect와 system cookie 생명주기는 일반 JSON API 호출과 다르고, P
 - callback은 `io.mosemo.app:/auth/callback`의 scheme, 빈 host와 path를 정확히
   검증한다.
 - PKCE verifier는 로그인 처리 중 메모리에만 두고 동시 로그인은 한 개로 제한한다.
-- raw token은 Keychain에만 저장하며 public API는 인증 완료된 `Account`를 반환한다.
+- raw token은 Release에서 Keychain에 저장한다. Debug 개발 빌드는 배포 전환을
+  전제로 앱 전용 SQLite adapter를 임시 사용하며, public API는 인증 완료된
+  `Account`를 반환한다.
 - refresh token이 없는 동안 만료나 401은 자동 재시도하지 않고 재로그인을 요구한다.
