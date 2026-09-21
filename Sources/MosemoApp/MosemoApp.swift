@@ -6,6 +6,7 @@ import SwiftUI
 struct MosemoApp: App {
     @StateObject private var model: CollectorViewModel
     @StateObject private var auth: AuthCoordinator
+    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     init() {
         _model = StateObject(wrappedValue: CollectorViewModel())
@@ -29,6 +30,16 @@ struct MosemoApp: App {
     }
 
     var body: some Scene {
+        WindowGroup("Mosemo", id: "main") {
+            DesktopRootView(
+                model: model,
+                auth: auth,
+                onboardingCompleted: $onboardingCompleted
+            )
+            .frame(minWidth: 720, minHeight: 520)
+        }
+        .defaultSize(width: 900, height: 640)
+
         MenuBarExtra("Mosemo", systemImage: model.collectionAllowed ? "scope" : "pause.circle") {
             CollectorMenuView(model: model, auth: auth)
         }
@@ -98,6 +109,7 @@ private struct CollectorMenuView: View {
                 .font(.caption)
 
             HStack {
+                Button("앱 열기", action: openApp)
                 Button("진단 열기", action: openDiagnostics)
                 Spacer()
                 Button("종료") { NSApplication.shared.terminate(nil) }
@@ -105,9 +117,11 @@ private struct CollectorMenuView: View {
         }
         .padding()
         .frame(width: 520)
-        .task {
-            await auth.restoreSession()
-        }
+    }
+
+    private func openApp() {
+        openWindow(id: "main")
+        NSApplication.shared.activate()
     }
 
     private func openDiagnostics() {
@@ -160,13 +174,6 @@ private struct DiagnosticsView: View {
                         buttonTitle: "손쉬운 사용 권한 요청"
                     ) {
                         model.requestAccessibilityPermission()
-                    }
-                    permission(
-                        "입력 모니터링",
-                        value: model.inputPermissionText,
-                        buttonTitle: "입력 모니터링 권한 요청"
-                    ) {
-                        model.requestInputPermission()
                     }
                     VStack(alignment: .leading) {
                         Text("Chrome 자동화: \(model.automationPermission.rawValue)")

@@ -55,8 +55,6 @@ final class CollectorViewModel: ObservableObject {
     @Published private(set) var automationPermission: AutomationPermissionStatus = .notRequested
     @Published private(set) var automationPermissionRequestInFlight = false
     @Published private(set) var accessibilityPermissionGranted = false
-    @Published private(set) var inputPermissionGranted = false
-    @Published private(set) var inputMonitorRunning = false
     @Published private(set) var currentCPUPercent = 0.0
     @Published private(set) var averageCPUPercent = 0.0
     @Published private(set) var currentMemoryBytes: UInt64 = 0
@@ -64,7 +62,6 @@ final class CollectorViewModel: ObservableObject {
 
     private let chrome = ChromeAppleEventClient()
     private let accessibility = AccessibilityClient()
-    private let inputMonitor = InputActivityMonitor()
     private let workspaceObserver = WorkspaceObserver()
     private let performanceSampler = PerformanceSampler()
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
@@ -72,7 +69,6 @@ final class CollectorViewModel: ObservableObject {
     private lazy var anchorStore = ReturnAnchorStore(accessibility: accessibility, chrome: chrome)
 
     private var eventBuffer = RingBuffer<DiagnosticActivityEvent>(capacity: 600)
-    private var inputAggregator = InputActivityAggregator(intervalSeconds: 10)
     private var chromeObservation: ChromeObservationIdentity?
     private var firefoxObservation: FirefoxObservationIdentity?
     private var chromePollInFlight = false
@@ -93,10 +89,6 @@ final class CollectorViewModel: ObservableObject {
         configureCallbacks()
         workspaceObserver.start()
         startTimers()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self, !self.accessibility.isTrusted else { return }
-            self.requestAccessibilityPermission()
-        }
     }
 
     var collectionAllowed: Bool {
@@ -105,12 +97,6 @@ final class CollectorViewModel: ObservableObject {
 
     var accessibilityPermissionText: String {
         accessibilityPermissionGranted ? "허용됨" : "필요함"
-    }
-
-    var inputPermissionText: String {
-        guard inputPermissionGranted else { return "필요함" }
-        if inputMonitorRunning { return "허용됨 · 수집 중" }
-        return collectionAllowed ? "허용됨 · 시작 실패" : "허용됨 · 세션 대기"
     }
 
     var currentAnchorText: String {
@@ -139,12 +125,6 @@ final class CollectorViewModel: ObservableObject {
         lastChromePollCompletedAt = nil
         lastFirefoxPollCompletedAt = nil
         lastObservationFailure = nil
-        inputAggregator.start(at: Date())
-        let inputStarted = inputMonitor.start()
-        inputMonitorRunning = inputStarted
-        if !inputStarted {
-            emitObservationUnavailable(reason: "input_permission")
-        }
         observeCurrentApplication(initial: true)
         statusMessage = currentAnchor == nil
             ? "집중을 시작했지만 최초 복귀 지점을 저장하지 못했습니다."
@@ -303,31 +283,6 @@ final class CollectorViewModel: ObservableObject {
         }
     }
 
-    func requestInputPermission() {
-        _ = inputMonitor.requestPermission()
-        refreshPermissionStatuses(announceChanges: false)
-        if inputPermissionGranted {
-            let started = startInputMonitoringIfNeeded()
-            statusMessage = started || !collectionAllowed
-                ? "입력 모니터링 권한이 허용되었습니다."
-                : "권한은 허용됐지만 입력 event tap을 시작하지 못했습니다. 앱을 재실행해 주세요."
-        } else {
-            statusMessage = "입력 모니터링 권한을 요청했습니다. 설정 화면을 여는 중입니다."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-                guard let self else { return }
-                self.refreshPermissionStatuses(announceChanges: false)
-                if self.inputPermissionGranted {
-                    _ = self.startInputMonitoringIfNeeded()
-                    self.statusMessage = "입력 모니터링 권한이 허용되었습니다."
-                } else if self.inputMonitor.openPermissionSettings() {
-                    self.statusMessage = "열린 입력 모니터링 설정에서 Mosemo를 허용해 주세요."
-                } else {
-                    self.statusMessage = "입력 모니터링 설정을 열지 못했습니다. 시스템 설정에서 직접 허용해 주세요."
-                }
-            }
-        }
-    }
-
     func requestChromeAutomationPermission() {
         guard !automationPermissionRequestInFlight else { return }
 
@@ -357,8 +312,6 @@ final class CollectorViewModel: ObservableObject {
             "sessionPhase=\(session.phase.rawValue)",
             "observationState=\(collectionAllowed ? "observed" : "paused")",
             "accessibilityPermission=\(accessibilityPermissionGranted ? "granted" : "required")",
-            "inputPermission=\(inputPermissionGranted ? "granted" : "required")",
-            "inputMonitor=\(inputMonitorRunning ? "running" : "stopped")",
             "chromeAutomationPermission=\(automationPermission.rawValue)",
             "cpuCurrentPercent=\(String(format: "%.2f", currentCPUPercent))",
             "cpuAveragePercent=\(String(format: "%.2f", averageCPUPercent))",
@@ -375,11 +328,6 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func configureCallbacks() {
-        inputMonitor.onInput = { [weak self] in
-            guard let self, self.collectionAllowed else { return }
-            let closed = self.inputAggregator.recordInput(at: Date())
-            self.emitInputIntervals(closed)
-        }
         workspaceObserver.onActivatedApplication = { [weak self] application in
             self?.handleActivatedApplication(application)
         }
@@ -431,7 +379,6 @@ final class CollectorViewModel: ObservableObject {
                 if self.collectionAllowed {
                     self.pollChromeIfNeeded()
                     self.pollFirefoxIfNeeded()
-                    self.emitInputIntervals(self.inputAggregator.flushClosedIntervals(until: Date()))
                 }
             }
         }
@@ -456,40 +403,6 @@ final class CollectorViewModel: ObservableObject {
             }
         }
 
-        let inputGranted = inputMonitor.hasPermission
-        if inputPermissionGranted != inputGranted {
-            inputPermissionGranted = inputGranted
-            if inputGranted {
-                let started = startInputMonitoringIfNeeded()
-                if announceChanges {
-                    statusMessage = started || !collectionAllowed
-                        ? "입력 모니터링 권한이 허용되었습니다."
-                        : "권한은 허용됐지만 입력 event tap을 시작하지 못했습니다. 앱을 재실행해 주세요."
-                }
-            } else {
-                inputMonitor.stop()
-                inputMonitorRunning = false
-                if announceChanges {
-                    statusMessage = "입력 모니터링 권한이 해제되었습니다."
-                }
-            }
-        } else {
-            inputMonitorRunning = inputMonitor.isRunning
-        }
-    }
-
-    @discardableResult
-    private func startInputMonitoringIfNeeded() -> Bool {
-        guard inputPermissionGranted, collectionAllowed else {
-            inputMonitorRunning = false
-            return false
-        }
-        let started = inputMonitor.start()
-        inputMonitorRunning = started
-        if started, lastObservationFailure == "input_permission" {
-            lastObservationFailure = nil
-        }
-        return started
     }
 
     private func observeCurrentApplication(initial: Bool) {
@@ -679,24 +592,6 @@ final class CollectorViewModel: ObservableObject {
         statusMessage = "관찰 불가: \(reason)"
     }
 
-    private func emitInputIntervals(_ intervals: [InputInterval]) {
-        guard collectionAllowed else { return }
-        intervals.forEach { interval in
-            append(SafeActivityEvent(
-                eventType: .inputInterval,
-                appBundleID: nil,
-                registeredDomain: nil,
-                surfaceType: .input,
-                transitionType: .inputInterval,
-                observationState: .observed,
-                inputOccurred: interval.inputOccurred,
-                occurredAt: interval.startedAt,
-                detectionLatencyMilliseconds: 0,
-                protectedContext: false
-            ))
-        }
-    }
-
     private func emitTransition(
         _ event: SafeActivityEvent,
         browserContext: TransientBrowserContext? = nil,
@@ -785,9 +680,6 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func stopActiveCollection() {
-        inputMonitor.stop()
-        inputMonitorRunning = false
-        inputAggregator.stop()
         chromeObservation = nil
         firefoxObservation = nil
         lastChromePollCompletedAt = nil
@@ -796,11 +688,6 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func resumeActiveCollection() {
-        inputAggregator.start(at: Date())
-        inputMonitorRunning = inputMonitor.start()
-        if !inputMonitorRunning {
-            emitObservationUnavailable(reason: "input_permission")
-        }
         observeCurrentApplication(initial: true)
     }
 

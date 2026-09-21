@@ -10,7 +10,6 @@
 - Google Chrome:
 - bundle ID: `io.mosemo.collector.spike`
 - 손쉬운 사용: 허용 / 거부
-- 입력 모니터링: 허용 / 거부
 - Chrome 자동화: 허용 / 거부
 - 화면 기록 권한 요청 횟수: 0 / 기타
 
