@@ -26,20 +26,20 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 ## 구현 경계
 
 - `NSWorkspace` 알림으로 전면 앱 전환을 받는다.
-- Google Chrome이 전면이고 집중 관찰이 활성일 때만 0.5초 간격으로 Apple
-  Events를 호출한다.
+- Google Chrome이 전면이고 집중 관찰이 활성일 때만 0.5초 간격으로 Chrome
+  Apple Events를 호출한다.
 - 일반 Chrome 창에서는 창 ID, 탭 ID, URL, 제목을 읽는다. URL은 등록 도메인과
   surface type 및 변화 fingerprint를 만들며, 원시 URL과 제목은 테스트 진단용
   ring buffer 항목에만 함께 보관한다.
 - 시크릿 창은 `mode`를 먼저 확인하고 URL·제목을 요청하는 Apple Event 분기로
   들어가지 않는다.
-- Firefox가 전면이면 Accessibility tree의 활성 web area 또는 주소 표시줄에서
-  제목·URL을 0.5초 간격으로 읽는다. Firefox는 Chrome과 같은 탭 ID API를
+- Firefox가 전면이면 System Events UI scripting으로 Accessibility tree의 활성
+  web area 또는 주소 표시줄에서 제목·URL을 0.5초 간격으로 읽는다. Firefox는 Chrome과 같은 탭 ID API를
   제공하지 않으므로 `firefoxPageChange`는 탭 전환과 같은 탭 이동을 구분하지
   않는다. Firefox UI 구조가 바뀌거나 값을 노출하지 않으면 추측하지 않고
   `firefox_page_context` 관찰 불가로 기록한다.
-- 일반 앱 복귀는 메모리에 보관한 AX window reference와 PID를, Chrome 복귀는
-  창·탭 ID를 사용한다. 현재 화면이나 탭을 닫지 않는다.
+- 일반 앱 복귀는 PID로 앱을 활성화하고, Chrome 복귀는 창·탭 ID를 사용한다.
+  현재 화면이나 탭을 닫지 않는다.
 - 화면 잠금, 사용자 세션 비활성, sleep 중에는 자동 일시정지한다. 명시적
   휴식과 세션 종료 중에도 collector를 중지한다.
 
@@ -65,8 +65,8 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Sources/MosemoApp/CollectorViewModel.swift` | 세션, 관찰 adapter, ring buffer, 진단 상태 조정 |
 | `Sources/MosemoApp/WorkspaceObserver.swift` | 전면 앱·Chrome 수명·sleep·사용자 세션 알림 수신 |
 | `Sources/MosemoApp/ChromeAppleEventClient.swift` | Chrome 권한 요청, 활성 창·탭 관찰, 저장된 탭 활성화 |
-| `Sources/MosemoApp/AccessibilityClient.swift` | AX 권한, 일반 창 복귀, 실험적 Firefox 맥락 관찰 |
-| `Sources/MosemoApp/ReturnAnchorStore.swift` | 메모리 전용 앱·창·Chrome 탭 복귀 지점 |
+| `Sources/MosemoApp/SystemEventsClient.swift` | System Events 자동화 권한과 실험적 Firefox 맥락 관찰 |
+| `Sources/MosemoApp/ReturnAnchorStore.swift` | 앱 활성화와 Chrome 창·탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
 | `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
 | `Sources/MosemoAPI/` | internal 생성 코드, generator 설정, Keychain·오류·모델 경계 |
@@ -107,8 +107,8 @@ My Mac 대상을 선택해 Run한다. 유료 Apple Developer 계정은 필요하
 
 명령행 build 결과는 TCC가 동일한 로컬 앱으로 식별할 수 있도록 사용자 전용
 Applications 디렉터리의 고정 경로에 복사해 실행한다. `/tmp`의 build product를
-직접 반복 실행하면 ad-hoc 서명 hash가 바뀔 때 손쉬운 사용 목록 등록이 불안정할
-수 있다.
+직접 반복 실행하면 ad-hoc 서명 hash가 바뀔 때 자동화 권한 등록이 불안정할 수
+있다.
 
 ```sh
 mkdir -p "$HOME/Applications"
@@ -144,7 +144,7 @@ scripts/update_openapi.sh
 
 | 권한 | 사용 목적 | 허용 방법 |
 | --- | --- | --- |
-| 손쉬운 사용 | 현재 AX window reference 획득과 저장된 창 raise | 권한이 없으면 앱 실행 시 등록을 요청하고 손쉬운 사용 설정을 연다. 노출된 Mosemo 토글은 사용자가 직접 허용하며, 진단 창의 `손쉬운 사용 권한 요청`으로 다시 열 수 있음 |
+| 자동화 → System Events | Firefox 전면 창의 활성 탭 제목·URL 읽기 | Firefox를 먼저 실행하고 진단 창의 `System Events 권한 요청`을 누른 뒤 macOS prompt를 허용. 이미 거부했다면 자동으로 열린 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Mosemo 아래 System Events 허용 |
 | 자동화 → Google Chrome | 전면 Chrome 창의 mode, 활성 탭 ID·URL 읽기와 저장된 탭 활성화 | Chrome을 먼저 실행하고 진단 창의 `Chrome 자동화 권한 요청`을 누른 뒤 macOS prompt를 허용. 이미 거부했다면 자동으로 열린 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Mosemo 아래 Google Chrome 허용 |
 
 화면 기록 권한은 요청하지 않는다. `Info.plist`에도 화면 기록 usage description이
@@ -156,8 +156,8 @@ Xcode의 ad-hoc 로컬 서명은 고정 bundle ID와 동일 build path를 사용
 다시 켜야 할 수 있다. 이는 유료 Developer ID 없이 수행하는 로컬 spike의
 제약이다. 현재 Mac에는 재사용할 code-signing identity가 없으므로 이 빌드의
 designated requirement는 `CDHash` 기반이며, 바이너리를 교체한 뒤에는 기존
-토글을 껐다가 다시 켜야 할 수 있다. 앱은 0.5초마다 `AXIsProcessTrusted()`를
-다시 읽어 토글 변경을 재실행 없이 진단 화면에 반영한다.
+토글을 껐다가 다시 켜야 할 수 있다. 권한 상태는 각 자동화 요청과 실제 관찰
+결과에 따라 진단 화면에 반영한다.
 
 Chrome 자동화 권한 요청 버튼은 권한 항목을 노출하기 위해 Chrome의 버전만 한 번
 확인하고 결과 값을 즉시 버린다. 이 요청은 집중 세션 밖에서도 사용할 수 있지만
@@ -297,16 +297,15 @@ scripts/check_safe_diagnostics.sh /tmp/collector-safe-diagnostics.txt
 
 ## 알려진 실패 조건
 
-- Firefox 관찰은 공식 탭 API가 아닌 Accessibility UI 구조에 의존하는 실험적
-  경로다. 탭 ID가 없어 탭 전환과 같은 탭 navigation을 구분하지 못하며 Firefox
+- Firefox 관찰은 공식 탭 API가 아닌 System Events UI scripting과 Accessibility UI
+  구조에 의존하는 실험적 경로다. 탭 ID가 없어 탭 전환과 같은 탭 navigation을 구분하지 못하며 Firefox
   버전·UI·전체 화면 상태에 따라 관찰 불가가 될 수 있다.
 - Firefox 개인정보 보호 창은 접근성 트리의 비공개 브라우징 표식을 발견하면
   원시 값을 읽거나 표시하지 않는다. 표식 노출은 Firefox UI 구현에 의존하므로
   원시 테스트 모드에서는 개인정보 보호 창을 사용하지 않는다.
-- Chrome AppleScript dictionary나 macOS Automation 정책이 바뀌면 관찰 불가가
-  된다.
-- 닫힌 앱·AX window·Chrome 탭은 이 spike에서 복원하지 않으며 복귀 실패다.
-- AXUIElement reference는 앱 프로세스 수명 안에서만 유효하다.
+- System Events UI 구조나 macOS Automation 정책이 바뀌면 Firefox 관찰이 불가할
+  수 있다. Chrome AppleScript dictionary가 바뀌면 Chrome 관찰이 불가하다.
+- 닫힌 앱·Chrome 탭은 이 spike에서 복원하지 않으며 복귀 실패다.
 - 시크릿 Chrome은 상세 관찰과 상세 복귀 대상에서 제외한다.
 - 등록 도메인 계산은 전체 Public Suffix List 구현이 아니다.
 - 0.5초 polling은 이론상 Chrome 감지 지연 상한을 만들지만 실제 CPU와 battery
