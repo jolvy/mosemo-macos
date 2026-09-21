@@ -28,13 +28,13 @@ struct DesktopRootView: View {
 
 private enum OnboardingStep: Int, CaseIterable, Hashable {
     case login
-    case accessibility
+    case systemEventsAutomation
     case chromeAutomation
 
     var shortTitle: String {
         switch self {
         case .login: "로그인"
-        case .accessibility: "손쉬운 사용"
+        case .systemEventsAutomation: "System Events"
         case .chromeAutomation: "Chrome"
         }
     }
@@ -48,8 +48,8 @@ private struct OnboardingView: View {
     @State private var step: OnboardingStep = .login
 
     private var allPermissionsGranted: Bool {
-        model.accessibilityPermissionGranted
-            && model.automationPermission == .granted
+        model.systemEventsAutomationPermission == .granted
+            && model.chromeAutomationPermission == .granted
     }
 
     var body: some View {
@@ -102,16 +102,17 @@ private struct OnboardingView: View {
                     .foregroundStyle(.secondary)
             }
 
-        case .accessibility:
+        case .systemEventsAutomation:
             PermissionOnboardingStep(
-                systemImage: "accessibility",
-                title: "손쉬운 사용 권한",
-                description: "활성 앱과 창을 확인하고 저장한 작업 화면으로 돌아가기 위해 필요합니다.",
-                statusText: model.accessibilityPermissionText,
-                isGranted: model.accessibilityPermissionGranted,
-                requestButtonTitle: "손쉬운 사용 권한 요청",
+                systemImage: "gearshape.2",
+                title: "System Events 자동화 권한",
+                description: "Firefox의 활성 탭 제목과 URL을 읽기 위해 필요합니다. Firefox를 먼저 실행해 주세요.",
+                statusText: model.systemEventsAutomationPermission.rawValue,
+                isGranted: model.systemEventsAutomationPermission == .granted,
+                requestInFlight: model.systemEventsPermissionRequestInFlight,
+                requestButtonTitle: "System Events 권한 요청",
                 continueButtonTitle: "다음",
-                requestPermission: model.requestAccessibilityPermission
+                requestPermission: model.requestSystemEventsAutomationPermission
             ) {
                 step = .chromeAutomation
             }
@@ -121,9 +122,9 @@ private struct OnboardingView: View {
                 systemImage: "globe",
                 title: "Chrome 자동화 권한",
                 description: "Google Chrome을 먼저 실행해 주세요. 활성 창과 탭의 전환을 확인하기 위해 필요합니다.",
-                statusText: model.automationPermission.rawValue,
-                isGranted: model.automationPermission == .granted,
-                requestInFlight: model.automationPermissionRequestInFlight,
+                statusText: model.chromeAutomationPermission.rawValue,
+                isGranted: model.chromeAutomationPermission == .granted,
+                requestInFlight: model.chromeAutomationPermissionRequestInFlight,
                 requestButtonTitle: "Chrome 자동화 권한 요청",
                 continueButtonTitle: "완료",
                 requestPermission: model.requestChromeAutomationPermission
@@ -136,7 +137,7 @@ private struct OnboardingView: View {
 
     private func movePastCompletedLogin() {
         guard auth.account != nil, step == .login else { return }
-        step = .accessibility
+        step = .systemEventsAutomation
     }
 }
 

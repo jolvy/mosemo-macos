@@ -169,18 +169,18 @@ private struct DiagnosticsView: View {
             GroupBox("권한") {
                 HStack(spacing: 24) {
                     permission(
-                        "손쉬운 사용",
-                        value: model.accessibilityPermissionText,
-                        buttonTitle: "손쉬운 사용 권한 요청"
+                        "System Events 자동화",
+                        value: model.systemEventsAutomationPermission.rawValue,
+                        buttonTitle: "System Events 권한 요청"
                     ) {
-                        model.requestAccessibilityPermission()
+                        model.requestSystemEventsAutomationPermission()
                     }
                     VStack(alignment: .leading) {
-                        Text("Chrome 자동화: \(model.automationPermission.rawValue)")
+                        Text("Chrome 자동화: \(model.chromeAutomationPermission.rawValue)")
                         Button("Chrome 자동화 권한 요청") {
                             model.requestChromeAutomationPermission()
                         }
-                        .disabled(model.automationPermissionRequestInFlight)
+                        .disabled(model.chromeAutomationPermissionRequestInFlight)
                         Text("Chrome을 먼저 실행하세요. 집중 시작 전에도 권한만 요청할 수 있습니다.")
                             .font(.caption)
                             .foregroundStyle(.secondary)

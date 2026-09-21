@@ -4,17 +4,14 @@ import Foundation
 
 private enum ReturnHandle {
     case application(processIdentifier: pid_t)
-    case accessibilityWindow(AccessibilityWindowReference)
     case chromeTab(windowID: Int, tabID: Int)
 }
 
 final class ReturnAnchorStore {
-    private let accessibility: AccessibilityClient
     private let chrome: ChromeAppleEventClient
     private var handles: [UUID: ReturnHandle] = [:]
 
-    init(accessibility: AccessibilityClient, chrome: ChromeAppleEventClient) {
-        self.accessibility = accessibility
+    init(chrome: ChromeAppleEventClient) {
         self.chrome = chrome
     }
 
@@ -56,19 +53,6 @@ final class ReturnAnchorStore {
             }
         }
 
-        if let window = accessibility.captureFocusedWindow(
-            processIdentifier: application.processIdentifier
-        ) {
-            let descriptor = ReturnAnchorDescriptor(
-                kind: .accessibilityWindow,
-                appBundleID: bundleID,
-                capturedAt: date,
-                protectedContext: false
-            )
-            handles[descriptor.identifier] = .accessibilityWindow(window)
-            return descriptor
-        }
-
         let descriptor = ReturnAnchorDescriptor(
             kind: .application,
             appBundleID: bundleID,
@@ -91,8 +75,6 @@ final class ReturnAnchorStore {
                 return .failure(.applicationTerminated)
             }
             return application.activate(options: []) ? .success : .failure(.activationRejected)
-        case let .accessibilityWindow(reference):
-            return accessibility.activate(reference)
         case let .chromeTab(windowID, tabID):
             switch chrome.activate(windowID: windowID, tabID: tabID) {
             case .success: return .success

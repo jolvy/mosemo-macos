@@ -52,21 +52,22 @@ final class CollectorViewModel: ObservableObject {
     @Published private(set) var currentAnchor: ReturnAnchorDescriptor?
     @Published private(set) var statusMessage = "집중 세션을 시작하지 않았습니다."
     @Published private(set) var automaticPauseReason: String?
-    @Published private(set) var automationPermission: AutomationPermissionStatus = .notRequested
-    @Published private(set) var automationPermissionRequestInFlight = false
-    @Published private(set) var accessibilityPermissionGranted = false
+    @Published private(set) var systemEventsAutomationPermission: AutomationPermissionStatus = .notRequested
+    @Published private(set) var chromeAutomationPermission: AutomationPermissionStatus = .notRequested
+    @Published private(set) var systemEventsPermissionRequestInFlight = false
+    @Published private(set) var chromeAutomationPermissionRequestInFlight = false
     @Published private(set) var currentCPUPercent = 0.0
     @Published private(set) var averageCPUPercent = 0.0
     @Published private(set) var currentMemoryBytes: UInt64 = 0
     @Published private(set) var maximumMemoryBytes: UInt64 = 0
 
     private let chrome = ChromeAppleEventClient()
-    private let accessibility = AccessibilityClient()
+    private let systemEvents = SystemEventsClient()
     private let workspaceObserver = WorkspaceObserver()
     private let performanceSampler = PerformanceSampler()
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
-    private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-accessibility")
-    private lazy var anchorStore = ReturnAnchorStore(accessibility: accessibility, chrome: chrome)
+    private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-system-events")
+    private lazy var anchorStore = ReturnAnchorStore(chrome: chrome)
 
     private var eventBuffer = RingBuffer<DiagnosticActivityEvent>(capacity: 600)
     private var chromeObservation: ChromeObservationIdentity?
@@ -85,7 +86,6 @@ final class CollectorViewModel: ObservableObject {
     private var automaticPauseReasons: Set<String> = []
 
     init() {
-        refreshPermissionStatuses(announceChanges: false)
         configureCallbacks()
         workspaceObserver.start()
         startTimers()
@@ -93,10 +93,6 @@ final class CollectorViewModel: ObservableObject {
 
     var collectionAllowed: Bool {
         session.allowsCollection && automaticPauseReason == nil
-    }
-
-    var accessibilityPermissionText: String {
-        accessibilityPermissionGranted ? "허용됨" : "필요함"
     }
 
     var currentAnchorText: String {
@@ -261,32 +257,25 @@ final class CollectorViewModel: ObservableObject {
         statusMessage = "전환 측정 통계를 초기화했습니다."
     }
 
-    func requestAccessibilityPermission() {
-        let trusted = accessibility.requestPermissionPrompt()
-        refreshPermissionStatuses(announceChanges: false)
-        if trusted {
-            statusMessage = "손쉬운 사용 권한이 이미 허용되어 있습니다."
-            return
-        }
+    func requestSystemEventsAutomationPermission() {
+        guard !systemEventsPermissionRequestInFlight else { return }
 
-        statusMessage = "macOS에 손쉬운 사용 권한을 요청했습니다. 설정 화면을 여는 중입니다."
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+        systemEventsPermissionRequestInFlight = true
+        statusMessage = "System Events 자동화 권한을 요청하는 중입니다. macOS 확인 창에 응답해 주세요."
+        let systemEvents = systemEvents
+        firefoxQueue.async { [weak self, systemEvents] in
             guard let self else { return }
-            self.refreshPermissionStatuses(announceChanges: false)
-            if self.accessibilityPermissionGranted {
-                self.statusMessage = "손쉬운 사용 권한이 허용되었습니다."
-            } else if self.accessibility.openPermissionSettings() {
-                self.statusMessage = "열린 손쉬운 사용 설정에서 Mosemo를 허용해 주세요."
-            } else {
-                self.statusMessage = "손쉬운 사용 설정을 열지 못했습니다. 시스템 설정에서 직접 허용해 주세요."
+            let result = systemEvents.requestAutomationPermission()
+            DispatchQueue.main.async {
+                Task { @MainActor in self.handleSystemEventsAutomationPermissionResult(result) }
             }
         }
     }
 
     func requestChromeAutomationPermission() {
-        guard !automationPermissionRequestInFlight else { return }
+        guard !chromeAutomationPermissionRequestInFlight else { return }
 
-        automationPermissionRequestInFlight = true
+        chromeAutomationPermissionRequestInFlight = true
         statusMessage = "Chrome 자동화 권한을 요청하는 중입니다. macOS 확인 창에 응답해 주세요."
         let chrome = chrome
         chromeQueue.async { [weak self, chrome] in
@@ -311,8 +300,8 @@ final class CollectorViewModel: ObservableObject {
         return ([
             "sessionPhase=\(session.phase.rawValue)",
             "observationState=\(collectionAllowed ? "observed" : "paused")",
-            "accessibilityPermission=\(accessibilityPermissionGranted ? "granted" : "required")",
-            "chromeAutomationPermission=\(automationPermission.rawValue)",
+            "systemEventsAutomationPermission=\(systemEventsAutomationPermission.rawValue)",
+            "chromeAutomationPermission=\(chromeAutomationPermission.rawValue)",
             "cpuCurrentPercent=\(String(format: "%.2f", currentCPUPercent))",
             "cpuAveragePercent=\(String(format: "%.2f", averageCPUPercent))",
             "memoryCurrentMB=\(String(format: "%.1f", Double(currentMemoryBytes) / 1_048_576))",
@@ -346,27 +335,52 @@ final class CollectorViewModel: ObservableObject {
         }
     }
 
-    private func handleChromeAutomationPermissionResult(
-        _ result: ChromeAutomationPermissionResult
+    private func handleSystemEventsAutomationPermissionResult(
+        _ result: SystemEventsAutomationPermissionResult
     ) {
-        automationPermissionRequestInFlight = false
+        systemEventsPermissionRequestInFlight = false
 
         switch result {
         case .granted:
-            automationPermission = .granted
+            systemEventsAutomationPermission = .granted
+            statusMessage = "System Events 자동화 권한이 허용되었습니다."
+        case .denied:
+            systemEventsAutomationPermission = .denied
+            if systemEvents.openAutomationSettings() {
+                statusMessage = "System Events 자동화 요청이 거부되었습니다. 열린 자동화 설정에서 Mosemo의 System Events 토글을 허용해 주세요."
+            } else {
+                statusMessage = "System Events 자동화 요청이 거부되었습니다. 시스템 설정의 개인정보 보호 및 보안 → 자동화에서 허용해 주세요."
+            }
+        case .firefoxNotRunning:
+            systemEventsAutomationPermission = .unavailable
+            statusMessage = "Firefox를 먼저 실행한 뒤 System Events 자동화 권한 요청을 다시 눌러 주세요."
+        case .unavailable:
+            systemEventsAutomationPermission = .unavailable
+            statusMessage = "System Events 자동화 권한을 확인하지 못했습니다. Firefox가 실행 중인지 확인해 주세요."
+        }
+    }
+
+    private func handleChromeAutomationPermissionResult(
+        _ result: ChromeAutomationPermissionResult
+    ) {
+        chromeAutomationPermissionRequestInFlight = false
+
+        switch result {
+        case .granted:
+            chromeAutomationPermission = .granted
             statusMessage = "Chrome 자동화 권한이 허용되었습니다."
         case .denied:
-            automationPermission = .denied
+            chromeAutomationPermission = .denied
             if chrome.openAutomationSettings() {
                 statusMessage = "Chrome 자동화 요청이 거부되었습니다. 열린 자동화 설정에서 Mosemo의 Google Chrome 토글을 허용해 주세요."
             } else {
                 statusMessage = "Chrome 자동화 요청이 거부되었습니다. 시스템 설정의 개인정보 보호 및 보안 → 자동화에서 허용해 주세요."
             }
         case .chromeNotRunning:
-            automationPermission = .unavailable
+            chromeAutomationPermission = .unavailable
             statusMessage = "Google Chrome을 먼저 실행한 뒤 Chrome 자동화 권한 요청을 다시 눌러 주세요."
         case .unavailable:
-            automationPermission = .unavailable
+            chromeAutomationPermission = .unavailable
             statusMessage = "Chrome 자동화 권한을 확인하지 못했습니다. Chrome 정식 버전이 실행 중인지 확인해 주세요."
         }
     }
@@ -375,7 +389,6 @@ final class CollectorViewModel: ObservableObject {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.refreshPermissionStatuses()
                 if self.collectionAllowed {
                     self.pollChromeIfNeeded()
                     self.pollFirefoxIfNeeded()
@@ -386,23 +399,6 @@ final class CollectorViewModel: ObservableObject {
             Task { @MainActor in self?.samplePerformance() }
         }
         samplePerformance()
-    }
-
-    private func refreshPermissionStatuses(announceChanges: Bool = true) {
-        let accessibilityGranted = accessibility.isTrusted
-        if accessibilityPermissionGranted != accessibilityGranted {
-            accessibilityPermissionGranted = accessibilityGranted
-            if announceChanges {
-                statusMessage = accessibilityGranted
-                    ? "손쉬운 사용 권한이 허용되었습니다."
-                    : "손쉬운 사용 권한이 해제되었습니다."
-            }
-            if accessibilityGranted, collectionAllowed {
-                lastObservationFailure = nil
-                pollFirefoxIfNeeded()
-            }
-        }
-
     }
 
     private func observeCurrentApplication(initial: Bool) {
@@ -432,7 +428,7 @@ final class CollectorViewModel: ObservableObject {
 
         if bundleID == ChromeAppleEventClient.bundleID {
             pollChromeIfNeeded()
-        } else if bundleID == AccessibilityClient.firefoxBundleID {
+        } else if bundleID == SystemEventsClient.firefoxBundleID {
             pollFirefoxIfNeeded()
         }
     }
@@ -464,7 +460,7 @@ final class CollectorViewModel: ObservableObject {
 
         switch result {
         case let .success(.observation(observation)):
-            automationPermission = .granted
+            chromeAutomationPermission = .granted
             lastObservationFailure = nil
             let identity = observation.identity
             var transition = ChromeTransitionDetector.transition(from: chromeObservation, to: identity)
@@ -491,12 +487,12 @@ final class CollectorViewModel: ObservableObject {
                 protectedContext: classification.protectedContext
             ), browserContext: observation.diagnosticContext, countsAsDetection: transition != .initialContext)
         case .success(.notRunning):
-            automationPermission = .unavailable
+            chromeAutomationPermission = .unavailable
             emitObservationUnavailable(reason: "chrome_not_running")
         case .success(.noWindow):
             emitObservationUnavailable(reason: "chrome_no_window")
         case let .failure(error):
-            automationPermission = error == .automationPermissionDenied ? .denied : .unavailable
+            chromeAutomationPermission = error == .automationPermissionDenied ? .denied : .unavailable
             emitObservationUnavailable(
                 reason: error == .automationPermissionDenied ? "automation_permission" : "chrome_apple_event"
             )
@@ -507,18 +503,15 @@ final class CollectorViewModel: ObservableObject {
         guard
             collectionAllowed,
             let application = NSWorkspace.shared.frontmostApplication,
-            application.bundleIdentifier == AccessibilityClient.firefoxBundleID,
+            application.bundleIdentifier == SystemEventsClient.firefoxBundleID,
             !firefoxPollInFlight
         else { return }
 
         firefoxPollInFlight = true
-        let processIdentifier = application.processIdentifier
-        let accessibility = accessibility
-        firefoxQueue.async { [weak self, accessibility] in
+        let systemEvents = systemEvents
+        firefoxQueue.async { [weak self, systemEvents] in
             guard let self else { return }
-            let result = accessibility.readFirefoxFrontmostContext(
-                processIdentifier: processIdentifier
-            )
+            let result = systemEvents.readFirefoxFrontmostContext()
             DispatchQueue.main.async {
                 Task { @MainActor in self.handleFirefoxResult(result, completedAt: Date()) }
             }
@@ -526,7 +519,7 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func handleFirefoxResult(
-        _ result: Result<FirefoxObservation, FirefoxReadFailure>,
+        _ result: Result<FirefoxObservation, SystemEventsReadFailure>,
         completedAt date: Date
     ) {
         firefoxPollInFlight = false
@@ -549,7 +542,7 @@ final class CollectorViewModel: ObservableObject {
             let classification = observation.classification
             emitTransition(SafeActivityEvent(
                 eventType: .activity,
-                appBundleID: AccessibilityClient.firefoxBundleID,
+                appBundleID: SystemEventsClient.firefoxBundleID,
                 registeredDomain: classification.registeredDomain,
                 surfaceType: classification.surfaceType,
                 transitionType: transition,
@@ -562,12 +555,14 @@ final class CollectorViewModel: ObservableObject {
         case let .failure(error):
             let reason: String
             switch error {
-            case .accessibilityPermissionMissing:
-                reason = "firefox_accessibility_permission"
+            case .automationPermissionDenied:
+                reason = "system_events_automation_permission"
             case .noFocusedWindow:
                 reason = "firefox_no_focused_window"
             case .pageContextUnavailable:
                 reason = "firefox_page_context"
+            case .malformedResponse, .unavailable:
+                reason = "system_events_firefox_context"
             }
             emitObservationUnavailable(reason: reason)
         }
