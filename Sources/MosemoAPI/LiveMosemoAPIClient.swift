@@ -9,13 +9,16 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
     private let tokenStore: any AccessTokenStoring
     private let now: @Sendable () -> Date
 
-    public init(baseURL: URL) throws {
+    public init(
+        baseURL: URL,
+        storage: MosemoAPIStorage = .keychain
+    ) throws {
         guard ["http", "https"].contains(baseURL.scheme?.lowercased()),
               baseURL.host != nil else {
             throw URLError(.badURL)
         }
 
-        let tokenStore = KeychainAccessTokenStore()
+        let tokenStore = try storage.makeAccessTokenStore()
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.timeoutIntervalForRequest = 30
         sessionConfiguration.timeoutIntervalForResource = 60

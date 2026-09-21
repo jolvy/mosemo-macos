@@ -35,7 +35,7 @@ flowchart LR
         Live --> Anonymous[Anonymous generated Client]
         Live --> Authenticated[Authenticated generated Client]
         Authenticated --> Middleware[Bearer middleware]
-        Middleware --> Keychain[Keychain token and device state]
+        Middleware --> Storage[Debug SQLite / Release Keychain storage]
         Anonymous --> Transport[OpenAPI URLSession transport]
         Authenticated --> Transport
         Generated[Generated APIProtocol and DTOs] --- Anonymous
@@ -50,7 +50,7 @@ SwiftPM이 구조의 단일 기준이다.
 | 대상 | 역할 | 의존성 |
 | --- | --- | --- |
 | `CollectorCore` | 수집 상태와 안전 이벤트를 다루는 순수 도메인 | 없음 |
-| `MosemoAPI` | 생성 client, transport, 인증, Keychain, 오류·모델 변환 | OpenAPI runtime, URLSession transport, HTTPTypes |
+| `MosemoAPI` | 생성 client, transport, 인증, 저장 adapter, 오류·모델 변환 | OpenAPI runtime, URLSession transport, HTTPTypes |
 | `MosemoApp` | SwiftUI/AppKit UI와 `AuthCoordinator` | `CollectorCore`, `MosemoAPI` |
 
 Xcode 프로젝트에는 `Mosemo` 앱 target만 둔다. `CollectorCore`와 `MosemoAPI`는
@@ -80,6 +80,7 @@ public protocol MosemoAPIClient: Sendable {
 모듈 밖에 공개하는 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
 `AccountProvider`, `Device`, `DeviceRegistrationState`,
 `DeviceRegistrationStateStoring`, `KeychainDeviceRegistrationStateStore`,
+`SQLiteDeviceRegistrationStateStore`, `MosemoAPIStorage`,
 `DeviceRegistrationManager`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback
 처리 타입이다. 생성된 `Client`, `APIProtocol`, `Components.Schemas.*`는
 `internal`이며 앱 UI와
@@ -94,9 +95,10 @@ public protocol MosemoAPIClient: Sendable {
 모델과 상세·opaque 컨텍스트를 generated DTO로 변환하며, Collector와 네트워크
 계층을 분리한다. Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
 `deviceId`를 UUIDv7으로 검증한 뒤 `Device(id:)`로 반환한다. 이 API 계층은
-`DeviceRegistrationManager`가 계정 UUID별 Keychain 상태를 읽고, pending
-멱등 키를 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를
-정리한다. `LiveMosemoAPIClient` 자체는 멱등 키를 생성하거나 재시도하지 않는다.
+`DeviceRegistrationManager`가 계정 UUID별 저장 상태를 읽고, pending 멱등 키를
+API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 정리한다. Debug
+빌드는 SQLite 저장 adapter를 사용하고 Release 빌드는 Keychain adapter를 사용한다.
+`LiveMosemoAPIClient` 자체는 멱등 키를 생성하거나 재시도하지 않는다.
 
 ## OpenAPI 계약과 생성 코드
 
@@ -138,7 +140,7 @@ sequenceDiagram
     participant Browser as ASWebAuthenticationSession
     participant Server as Mosemo server
     participant API as LiveMosemoAPIClient
-    participant Keychain
+    participant Storage as Debug SQLite / Release Keychain
 
     User->>Auth: 카카오 로그인
     Auth->>Auth: verifier 생성, S256 challenge 계산
@@ -152,21 +154,21 @@ sequenceDiagram
     Auth->>API: authenticate(code, verifier)
     API->>Server: POST /api/v1/auth/token
     Server-->>API: access token, expires_in
-    API->>Keychain: token과 expiresAt 저장
+    API->>Storage: token과 expiresAt 저장
     API->>Server: GET /api/v1/accounts/me + Bearer
     Server-->>API: account DTO
     API-->>Auth: Account
-    Auth->>Keychain: account별 Device 상태 조회
+    Auth->>Storage: account별 Device 상태 조회
     alt 저장된 deviceId 없음
-        Keychain-->>Auth: pending key 또는 없음
-        Auth->>Keychain: 없으면 UUID 멱등 키 저장
+        Storage-->>Auth: pending key 또는 없음
+        Auth->>Storage: 없으면 UUID 멱등 키 저장
         Auth->>API: registerDevice(idempotencyKey)
         API->>Server: POST /api/v1/devices + Bearer
         Server-->>API: deviceId
         API-->>Auth: Device
-        Auth->>Keychain: deviceId 저장 및 pending key 정리
+        Auth->>Storage: deviceId 저장 및 pending key 정리
     else 저장된 deviceId 있음
-        Keychain-->>Auth: Device 재사용
+        Storage-->>Auth: Device 재사용
     end
     Auth-->>User: 로그인 및 Device 등록 상태 표시
 ```
@@ -193,14 +195,15 @@ callback은 scheme·host·path가 모두 정확히 일치해야 한다. `code`�
 ## token과 HTTP 처리
 
 token 교환에는 익명 generated client를, 현재 계정 조회와 Device 등록에는 인증
-generated client를 사용한다. 인증 middleware는 매 요청마다 Keychain 값을 읽어 유효기간을
-확인하고 `Authorization: Bearer ...` 헤더를 추가한다.
+generated client를 사용한다. 인증 middleware는 매 요청마다 현재 빌드의 저장 adapter에서
+값을 읽어 유효기간을 확인하고 `Authorization: Bearer ...` 헤더를 추가한다.
 
-Keychain에는 raw token과 서버의 `expires_in`으로 계산한 `expiresAt`을 함께
-저장한다. 만료된 token 또는 인증 요청의 401 응답에서는 Keychain을 비우고
-`authenticationRequired`를 반환한다. 로그아웃도 서버 호출 없이 로컬 Keychain
-자격 증명을 삭제하지만, 계정별 Device 등록 상태는 유지해 같은 계정의
-재로그인에서 Device를 재사용한다. Device 등록 상태의 pending 멱등 키는
+저장 adapter에는 raw token과 서버의 `expires_in`으로 계산한 `expiresAt`을 함께
+저장한다. Debug에서는 이 값이 앱 전용 SQLite에 저장되고 Release에서는 Keychain에
+저장된다. 만료된 token 또는 인증 요청의 401 응답에서는 현재 저장소의 token을 비우고
+`authenticationRequired`를 반환한다. 로그아웃도 서버 호출 없이 로컬 자격 증명을
+삭제하지만, 계정별 Device 등록 상태는 유지해 같은 계정의 재로그인에서 Device를
+재사용한다. Device 등록 상태의 pending 멱등 키는
 전송 실패·응답 유실·앱 재시작 뒤에도 같은 계정과 함께 보존한다.
 
 초기 버전에는 refresh token이 없다. 따라서 401을 재시도하지 않으며 사용자가
@@ -219,7 +222,7 @@ UI는 HTTP status나 생성 response enum을 직접 판단하지 않는다.
 | --- | --- | --- |
 | token 400 | `invalidAuthorizationCode` | 재시도하지 않음 |
 | token 422 | `validationFailed` | 재시도하지 않음 |
-| account 401 | `authenticationRequired` | Keychain 삭제 |
+| account 401 | `authenticationRequired` | 현재 저장소의 token 삭제 |
 | Device 등록 401 | `authenticationRequired` | token 삭제, pending 등록 상태 보존 |
 | Device 등록 422 | `validationFailed` | 재시도하지 않음 |
 | Device 등록 201의 잘못된 `deviceId` | `unexpectedResponse(statusCode: 201)` | UUIDv7 검증 |
@@ -227,7 +230,7 @@ UI는 HTTP status나 생성 response enum을 직접 판단하지 않는다.
 | timeout | `timedOut` | 인증 및 pending 등록 상태 보존 |
 | 기타 URL 오류 | `networkUnavailable` | 인증 및 pending 등록 상태 보존 |
 | 예상하지 못한 HTTP 응답 | `unexpectedResponse(statusCode:)` | status 보존 |
-| Keychain 실패 | `credentialStorageFailed` | 자격 증명 상태를 성공으로 표시하지 않음 |
+| 저장소 실패 | `credentialStorageFailed` | 자격 증명 상태를 성공으로 표시하지 않음 |
 
 형식이 깨진 오류 본문도 서버의 `detail` 문자열에 의존하지 않고 operation과
 HTTP status로 분류한다. HTTP 응답을 받기 전에 발생한 알 수 없는 실패는 현재
@@ -250,10 +253,11 @@ Release 설정이 비어 있거나 잘못되면 앱을 crash시키지 않고 로
 
 ## Privacy 경계
 
-`CollectorCore`에는 network framework와 API DTO가 들어갈 수 없다. 네트워크는
-`MosemoAPI`에서만 허용한다. 화면 캡처 API, 데이터베이스, 일반 파일·UserDefaults
-영속화, application logging 금지는 production source 전체에 적용한다. 인증
-자격 증명 보관을 위한 Keychain만 허용된 영속화 경계다.
+`CollectorCore`에는 network framework, database framework와 API DTO가 들어갈 수
+없다. 네트워크와 인증 저장은 `MosemoAPI`에서만 허용한다. Debug 빌드의 앱 전용
+SQLite는 인증·Device 상태에 한해 임시 허용하며 활동 payload나 수집 원문을 저장하지
+않는다. Release 빌드의 인증·Device 상태는 Keychain에 저장한다. application logging
+금지는 production source 전체에 적용한다.
 
 access token, callback code, PKCE verifier는 로그와 사용자용 오류 설명에 넣지
 않는다. 활동 payload에는 원문 URL·제목·키 입력 내용·클릭 좌표 등의 금지 필드를
@@ -297,7 +301,7 @@ checkout한 서버 저장소의 계약 파일을 상위 계약으로 복사한�
 - Device 등록의 요청 경로·Bearer·멱등 키·빈 본문·201 응답과 오류 매핑
 - 형식이 깨진 400·401 본문의 status 기반 처리
 - Bearer header 삽입, token 만료와 401 정리, 로그아웃
-- Keychain 실제 round trip
+- SQLite Debug 및 Keychain Release 저장소의 실제 round trip
 - generated account DTO에서 앱 `Account`로의 변환
 - 활동 observation·collection state DTO 변환, discriminator와 값 상태, 201 event ID 검증
 - 활동 401·404·409·422·500 및 네트워크 오류 매핑과 자동 재시도 없음
