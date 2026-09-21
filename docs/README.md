@@ -38,8 +38,6 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
   제공하지 않으므로 `firefoxPageChange`는 탭 전환과 같은 탭 이동을 구분하지
   않는다. Firefox UI 구조가 바뀌거나 값을 노출하지 않으면 추측하지 않고
   `firefox_page_context` 관찰 불가로 기록한다.
-- 키 입력과 마우스 입력은 listen-only event tap에서 발생 사실만 받는다. 키,
-  좌표, 이동 이벤트는 읽지 않으며 10초 boolean으로만 만든다.
 - 일반 앱 복귀는 메모리에 보관한 AX window reference와 PID를, Chrome 복귀는
   창·탭 ID를 사용한다. 현재 화면이나 탭을 닫지 않는다.
 - 화면 잠금, 사용자 세션 비활성, sleep 중에는 자동 일시정지한다. 명시적
@@ -60,15 +58,14 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Sources/CollectorCore/SessionStateMachine.swift` | 집중 시작·휴식·재개·종료와 수집 허용 상태 |
 | `Sources/CollectorCore/SafeActivityEvent.swift` | 안전 이벤트 allow-list와 보호 맥락 필드 제거 |
 | `Sources/CollectorCore/SurfaceClassifier.swift` | 등록 도메인·Chrome surface·브라우저 transition 분류 |
-| `Sources/CollectorCore/InputActivityAggregator.swift` | 입력 내용을 버리고 10초 구간 boolean으로 집계 |
 | `Sources/CollectorCore/ReturnTracking.swift` | 복귀 시도와 성공·실패 결과 모델링 |
 | `Sources/CollectorCore/DetectionStatistics.swift` | ring buffer와 지연·누락 통계 |
-| `Sources/MosemoApp/MosemoApp.swift` | 메뉴 막대 UI와 진단 창 |
+| `Sources/MosemoApp/MosemoApp.swift` | 기본 창, 메뉴 막대 UI와 진단 창 구성 |
+| `Sources/MosemoApp/DesktopRootView.swift` | 로그인, 권한 온보딩과 홈 화면 전환 |
 | `Sources/MosemoApp/CollectorViewModel.swift` | 세션, 관찰 adapter, ring buffer, 진단 상태 조정 |
 | `Sources/MosemoApp/WorkspaceObserver.swift` | 전면 앱·Chrome 수명·sleep·사용자 세션 알림 수신 |
 | `Sources/MosemoApp/ChromeAppleEventClient.swift` | Chrome 권한 요청, 활성 창·탭 관찰, 저장된 탭 활성화 |
 | `Sources/MosemoApp/AccessibilityClient.swift` | AX 권한, 일반 창 복귀, 실험적 Firefox 맥락 관찰 |
-| `Sources/MosemoApp/InputActivityMonitor.swift` | 입력 모니터링 권한과 listen-only event tap |
 | `Sources/MosemoApp/ReturnAnchorStore.swift` | 메모리 전용 앱·창·Chrome 탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
 | `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
@@ -148,7 +145,6 @@ scripts/update_openapi.sh
 | 권한 | 사용 목적 | 허용 방법 |
 | --- | --- | --- |
 | 손쉬운 사용 | 현재 AX window reference 획득과 저장된 창 raise | 권한이 없으면 앱 실행 시 등록을 요청하고 손쉬운 사용 설정을 연다. 노출된 Mosemo 토글은 사용자가 직접 허용하며, 진단 창의 `손쉬운 사용 권한 요청`으로 다시 열 수 있음 |
-| 입력 모니터링 | key/mouse down·modifier·scroll의 발생 사실을 listen-only event tap으로 수신 | 진단 창의 `권한 요청`을 누른 뒤 시스템 설정 → 개인정보 보호 및 보안 → 입력 모니터링에서 허용. 앱은 권한 변화를 감지해 event tap을 즉시 재시작하며, 실패할 때만 앱 재실행 |
 | 자동화 → Google Chrome | 전면 Chrome 창의 mode, 활성 탭 ID·URL 읽기와 저장된 탭 활성화 | Chrome을 먼저 실행하고 진단 창의 `Chrome 자동화 권한 요청`을 누른 뒤 macOS prompt를 허용. 이미 거부했다면 자동으로 열린 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Mosemo 아래 Google Chrome 허용 |
 
 화면 기록 권한은 요청하지 않는다. `Info.plist`에도 화면 기록 usage description이
@@ -200,9 +196,7 @@ macOS가 같은 팝업을 다시 띄우지 않을 수 있으므로 앱이 자동
 `sessionPhase`가 `notStarted`, `intendedRest`, `ended`이면 활동 이벤트를 만들지
 않는 것이 정상이다. `observationState=paused`이면 화면 잠금, sleep, 비활성 사용자
 세션 등 자동 일시정지 원인을 상태 문구에서 확인한다. Chrome 내부 이벤트는
-Chrome이 전면이고 `Chrome 자동화: 허용됨`인 동안에만 관찰한다. 입력 이벤트는
-활성 집중 세션에서 10초 구간이 닫힐 때 추가되므로 키나 마우스를 누른 즉시 행이
-생기지 않을 수 있다.
+Chrome이 전면이고 `Chrome 자동화: 허용됨`인 동안에만 관찰한다.
 
 위 조건이 모두 맞는데 최초 맥락도 생기지 않으면 `안전 진단 복사` 내용을 결과
 기록에 첨부한다. 이 복사본에는 테스트 화면에 표시되는 원시 URL과 제목이

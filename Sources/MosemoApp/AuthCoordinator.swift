@@ -9,6 +9,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
     @Published private(set) var account: Account?
     @Published private(set) var statusMessage: String
     @Published private(set) var isAuthenticating = false
+    @Published private(set) var hasFinishedRestoringSession = false
 
     private let client: (any MosemoAPIClient)?
     private let deviceRegistrationManager: DeviceRegistrationManager
@@ -40,6 +41,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
     func restoreSession() async {
         guard !hasRestoredSession else { return }
         hasRestoredSession = true
+        defer { hasFinishedRestoringSession = true }
 
         guard let client else { return }
         do {

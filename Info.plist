@@ -38,7 +38,7 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>MosemoAPIBaseURL</key>
 	<string>$(MOSEMO_API_BASE_URL)</string>
 	<key>NSAppleEventsUsageDescription</key>

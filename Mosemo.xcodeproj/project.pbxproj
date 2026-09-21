@@ -11,10 +11,10 @@
 		200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000013 /* ChromeAppleEventClient.swift */; };
 		200000000000000000000014 /* AccessibilityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000014 /* AccessibilityClient.swift */; };
 		200000000000000000000015 /* ReturnAnchorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000015 /* ReturnAnchorStore.swift */; };
-		200000000000000000000016 /* InputActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000016 /* InputActivityMonitor.swift */; };
 		200000000000000000000017 /* WorkspaceObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000017 /* WorkspaceObserver.swift */; };
 		200000000000000000000018 /* PerformanceSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000018 /* PerformanceSampler.swift */; };
 		200000000000000000000019 /* AuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000019 /* AuthCoordinator.swift */; };
+		200000000000000000000020 /* DesktopRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000020 /* DesktopRootView.swift */; };
 		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
 		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
 /* End PBXBuildFile section */
@@ -25,10 +25,10 @@
 		300000000000000000000013 /* ChromeAppleEventClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeAppleEventClient.swift; sourceTree = "<group>"; };
 		300000000000000000000014 /* AccessibilityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityClient.swift; sourceTree = "<group>"; };
 		300000000000000000000015 /* ReturnAnchorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReturnAnchorStore.swift; sourceTree = "<group>"; };
-		300000000000000000000016 /* InputActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputActivityMonitor.swift; sourceTree = "<group>"; };
 		300000000000000000000017 /* WorkspaceObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceObserver.swift; sourceTree = "<group>"; };
 		300000000000000000000018 /* PerformanceSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSampler.swift; sourceTree = "<group>"; };
 		300000000000000000000019 /* AuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCoordinator.swift; sourceTree = "<group>"; };
+		300000000000000000000020 /* DesktopRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRootView.swift; sourceTree = "<group>"; };
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000040 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -71,10 +71,10 @@
 				300000000000000000000013 /* ChromeAppleEventClient.swift */,
 				300000000000000000000014 /* AccessibilityClient.swift */,
 				300000000000000000000015 /* ReturnAnchorStore.swift */,
-				300000000000000000000016 /* InputActivityMonitor.swift */,
 				300000000000000000000017 /* WorkspaceObserver.swift */,
 				300000000000000000000018 /* PerformanceSampler.swift */,
 				300000000000000000000019 /* AuthCoordinator.swift */,
+				300000000000000000000020 /* DesktopRootView.swift */,
 			);
 			path = MosemoApp;
 			sourceTree = "<group>";
@@ -154,10 +154,10 @@
 				200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */,
 				200000000000000000000014 /* AccessibilityClient.swift in Sources */,
 				200000000000000000000015 /* ReturnAnchorStore.swift in Sources */,
-				200000000000000000000016 /* InputActivityMonitor.swift in Sources */,
 				200000000000000000000017 /* WorkspaceObserver.swift in Sources */,
 				200000000000000000000018 /* PerformanceSampler.swift in Sources */,
 				200000000000000000000019 /* AuthCoordinator.swift in Sources */,
+				200000000000000000000020 /* DesktopRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
