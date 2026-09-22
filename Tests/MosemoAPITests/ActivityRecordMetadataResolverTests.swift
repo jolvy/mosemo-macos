@@ -68,6 +68,44 @@ final class ActivityRecordMetadataResolverTests: XCTestCase {
         XCTAssertEqual(secondMetadata.deviceRegistrationID, secondDeviceID)
     }
 
+    func testResolveReloadsDeviceStateForEveryCall() async throws {
+        let account = makeAccount(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        )
+        let firstDeviceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let secondDeviceID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let store = ResolverDeviceRegistrationStateStore(states: [
+            account.id: DeviceRegistrationState(deviceID: firstDeviceID),
+        ])
+        let resolver = ActivityRecordMetadataResolver(stateStore: store)
+
+        let firstMetadata = try await resolver.resolve(
+            for: account,
+            eventID: UUID(),
+            sequence: 1,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_100),
+            timezoneID: "Asia/Seoul",
+            utcOffsetMinutes: 540
+        )
+        await store.save(
+            DeviceRegistrationState(deviceID: secondDeviceID),
+            for: account.id
+        )
+        let secondMetadata = try await resolver.resolve(
+            for: account,
+            eventID: UUID(),
+            sequence: 2,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_200),
+            timezoneID: "Asia/Seoul",
+            utcOffsetMinutes: 540
+        )
+
+        XCTAssertEqual(firstMetadata.deviceRegistrationID, firstDeviceID)
+        XCTAssertEqual(secondMetadata.deviceRegistrationID, secondDeviceID)
+        let loadCallCount = await store.loadCallCount()
+        XCTAssertEqual(loadCallCount, 2)
+    }
+
     func testResolveRequiresStoredDeviceForEmptyOrPendingState() async {
         let emptyAccount = makeAccount(
             id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
@@ -144,6 +182,7 @@ final class ActivityRecordMetadataResolverTests: XCTestCase {
 private actor ResolverDeviceRegistrationStateStore: DeviceRegistrationStateStoring {
     private var states: [UUID: DeviceRegistrationState]
     private let loadError: MosemoAPIError?
+    private var loadCalls = 0
 
     init(
         states: [UUID: DeviceRegistrationState] = [:],
@@ -154,6 +193,7 @@ private actor ResolverDeviceRegistrationStateStore: DeviceRegistrationStateStori
     }
 
     func load(for accountID: UUID) throws -> DeviceRegistrationState {
+        loadCalls += 1
         if let loadError {
             throw loadError
         }
@@ -162,5 +202,9 @@ private actor ResolverDeviceRegistrationStateStore: DeviceRegistrationStateStori
 
     func save(_ state: DeviceRegistrationState, for accountID: UUID) {
         states[accountID] = state
+    }
+
+    func loadCallCount() -> Int {
+        loadCalls
     }
 }

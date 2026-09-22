@@ -77,12 +77,14 @@ public protocol MosemoAPIClient: Sendable {
 }
 ```
 
-모듈 밖에 공개하는 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
+모듈 밖에 공개하는 주요 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
 `AccountProvider`, `Device`, `DeviceRegistrationState`,
 `DeviceRegistrationStateStoring`, `KeychainDeviceRegistrationStateStore`,
 `SQLiteDeviceRegistrationStateStore`, `MosemoAPIStorage`,
-`DeviceRegistrationManager`, `MosemoAPIError`와 앱 인증에 필요한 PKCE·callback
-처리 타입이다. 생성된 `Client`, `APIProtocol`, `Components.Schemas.*`는
+`DeviceRegistrationManager`, `ActivityRecord`, `ActivityRecordMetadata`,
+`ActivityRecordMetadataResolver`, `ActivityCreateResult`, `MosemoAPIError`와 앱
+인증에 필요한 PKCE·callback 처리 타입이다. 생성된 `Client`, `APIProtocol`,
+`Components.Schemas.*`는
 `internal`이며 앱 UI와
 `CollectorCore`에서 직접 사용할 수 없다. raw access token도 public API의
 반환값이 아니다.
