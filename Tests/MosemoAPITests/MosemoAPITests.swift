@@ -460,6 +460,91 @@ final class MosemoAPITests: XCTestCase {
         }
     }
 
+    func testCreateActivityUsesDeviceResolvedFromAccountState() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mosemo-activity-\(UUID().uuidString)")
+            .appendingPathExtension("sqlite")
+        defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+        let account = Account(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            provider: .kakao,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let deviceID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let eventID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        let store = try SQLiteDeviceRegistrationStateStore(databaseURL: databaseURL)
+        try await store.save(
+            DeviceRegistrationState(deviceID: deviceID),
+            for: account.id
+        )
+        let metadata = try await ActivityRecordMetadataResolver(stateStore: store).resolve(
+            for: account,
+            eventID: eventID,
+            sequence: 7,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_100),
+            timezoneID: "Asia/Seoul",
+            utcOffsetMinutes: 540
+        )
+        let client = makeClient(createActivity: { input in
+            guard case .json(.activityObservation(let observation)) = input.body else {
+                XCTFail("Expected an activity observation")
+                return .undocumented(statusCode: 500, .init())
+            }
+            XCTAssertEqual(observation.deviceId, deviceID.uuidString)
+            return .created(.init(body: .json(.init(
+                eventId: eventID.uuidString,
+                receivedAt: self.now,
+                status: .accepted
+            ))))
+        })
+
+        _ = try await client.createActivity(.observation(.init(
+            metadata: metadata,
+            context: .opaque
+        )))
+    }
+
+    func testMissingStoredDeviceStopsBeforeActivityRequest() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mosemo-activity-\(UUID().uuidString)")
+            .appendingPathExtension("sqlite")
+        defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+        let account = Account(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            provider: .kakao,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let store = try SQLiteDeviceRegistrationStateStore(databaseURL: databaseURL)
+        let resolver = ActivityRecordMetadataResolver(stateStore: store)
+        let calls = CallCounter()
+        let client = makeClient(createActivity: { _ in
+            await calls.increment()
+            return .undocumented(statusCode: 500, .init())
+        })
+
+        await assertAPIError(.deviceRegistrationRequired) {
+            let metadata = try await resolver.resolve(
+                for: account,
+                eventID: UUID(),
+                sequence: 1,
+                observedAt: Date(timeIntervalSince1970: 1_800_000_100),
+                timezoneID: "Asia/Seoul",
+                utcOffsetMinutes: 540
+            )
+            _ = try await client.createActivity(.observation(.init(
+                metadata: metadata,
+                context: .opaque
+            )))
+        }
+
+        let callCount = await calls.value()
+        XCTAssertEqual(callCount, 0)
+    }
+
     func testCreateActivityMapsDetailedBrowserObservation() async throws {
         let metadata = makeActivityMetadata()
         let receivedAt = now.addingTimeInterval(5)

@@ -93,8 +93,12 @@ public protocol MosemoAPIClient: Sendable {
 활동 모델은 `ActivityRecordMetadata`에 서버 발급 Device UUID, event ID, sequence,
 관측 시각, timezone ID와 UTC offset을 담는다. `ActivityRequestMapper`가 이 공개
 모델과 상세·opaque 컨텍스트를 generated DTO로 변환하며, Collector와 네트워크
-계층을 분리한다. Device 등록은 호출자가 제공한 UUID `Idempotency-Key`를 그대로 보내고 서버의
-`deviceId`를 UUIDv7으로 검증한 뒤 `Device(id:)`로 반환한다. 이 API 계층은
+계층을 분리한다. `ActivityRecordMetadataResolver`는 인증된 `Account`의 UUID로
+저장 상태를 매번 조회하고, 확인된 Device UUID가 있을 때만 메타데이터를 만든다.
+저장된 Device가 없으면 `deviceRegistrationRequired`를 반환하며 임의 UUID 생성이나
+Device 등록 API 호출은 하지 않는다. Device 등록은 호출자가 제공한 UUID
+`Idempotency-Key`를 그대로 보내고 서버의 `deviceId`를 UUIDv7으로 검증한 뒤
+`Device(id:)`로 반환한다. 이 API 계층은
 `DeviceRegistrationManager`가 계정 UUID별 저장 상태를 읽고, pending 멱등 키를
 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 정리한다. Debug
 빌드는 SQLite 저장 adapter를 사용하고 Release 빌드는 Keychain adapter를 사용한다.
@@ -226,6 +230,7 @@ UI는 HTTP status나 생성 response enum을 직접 판단하지 않는다.
 | Device 등록 401 | `authenticationRequired` | token 삭제, pending 등록 상태 보존 |
 | Device 등록 422 | `validationFailed` | 재시도하지 않음 |
 | Device 등록 201의 잘못된 `deviceId` | `unexpectedResponse(statusCode: 201)` | UUIDv7 검증 |
+| 활동 메타데이터 준비 시 저장된 Device 없음 | `deviceRegistrationRequired` | 활동 요청을 보내지 않음 |
 | 5xx | `serverError(statusCode:)` | 인증 및 pending 등록 상태 보존 |
 | timeout | `timedOut` | 인증 및 pending 등록 상태 보존 |
 | 기타 URL 오류 | `networkUnavailable` | 인증 및 pending 등록 상태 보존 |
@@ -339,6 +344,7 @@ status를 `validationFailed`로 매핑한다.
 - `ActivitySyncClient` 빈 인터페이스
 - 실제 Kakao 계정이 필요한 자동 end-to-end 테스트
 
-추후 구현할 때는 `CollectorCore` 이벤트를 공개 활동 모델로 명시적으로 변환하고,
-저장된 Device UUID를 `ActivityRecordMetadata.deviceRegistrationID`에 주입한다.
-event ID와 sequence는 호출 전에 확정해 재전송에서도 동일하게 유지해야 한다.
+추후 Collector를 연결할 때는 `CollectorCore` 이벤트를 공개 활동 모델로 명시적으로
+변환하고, `ActivityRecordMetadataResolver`로 저장된 Device UUID가 주입된
+메타데이터를 준비한다. event ID와 sequence는 Resolver 호출 전에 확정해
+재전송에서도 동일하게 유지해야 한다.
