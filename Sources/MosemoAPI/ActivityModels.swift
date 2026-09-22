@@ -8,7 +8,7 @@ public struct ActivityRecordMetadata: Equatable, Sendable {
     public let timezoneID: String
     public let utcOffsetMinutes: Int
 
-    public init(
+    init(
         deviceRegistrationID: UUID,
         eventID: UUID,
         sequence: Int,
