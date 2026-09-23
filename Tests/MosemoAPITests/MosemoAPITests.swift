@@ -669,6 +669,9 @@ final class MosemoAPITests: XCTestCase {
             let windowObject = try XCTUnwrap(contextObject["window"] as? [String: Any])
             let titleObject = try XCTUnwrap(windowObject["title"] as? [String: Any])
             XCTAssertNil(titleObject["originalByteLength"])
+            XCTAssertEqual(contextObject["kind"] as? String, "detailed")
+            let webObject = try XCTUnwrap(contextObject["web"] as? [String: Any])
+            XCTAssertEqual(webObject["kind"] as? String, "not_applicable")
 
             return .created(.init(body: .json(.init(
                 eventId: metadata.eventID.uuidString,
@@ -713,16 +716,31 @@ final class MosemoAPITests: XCTestCase {
                 status: .accepted
             ))))
         })
-        let unavailableURLClient = makeClient(createActivity: { input in
+        let unavailableTitleAbsentURLClient = makeClient(createActivity: { input in
             guard case .json(.activityObservation(let observation)) = input.body,
                   case .detailed(let context) = observation.context,
                   case .browser(let browser) = context.web,
-                  case .absent = browser.tabTitle,
-                  case .unavailable(let url) = browser.url else {
-                XCTFail("Expected absent tab title and unavailable URL")
+                  case .unavailable(let title) = browser.tabTitle,
+                  case .absent = browser.url else {
+                XCTFail("Expected unavailable tab title and absent URL")
                 return .undocumented(statusCode: 500, .init())
             }
-            XCTAssertEqual(url.reason, "automation_denied")
+            XCTAssertEqual(title.reason, "automation_denied")
+
+            let encoded = try JSONEncoder().encode(observation)
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+            )
+            XCTAssertEqual(object["recordType"] as? String, "activity_observation")
+            let contextObject = try XCTUnwrap(object["context"] as? [String: Any])
+            XCTAssertEqual(contextObject["kind"] as? String, "detailed")
+            let webObject = try XCTUnwrap(contextObject["web"] as? [String: Any])
+            XCTAssertEqual(webObject["kind"] as? String, "browser")
+            let titleObject = try XCTUnwrap(webObject["tabTitle"] as? [String: Any])
+            XCTAssertEqual(titleObject["status"] as? String, "unavailable")
+            XCTAssertEqual(titleObject["reason"] as? String, "automation_denied")
+            let urlObject = try XCTUnwrap(webObject["url"] as? [String: Any])
+            XCTAssertEqual(urlObject["status"] as? String, "absent")
             return .created(.init(body: .json(.init(
                 eventId: metadata.eventID.uuidString,
                 receivedAt: self.now,
@@ -744,14 +762,14 @@ final class MosemoAPITests: XCTestCase {
                 ))
             ))
         )))
-        _ = try await unavailableURLClient.createActivity(.observation(.init(
+        _ = try await unavailableTitleAbsentURLClient.createActivity(.observation(.init(
             metadata: metadata,
             context: .detailed(.init(
                 app: .init(bundleID: .absent, name: .absent),
                 window: .absent,
                 web: .browser(.init(
-                    tabTitle: .absent,
-                    url: .unavailable(reason: "automation_denied")
+                    tabTitle: .unavailable(reason: "automation_denied"),
+                    url: .absent
                 ))
             ))
         )))
@@ -769,6 +787,10 @@ final class MosemoAPITests: XCTestCase {
             XCTAssertEqual(change.recordType, .collectionStateChanged)
             XCTAssertEqual(change.state, .suspended)
             XCTAssertEqual(change.reason, "system_sleep")
+            XCTAssertEqual(change.sequence, metadata.sequence)
+            XCTAssertEqual(change.observedAt, metadata.observedAt)
+            XCTAssertEqual(change.timezoneId, .asiaSeoul)
+            XCTAssertEqual(change.utcOffsetMinutes, metadata.utcOffsetMinutes)
             return .created(.init(body: .json(.init(
                 eventId: metadata.eventID.uuidString,
                 receivedAt: self.now,
@@ -884,6 +906,8 @@ final class MosemoAPITests: XCTestCase {
                 context: .opaque
             )))
         }
+        let deleteCallCount = await tokenStore.deleteCallCount()
+        XCTAssertEqual(deleteCallCount, 1)
     }
 
     func testCreateActivityMapsDeviceNotFound() async {
@@ -1387,6 +1411,8 @@ private actor MemoryAccessTokenStore: AccessTokenStoring {
 }
 
 private actor FailingDeleteTokenStore: AccessTokenStoring {
+    private var deleteCalls = 0
+
     func load() -> StoredAccessToken? {
         StoredAccessToken(
             value: "expired-token",
@@ -1397,7 +1423,12 @@ private actor FailingDeleteTokenStore: AccessTokenStoring {
     func save(_ token: StoredAccessToken) {}
 
     func delete() throws {
+        deleteCalls += 1
         throw MosemoAPIError.credentialStorageFailed
+    }
+
+    func deleteCallCount() -> Int {
+        deleteCalls
     }
 }
 
