@@ -95,6 +95,11 @@ public protocol TimelineFetching: Sendable {
 반환값이 아니다.
 
 서버 DTO의 account UUID, provider, 계정 시간대, 생성 시각과 마지막 인증 시각은
+라벨 검토 경계는 `LabelReviewReading`과 값 타입
+`LabelCatalogEntry`, `PendingLabelTimelineSegment`, `RemoteLabelProposal`,
+`RemoteSegmentLabelState`를 공개한다. 생성 DTO는 `LiveMosemoAPIClient` 안에서 이
+값 타입으로 변환된다.
+
 `LiveMosemoAPIClient`가 앱의 `Account`로 명시적으로 변환한다. 서버 스키마가
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
 활동 모델은 `ActivityRecordMetadata`에 서버 발급 Device UUID, event ID, sequence,
@@ -118,12 +123,12 @@ API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 �
 
 | 항목 | 현재 값 |
 | --- | --- |
-| 입력 | `../openapi.json` (서버 스냅샷과 일치 확인) |
+| 입력 | 기본값 `../openapi.json`; `MOSEMO_SERVER_OPENAPI_SNAPSHOT` 설정 시 지정한 서버 스냅샷 |
 | 설정 | `Sources/MosemoAPI/openapi-generator-config.yaml` |
 | 생성 모드 | `types`, `client` |
 | 접근 수준 | `internal` |
 | 이름 전략 | `idiomatic` |
-| 포함 operation | token 교환, 현재 계정 조회, Device 등록, 활동 레코드 생성, 날짜별 타임라인 조회 |
+| 포함 operation | token 교환, 현재 계정 조회, 라벨 목록·검토 타임라인·구간 상태 조회, Device 등록, 활동 레코드 생성, 관찰 타임라인 조회 |
 | generator | `1.13.0` |
 | runtime | `1.12.0` |
 | URLSession transport | `1.3.0` |
@@ -132,7 +137,10 @@ API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 �
 `/api/v1/auth/kakao/login` URL은 wrapper가 만들고 callback은
 `ASWebAuthenticationSession`이 수신한다. 생성 client가 호출하는 endpoint는
 `POST /api/v1/auth/token`, `GET /api/v1/accounts/me`,
+<<<<<<< HEAD
 `POST /api/v1/devices`, `POST /api/v1/activities`,
+`GET /api/v1/labels`, `GET /api/v1/activities/label-timeline`,
+`GET /api/v1/activities/segments/{segment_id}/label-state`,
 `GET /api/v1/activities/timeline`이다.
 
 초기에는 build-tool plugin에서 빌드할 때마다 코드를 생성하려 했다. 실제 Xcode

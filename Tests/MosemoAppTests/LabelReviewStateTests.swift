@@ -169,6 +169,37 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.groups.flatMap(\.segments).contains { $0.id == segment.id })
     }
 
+    func testUnchangedArchivedProposalCanBeCompletedLocally() async {
+        let labelID = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+        let segment = LabelReviewSegmentDTO(
+            id: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!,
+            version: String(repeating: "b", count: 64),
+            startedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            endedAt: Date(timeIntervalSince1970: 1_800_000_300),
+            appName: "Xcode",
+            title: "Editor.swift",
+            proposal: .ready(.label(id: labelID))
+        )
+        let response = LabelReviewResponseDTO(
+            labels: [LabelReviewLabelDTO(
+                id: labelID,
+                displayName: "옛 라벨",
+                archivedAt: Date(timeIntervalSince1970: 1_800_000_100)
+            )],
+            segments: [segment]
+        )
+        let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response))
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.title(for: viewModel.selection(for: viewModel.groups[0].segments[0])), "옛 라벨")
+        viewModel.toggleAllGroups()
+        XCTAssertEqual(viewModel.missingChoiceCount, 0)
+
+        viewModel.confirmSelectedGroups()
+
+        XCTAssertEqual(viewModel.segmentCount, 0)
+    }
+
     func testSelectedGroupsCanBeConfirmedTogether() async {
         let viewModel = LabelReviewViewModel(
             fetcher: MockLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
