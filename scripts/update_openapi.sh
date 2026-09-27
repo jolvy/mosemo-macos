@@ -8,8 +8,14 @@ fi
 
 script_directory=$(CDPATH= cd "$(dirname "$0")" && pwd)
 component_root=$(CDPATH= cd "$script_directory/.." && pwd)
-source_contract="$component_root/../openapi.json"
-server_contract="$component_root/../mosemo-server/openapi/openapi.json"
+server_snapshot=${MOSEMO_SERVER_OPENAPI_SNAPSHOT:-}
+if [ -n "$server_snapshot" ]; then
+    source_contract=$server_snapshot
+    server_contract=$server_snapshot
+else
+    source_contract="$component_root/../openapi.json"
+    server_contract="$component_root/../mosemo-server/openapi/openapi.json"
+fi
 generator_input="$component_root/Sources/MosemoAPI/openapi.json"
 generated_sources="$component_root/Sources/MosemoAPI/GeneratedSources"
 developer_directory=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
@@ -81,6 +87,13 @@ jq -e '
         == "accountsGetMe") and
     (.paths["/api/v1/accounts/me"].get.responses["200"] != null) and
     (.paths["/api/v1/accounts/me"].get.responses["401"] != null) and
+    (.paths["/api/v1/labels"].get.operationId == "labelsList") and
+    (.paths["/api/v1/labels"].get.responses["200"].content["application/json"].schema.type == "array") and
+    (.paths["/api/v1/labels"].get.responses["200"].content["application/json"].schema.items."$ref"
+        == "#/components/schemas/LabelResponse") and
+    (.components.schemas.LabelResponse.required | index("archivedAt") != null) and
+    (.components.schemas.LabelResponse.properties.archivedAt.anyOf
+        | map(.type) | sort == ["null", "string"]) and
     (.paths["/api/v1/devices"].post.operationId == "devicesCreate") and
     (.paths["/api/v1/devices"].post.parameters | any(
         .name == "Idempotency-Key" and .in == "header" and
@@ -136,7 +149,8 @@ jq '
     (.components.schemas.ActivityGroupResponse.properties.selection,
      .components.schemas.ConfirmedActivityLabelStateResponse.properties.proposal,
      .components.schemas.OpaqueActivityResponse.properties.endedAt,
-     .components.schemas.LabelTimelineCaptureGapResponse.properties.endedAt) |= (
+     .components.schemas.LabelTimelineCaptureGapResponse.properties.endedAt,
+     .components.schemas.LabelResponse.properties.archivedAt) |= (
         . as $schema
         | ($schema.anyOf | map(select(.type != "null")) | first) as $value
         | ($schema | del(.anyOf)) + $value
@@ -144,6 +158,7 @@ jq '
     (.components.schemas.InProgressActivityResponse.required,
      .components.schemas.OpaqueActivityResponse.required,
      .components.schemas.LabelTimelineCaptureGapResponse.required) |= map(select(. != "endedAt")) |
+    .components.schemas.LabelResponse.required |= map(select(. != "archivedAt")) |
     .components.schemas.InProgressActivityResponse.properties.endedAt |= (
         . + {"type": "string", "format": "date-time"}
     )

@@ -12,3 +12,4 @@ filter:
     - activitiesGetSegmentLabelState
     - authExchangeToken
     - devicesCreate
+    - labelsList

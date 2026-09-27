@@ -1339,6 +1339,64 @@ final class MosemoAPITests: XCTestCase {
         }
     }
 
+    func testListLabelsMapsActiveAndArchivedEntriesFromAuthenticatedResponse() async throws {
+        let activeLabelID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let archivedLabelID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let recorder = RequestRecorder()
+        let body = Data(#"""
+        [
+          {"labelId":"11111111-1111-1111-1111-111111111111","displayName":"코딩","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-25T00:00:00Z","archivedAt":null},
+          {"labelId":"22222222-2222-2222-2222-222222222222","displayName":"옛 라벨","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-26T00:00:00Z","archivedAt":"2026-09-27T00:00:00Z"}
+        ]
+        """#.utf8)
+        let transport = RecordingClientTransport { request, requestBody, baseURL, operationID in
+            await recorder.record(request: request, hasBody: requestBody != nil,
+                                  baseURL: baseURL, operationID: operationID)
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(
+                value: "review-token",
+                expiresAt: now.addingTimeInterval(60)
+            )),
+            transport: transport
+        )
+
+        let labels = try await client.listLabels()
+
+        XCTAssertEqual(labels, [
+            LabelCatalogEntry(id: activeLabelID, displayName: "코딩", archivedAt: nil),
+            LabelCatalogEntry(
+                id: archivedLabelID,
+                displayName: "옛 라벨",
+                archivedAt: Date(timeIntervalSince1970: 1_790_467_200)
+            ),
+        ])
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.map(\.request.path), ["/api/v1/labels"])
+        XCTAssertEqual(requests.map(\.operationID), ["labelsList"])
+        XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer review-token")
+    }
+
+    func testListLabelsClearsTokenOnUnauthorizedResponse() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "expired-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let transport = RecordingClientTransport { _, _, _, _ in
+            let error = Data(#"{"error":{"code":401,"details":[],"message":"Invalid or expired access token","status":"AUTH_INVALID_ACCESS_TOKEN"}}"#.utf8)
+            return (HTTPResponse(status: .unauthorized, headerFields: [.contentType: "application/json"]), HTTPBody(error))
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        await assertAPIError(.authenticationRequired) {
+            _ = try await client.listLabels()
+        }
+
+        let storedToken = await tokenStore.currentToken()
+        XCTAssertNil(storedToken)
+    }
+
     func testLabelTimelineUsesSelectedDateAndMapsPendingSegment() async throws {
         let tokenStore = MemoryAccessTokenStore(token: .init(
             value: "review-token",
@@ -1599,6 +1657,12 @@ private struct MockGeneratedAPI: APIProtocol {
     func activitiesGetSegmentLabelState(
         _ input: Operations.ActivitiesGetSegmentLabelState.Input
     ) async throws -> Operations.ActivitiesGetSegmentLabelState.Output {
+        .undocumented(statusCode: 500, .init())
+    }
+
+    func labelsList(
+        _ input: Operations.LabelsList.Input
+    ) async throws -> Operations.LabelsList.Output {
         .undocumented(statusCode: 500, .init())
     }
 }

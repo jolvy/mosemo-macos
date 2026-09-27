@@ -419,8 +419,36 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
 
 extension LiveMosemoAPIClient: LabelReviewReading {
     public func listLabels() async throws -> [LabelCatalogEntry] {
-        // The server's catalog endpoint is being developed alongside this client.
-        throw URLError(.unsupportedURL)
+        do {
+            let response = try await authenticatedClient.labelsList()
+            switch response {
+            case .ok(let result):
+                return try result.body.json.map { label in
+                    guard let id = UUID(uuidString: label.labelId) else {
+                        throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                    return LabelCatalogEntry(
+                        id: id,
+                        displayName: label.displayName,
+                        archivedAt: label.archivedAt
+                    )
+                }
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mappedError = Self.mapCommon(error, statusCode: nil)
+            if mappedError == .authenticationRequired { try? await tokenStore.delete() }
+            throw mappedError
+        }
     }
 
     public func pendingLabelSegments(day: TimelineDate) async throws -> [PendingLabelTimelineSegment] {
