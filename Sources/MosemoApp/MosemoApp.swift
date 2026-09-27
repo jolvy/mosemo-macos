@@ -65,6 +65,14 @@ struct MosemoApp: App {
                 .frame(minWidth: 760, minHeight: 620)
         }
         .defaultSize(width: 900, height: 700)
+
+        #if DEBUG
+        Window("라벨 검토 시안", id: "label-review-demo") {
+            LabelReviewDemoView()
+                .frame(minWidth: 720, minHeight: 520)
+        }
+        .defaultSize(width: 1050, height: 700)
+        #endif
     }
 }
 
@@ -126,6 +134,12 @@ private struct CollectorMenuView: View {
             HStack {
                 Button("앱 열기", action: openApp)
                 Button("진단 열기", action: openDiagnostics)
+                #if DEBUG
+                Button("라벨 검토 시안") {
+                    openWindow(id: "label-review-demo")
+                    NSApplication.shared.activate()
+                }
+                #endif
                 Spacer()
                 Button("종료") { NSApplication.shared.terminate(nil) }
             }
