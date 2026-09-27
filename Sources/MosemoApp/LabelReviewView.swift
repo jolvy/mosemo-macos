@@ -150,8 +150,8 @@ private struct LabelReviewTable: View {
                                     segment: segment,
                                     timeZone: viewModel.timeZone,
                                     labels: viewModel.labels,
-                                    selection: viewModel.selection(for: segment),
                                     selectionTitle: viewModel.title(for: viewModel.selection(for: segment)),
+                                    canConfirm: viewModel.canConfirm([segment]),
                                     onSelect: { viewModel.setSelection($0, for: segment) },
                                     onConfirm: { viewModel.confirm(segment) }
                                 )
@@ -265,8 +265,8 @@ private struct LabelReviewSegmentRow: View {
     let segment: LabelReviewSegment
     let timeZone: TimeZone
     let labels: [LabelReviewLabel]
-    let selection: LabelReviewSelection?
     let selectionTitle: String
+    let canConfirm: Bool
     let onSelect: (LabelReviewSelection) -> Void
     let onConfirm: () -> Void
 
@@ -299,7 +299,7 @@ private struct LabelReviewSegmentRow: View {
             Button("이 기록 로컬 완료", action: onConfirm)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(selection == nil)
+                .disabled(!canConfirm)
                 .frame(width: 225, alignment: .leading)
         }
         .padding(.vertical, 10)
