@@ -1,4 +1,5 @@
 import Foundation
+import MosemoAPI
 
 enum LabelReviewSelectionDTO: Equatable, Sendable {
     case label(id: UUID)
@@ -15,6 +16,13 @@ enum LabelReviewProposalDTO: Equatable, Sendable {
 struct LabelReviewLabelDTO: Equatable, Sendable {
     let id: UUID
     let displayName: String
+    let archivedAt: Date?
+
+    init(id: UUID, displayName: String, archivedAt: Date? = nil) {
+        self.id = id
+        self.displayName = displayName
+        self.archivedAt = archivedAt
+    }
 }
 
 struct LabelReviewSegmentDTO: Equatable, Sendable {
@@ -25,6 +33,27 @@ struct LabelReviewSegmentDTO: Equatable, Sendable {
     let appName: String
     let title: String
     let proposal: LabelReviewProposalDTO
+    let sourceGroupVersion: String?
+
+    init(
+        id: UUID,
+        version: String,
+        startedAt: Date,
+        endedAt: Date,
+        appName: String,
+        title: String,
+        proposal: LabelReviewProposalDTO,
+        sourceGroupVersion: String? = nil
+    ) {
+        self.id = id
+        self.version = version
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.appName = appName
+        self.title = title
+        self.proposal = proposal
+        self.sourceGroupVersion = sourceGroupVersion
+    }
 }
 
 struct LabelReviewResponseDTO: Equatable, Sendable {
@@ -33,13 +62,99 @@ struct LabelReviewResponseDTO: Equatable, Sendable {
 }
 
 protocol LabelReviewFetching: Sendable {
-    func fetchLabelReview() async throws -> LabelReviewSnapshot
+    func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot
+}
+
+enum LabelReviewFetchError: Error {
+    case changedDuringFetch
+    case missingLabel
+}
+
+struct LiveLabelReviewFetcher: LabelReviewFetching {
+    let reader: any LabelReviewReading
+
+    func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
+        for attempt in 0..<2 {
+            let labels = try await reader.listLabels()
+            let segments = try await reader.pendingLabelSegments(day: day)
+            let states: [RemoteSegmentLabelState]
+            do {
+                states = try await fetchStates(for: segments)
+            } catch MosemoAPIError.unexpectedResponse(let statusCode)
+                where attempt == 0 && (statusCode == 404 || statusCode == 409) {
+                continue
+            }
+            guard let response = try makeResponse(labels: labels, segments: segments, states: states) else {
+                if attempt == 0 { continue }
+                throw LabelReviewFetchError.changedDuringFetch
+            }
+            return LabelReviewSnapshot(response: response)
+        }
+        throw LabelReviewFetchError.changedDuringFetch
+    }
+
+    private func fetchStates(
+        for segments: [PendingLabelTimelineSegment]
+    ) async throws -> [RemoteSegmentLabelState] {
+        var states = Array<RemoteSegmentLabelState?>(repeating: nil, count: segments.count)
+        for start in stride(from: 0, to: segments.count, by: 8) {
+            let end = min(start + 8, segments.count)
+            try await withThrowingTaskGroup(of: (Int, RemoteSegmentLabelState).self) { group in
+                for index in start..<end {
+                    let id = segments[index].id
+                    group.addTask { (index, try await reader.labelState(segmentID: id)) }
+                }
+                for try await (index, state) in group { states[index] = state }
+            }
+        }
+        return states.compactMap { $0 }
+    }
+
+    private func makeResponse(
+        labels: [LabelCatalogEntry],
+        segments: [PendingLabelTimelineSegment],
+        states: [RemoteSegmentLabelState]
+    ) throws -> LabelReviewResponseDTO? {
+        guard states.count == segments.count else { return nil }
+        let labelIDs = Set(labels.map(\.id))
+        var mapped: [LabelReviewSegmentDTO] = []
+        for (segment, state) in zip(segments, states) {
+            guard case .pending(let id, let version, let remoteProposal) = state,
+                  id == segment.id, version == segment.version else { return nil }
+            let proposal: LabelReviewProposalDTO
+            switch remoteProposal {
+            case .readyLabel(let labelID):
+                guard labelIDs.contains(labelID) else { throw LabelReviewFetchError.missingLabel }
+                proposal = .ready(.label(id: labelID))
+            case .readyUnclassified: proposal = .ready(.unclassified)
+            case .waiting: proposal = .waiting
+            case .processing: proposal = .processing
+            case .failed: proposal = .failed
+            }
+            mapped.append(LabelReviewSegmentDTO(
+                id: segment.id,
+                version: segment.version,
+                startedAt: segment.startedAt,
+                endedAt: segment.endedAt,
+                appName: segment.appName,
+                title: segment.title,
+                proposal: proposal,
+                sourceGroupVersion: segment.sourceGroupVersion
+            ))
+        }
+        return LabelReviewResponseDTO(
+            labels: labels.map {
+                LabelReviewLabelDTO(id: $0.id, displayName: $0.displayName, archivedAt: $0.archivedAt)
+            },
+            segments: mapped
+        )
+    }
 }
 
 struct MockLabelReviewFetcher: LabelReviewFetching {
     let response: LabelReviewResponseDTO
 
-    func fetchLabelReview() async throws -> LabelReviewSnapshot {
+    func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
         LabelReviewSnapshot(response: response)
     }
 

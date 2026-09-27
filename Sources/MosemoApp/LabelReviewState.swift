@@ -20,6 +20,7 @@ enum LabelReviewProposal: Equatable, Sendable {
 struct LabelReviewLabel: Identifiable, Equatable, Sendable {
     let id: UUID
     let displayName: String
+    let archivedAt: Date?
 }
 
 struct LabelReviewSegment: Identifiable, Equatable, Sendable {
@@ -30,6 +31,7 @@ struct LabelReviewSegment: Identifiable, Equatable, Sendable {
     let appName: String
     let title: String
     let proposal: LabelReviewProposal
+    let sourceGroupVersion: String?
 
     var durationMinutes: Int { Int(endedAt.timeIntervalSince(startedAt) / 60) }
 }
@@ -55,7 +57,9 @@ struct LabelReviewSnapshot: Equatable, Sendable {
     let segments: [LabelReviewSegment]
 
     init(response: LabelReviewResponseDTO) {
-        labels = response.labels.map { LabelReviewLabel(id: $0.id, displayName: $0.displayName) }
+        labels = response.labels.map {
+            LabelReviewLabel(id: $0.id, displayName: $0.displayName, archivedAt: $0.archivedAt)
+        }
         segments = response.segments.map { segment in
             LabelReviewSegment(
                 id: segment.id,
@@ -64,7 +68,8 @@ struct LabelReviewSnapshot: Equatable, Sendable {
                 endedAt: segment.endedAt,
                 appName: segment.appName,
                 title: segment.title,
-                proposal: Self.proposal(from: segment.proposal)
+                proposal: Self.proposal(from: segment.proposal),
+                sourceGroupVersion: segment.sourceGroupVersion
             )
         }
     }
@@ -102,11 +107,6 @@ struct LabelReviewState: Equatable, Sendable {
     var pendingSegments: [LabelReviewSegment] {
         snapshot.segments
             .filter { confirmedVersions[$0.id] != $0.version }
-            .sorted {
-                if $0.startedAt != $1.startedAt { return $0.startedAt < $1.startedAt }
-                if $0.endedAt != $1.endedAt { return $0.endedAt < $1.endedAt }
-                return $0.id.uuidString < $1.id.uuidString
-            }
     }
 
     var groups: [LabelReviewGroup] {
@@ -114,6 +114,7 @@ struct LabelReviewState: Equatable, Sendable {
         for segment in pendingSegments {
             if let previous = groupedSegments.last?.last,
                previous.endedAt == segment.startedAt,
+               previous.sourceGroupVersion == segment.sourceGroupVersion,
                previous.proposal == segment.proposal {
                 groupedSegments[groupedSegments.count - 1].append(segment)
             } else {
@@ -125,7 +126,7 @@ struct LabelReviewState: Equatable, Sendable {
 
     func canSelect(_ selection: LabelReviewSelection) -> Bool {
         switch selection {
-        case .label(let id): labels.contains(where: { $0.id == id })
+        case .label(let id): labels.contains(where: { $0.id == id && $0.archivedAt == nil })
         case .unclassified: true
         }
     }

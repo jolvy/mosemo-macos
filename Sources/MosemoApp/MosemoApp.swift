@@ -9,6 +9,7 @@ struct MosemoApp: App {
     @StateObject private var auth: AuthCoordinator
     private let apiClient: LiveMosemoAPIClient?
     @AppStorage("onboardingCompleted") private var onboardingCompleted = false
+    private let reviewReader: (any LabelReviewReading)?
 
     init() {
         _model = StateObject(wrappedValue: CollectorViewModel())
@@ -27,14 +28,17 @@ struct MosemoApp: App {
                     client: client,
                     deviceRegistrationStateStore: deviceRegistrationStateStore
                 ))
+                reviewReader = client
             } catch let error as URLError where error.code == .badURL {
                 apiClient = nil
+                reviewReader = nil
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: nil,
                     configurationMessage: "API 서버 주소가 올바르지 않습니다."
                 ))
             } catch {
                 apiClient = nil
+                reviewReader = nil
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: nil,
                     configurationMessage: "앱 저장소를 초기화할 수 없습니다."
@@ -42,6 +46,7 @@ struct MosemoApp: App {
             }
         } else {
             apiClient = nil
+            reviewReader = nil
             _auth = StateObject(wrappedValue: AuthCoordinator(
                 client: nil,
                 configurationMessage: "API 서버 주소가 설정되지 않았습니다."
@@ -86,6 +91,21 @@ struct MosemoApp: App {
                 .frame(minWidth: 760, minHeight: 620)
         }
         .defaultSize(width: 900, height: 700)
+
+        Window("라벨 검토", id: "label-review") {
+            if let account = auth.account, let reviewReader {
+                LabelReviewScreen(
+                    fetcher: LiveLabelReviewFetcher(reader: reviewReader),
+                    timeZone: TimeZone(identifier: account.timeZoneID) ?? .current
+                )
+                .id(account.id)
+                .frame(minWidth: 720, minHeight: 520)
+            } else {
+                ContentUnavailableView("로그인이 필요합니다", systemImage: "person.crop.circle.badge.exclamationmark")
+                    .frame(minWidth: 720, minHeight: 520)
+            }
+        }
+        .defaultSize(width: 1050, height: 700)
 
         #if DEBUG
         Window("라벨 검토 시안", id: "label-review-demo") {

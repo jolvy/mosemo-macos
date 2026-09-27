@@ -1339,6 +1339,87 @@ final class MosemoAPITests: XCTestCase {
         }
     }
 
+    func testLabelTimelineUsesSelectedDateAndMapsPendingSegment() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "review-token",
+            expiresAt: now.addingTimeInterval(60)
+        ))
+        let recorder = RequestRecorder()
+        let body = Data(#"""
+        [{"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"pending","selection":null,"segments":[{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"captured","title":{"status":"captured","value":"Editor.swift"}},"web":{"kind":"not_applicable"}}}]}]
+        """#.utf8)
+        let transport = RecordingClientTransport { request, requestBody, baseURL, operationID in
+            await recorder.record(request: request, hasBody: requestBody != nil,
+                                  baseURL: baseURL, operationID: operationID)
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        let segments = try await client.pendingLabelSegments(day: TimelineDate(year: 2026, month: 9, day: 26))
+
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments[0].id.uuidString, "11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(segments[0].version, String(repeating: "b", count: 64))
+        XCTAssertEqual(segments[0].sourceGroupVersion, String(repeating: "a", count: 64))
+        XCTAssertEqual(segments[0].appName, "Xcode")
+        XCTAssertEqual(segments[0].title, "Editor.swift")
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.map(\.request.path), ["/api/v1/activities/label-timeline?date=2026-09-26"])
+        XCTAssertEqual(requests.map(\.operationID), ["activitiesGetLabelTimeline"])
+        XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer review-token")
+    }
+
+    func testLabelStateMapsReadyAndUnclassifiedProposals() async throws {
+        let segmentID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let labelID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let version = String(repeating: "a", count: 64)
+        let responses: [(String, RemoteLabelProposal)] = [
+            (#"{"status":"ready","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222"},"suggestedAt":"2026-09-27T00:00:00Z"}"#, .readyLabel(labelID)),
+            (#"{"status":"ready","selection":{"kind":"unclassified"},"suggestedAt":"2026-09-27T00:00:00Z"}"#, .readyUnclassified),
+            (#"{"status":"waiting"}"#, .waiting),
+            (#"{"status":"processing"}"#, .processing),
+            (#"{"status":"failed"}"#, .failed),
+        ]
+        for (proposalJSON, expected) in responses {
+            let responseJSON = #"{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":""#
+                + version + #"","state":"pending","proposal":"# + proposalJSON + "}"
+            let transport = RecordingClientTransport { _, _, _, _ in
+                (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]),
+                 HTTPBody(Data(responseJSON.utf8)))
+            }
+            let client = makeTransportClient(
+                tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+                transport: transport
+            )
+
+            let state = try await client.labelState(segmentID: segmentID)
+
+            XCTAssertEqual(state, .pending(id: segmentID, version: version, proposal: expected))
+        }
+    }
+
+    func testLabelTimelineIgnoresConfirmedOpenOpaqueAndCaptureGapItems() async throws {
+        let body = Data(#"""
+        [
+          {"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"confirmed","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222","displayName":"코딩"},"segments":[{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}}]},
+          {"itemType":"in_progress_activity","segmentId":"33333333-3333-3333-3333-333333333333","startedAt":"2026-09-26T00:05:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:06:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}},
+          {"itemType":"opaque_activity","segmentId":"44444444-4444-4444-4444-444444444444","startedAt":"2026-09-26T00:06:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:07:00Z","context":{"kind":"opaque"}},
+          {"itemType":"capture_gap","segmentId":"55555555-5555-5555-5555-555555555555","startedAt":"2026-09-26T00:07:00Z","endedAt":null,"reason":"paused"}
+        ]
+        """#.utf8)
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+            transport: transport
+        )
+
+        let segments = try await client.pendingLabelSegments(day: TimelineDate(year: 2026, month: 9, day: 26))
+
+        XCTAssertTrue(segments.isEmpty)
+    }
+
     private func makeClient(
         tokenStore: any AccessTokenStoring = MemoryAccessTokenStore(),
         exchange: @escaping MockGeneratedAPI.Exchange = { _ in
@@ -1507,6 +1588,18 @@ private struct MockGeneratedAPI: APIProtocol {
         _ input: Operations.ActivitiesGetTimeline.Input
     ) async throws -> Operations.ActivitiesGetTimeline.Output {
         try await getTimeline(input)
+    }
+
+    func activitiesGetLabelTimeline(
+        _ input: Operations.ActivitiesGetLabelTimeline.Input
+    ) async throws -> Operations.ActivitiesGetLabelTimeline.Output {
+        .undocumented(statusCode: 500, .init())
+    }
+
+    func activitiesGetSegmentLabelState(
+        _ input: Operations.ActivitiesGetSegmentLabelState.Input
+    ) async throws -> Operations.ActivitiesGetSegmentLabelState.Output {
+        .undocumented(statusCode: 500, .init())
     }
 }
 

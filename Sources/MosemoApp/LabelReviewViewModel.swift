@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MosemoAPI
 
 extension LabelReviewSelection {
     func title(in labels: [LabelReviewLabel]) -> String {
@@ -44,14 +45,23 @@ final class LabelReviewViewModel: ObservableObject {
 
     @Published private(set) var review: LabelReviewState?
     @Published private(set) var loadState: LoadState = .idle
+    @Published private(set) var selectedDate: TimelineDate
     @Published private(set) var selectedGroupIDs: Set<UUID> = []
     @Published private(set) var expandedGroupIDs: Set<UUID> = []
     @Published private var draftOverrides: [SegmentKey: LabelReviewSelection] = [:]
 
     private let fetcher: any LabelReviewFetching
+    let timeZone: TimeZone
+    private var requestID = UUID()
 
-    init(fetcher: any LabelReviewFetching) {
+    init(
+        fetcher: any LabelReviewFetching,
+        timeZone: TimeZone = .current,
+        now: Date = .now
+    ) {
         self.fetcher = fetcher
+        self.timeZone = timeZone
+        selectedDate = TimelineDate(now, timeZone: timeZone)
     }
 
     var groups: [LabelReviewGroup] { review?.groups ?? [] }
@@ -78,20 +88,39 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     func load() async {
-        guard loadState != .loading else { return }
+        let id = UUID()
+        requestID = id
         loadState = .loading
+        review = nil
+        selectedGroupIDs = []
+        expandedGroupIDs = []
+        draftOverrides = [:]
         do {
-            let snapshot = try await fetcher.fetchLabelReview()
-            if let review {
-                self.review = review.replacing(with: snapshot)
-            } else {
-                review = LabelReviewState(snapshot: snapshot)
-            }
+            let snapshot = try await fetcher.fetchLabelReview(day: selectedDate)
+            guard requestID == id else { return }
+            review = LabelReviewState(snapshot: snapshot)
             loadState = .loaded
             reconcileInteractionState()
         } catch {
+            guard requestID == id else { return }
             loadState = .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요.")
         }
+    }
+
+    func selectDate(_ date: TimelineDate) {
+        guard selectedDate != date else { return }
+        selectedDate = date
+        requestID = UUID()
+        loadState = .loading
+        Task { await load() }
+    }
+
+    func selectDate(_ date: Date) {
+        selectDate(TimelineDate(date, timeZone: timeZone))
+    }
+
+    func moveDate(by days: Int) {
+        selectDate(selectedDate.adding(days: days, timeZone: timeZone))
     }
 
     func toggleAllGroups() {
@@ -157,7 +186,7 @@ final class LabelReviewViewModel: ObservableObject {
         let unchanged = group.segments.allSatisfy {
             $0.proposal.selection != nil && selection(for: $0) == $0.proposal.selection
         }
-        return unchanged ? "\(group.segments.count)건 모두 승인" : "\(group.segments.count)건 선택대로 확정"
+        return unchanged ? "\(group.segments.count)건 로컬 완료" : "\(group.segments.count)건 선택대로 로컬 완료"
     }
 
     func confirmSelectedGroups() {

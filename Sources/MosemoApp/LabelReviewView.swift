@@ -1,11 +1,44 @@
 import SwiftUI
+import MosemoAPI
 
 struct LabelReviewView: View {
     @ObservedObject var viewModel: LabelReviewViewModel
 
+    private var selectedDateBinding: Binding<Date> {
+        Binding(
+            get: { viewModel.selectedDate.startOfDay(timeZone: viewModel.timeZone) },
+            set: { viewModel.selectDate($0) }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 19) {
             LabelReviewHeader(segmentCount: viewModel.segmentCount)
+
+            HStack(spacing: 10) {
+                Button { viewModel.moveDate(by: -1) } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel("이전 날짜")
+                DatePicker("검토 날짜", selection: selectedDateBinding, displayedComponents: .date)
+                    .labelsHidden()
+                    .accessibilityLabel("검토 날짜")
+                    .environment(\.timeZone, viewModel.timeZone)
+                Button { viewModel.moveDate(by: 1) } label: { Image(systemName: "chevron.right") }
+                    .accessibilityLabel("다음 날짜")
+                Button("오늘") {
+                    viewModel.selectDate(TimelineDate(.now, timeZone: viewModel.timeZone))
+                }
+                Text("\(viewModel.timeZone.identifier) 기준")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("새로고침", systemImage: "arrow.clockwise") {
+                    Task { await viewModel.load() }
+                }
+            }
+
+            Label("이 화면의 완료 처리는 임시 표시입니다. 서버에 저장되지 않으며 새로고침하면 서버 상태로 돌아옵니다.", systemImage: "info.circle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             switch viewModel.loadState {
             case .idle, .loading:
@@ -74,13 +107,13 @@ private struct LabelReviewSelectionSummary: View {
                 Text("\(selectedGroupCount)개 묶음 선택 · \(selectedSegmentCount)개 기록")
                     .font(.subheadline.weight(.semibold))
                 Text(missingChoiceCount == 0
-                     ? "각 기록의 현재 선택으로 확정합니다."
+                     ? "각 기록의 현재 선택으로 로컬 완료 처리합니다."
                      : "라벨 선택이 필요한 기록 \(missingChoiceCount)건을 먼저 지정하세요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("선택한 묶음 확정", action: onConfirm)
+            Button("선택한 묶음 로컬 완료", action: onConfirm)
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedGroupCount == 0 || missingChoiceCount > 0)
         }
@@ -100,6 +133,7 @@ private struct LabelReviewTable: View {
                     ForEach(viewModel.groups) { group in
                         LabelReviewGroupRow(
                             group: group,
+                            timeZone: viewModel.timeZone,
                             labels: viewModel.labels,
                             isSelected: viewModel.selectedGroupIDs.contains(group.id),
                             isExpanded: viewModel.expandedGroupIDs.contains(group.id),
@@ -114,6 +148,7 @@ private struct LabelReviewTable: View {
                             ForEach(group.segments) { segment in
                                 LabelReviewSegmentRow(
                                     segment: segment,
+                                    timeZone: viewModel.timeZone,
                                     labels: viewModel.labels,
                                     selection: viewModel.selection(for: segment),
                                     selectionTitle: viewModel.title(for: viewModel.selection(for: segment)),
@@ -162,6 +197,7 @@ private struct LabelReviewTable: View {
 
 private struct LabelReviewGroupRow: View {
     let group: LabelReviewGroup
+    let timeZone: TimeZone
     let labels: [LabelReviewLabel]
     let isSelected: Bool
     let isExpanded: Bool
@@ -221,12 +257,13 @@ private struct LabelReviewGroupRow: View {
     }
 
     private var timeRange: String {
-        "\(group.first.startedAt.reviewTime)–\(group.last.endedAt.reviewTime)"
+        "\(group.first.startedAt.reviewTime(in: timeZone))–\(group.last.endedAt.reviewTime(in: timeZone))"
     }
 }
 
 private struct LabelReviewSegmentRow: View {
     let segment: LabelReviewSegment
+    let timeZone: TimeZone
     let labels: [LabelReviewLabel]
     let selection: LabelReviewSelection?
     let selectionTitle: String
@@ -236,7 +273,7 @@ private struct LabelReviewSegmentRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Color.clear.frame(width: 36)
-            Text("\(segment.startedAt.reviewTime)–\(segment.endedAt.reviewTime)")
+            Text("\(segment.startedAt.reviewTime(in: timeZone))–\(segment.endedAt.reviewTime(in: timeZone))")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 110, alignment: .leading)
@@ -259,7 +296,7 @@ private struct LabelReviewSegmentRow: View {
             )
             .frame(width: 160, alignment: .leading)
 
-            Button("이 기록 확정", action: onConfirm)
+            Button("이 기록 로컬 완료", action: onConfirm)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(selection == nil)
@@ -279,7 +316,7 @@ private struct LabelReviewChoiceMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(labels) { label in
+            ForEach(labels.filter { $0.archivedAt == nil }) { label in
                 Button(label.displayName) { onSelect(.label(id: label.id)) }
             }
             Button("미분류") { onSelect(.unclassified) }
@@ -320,8 +357,11 @@ private struct LabelReviewProposalBadge: View {
 }
 
 private extension Date {
-    var reviewTime: String {
-        formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    func reviewTime(in timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: self)
     }
 }
 
@@ -340,3 +380,18 @@ struct LabelReviewDemoView: View {
     }
 }
 #endif
+
+struct LabelReviewScreen: View {
+    @StateObject private var viewModel: LabelReviewViewModel
+
+    init(fetcher: any LabelReviewFetching, timeZone: TimeZone) {
+        _viewModel = StateObject(wrappedValue: LabelReviewViewModel(
+            fetcher: fetcher,
+            timeZone: timeZone
+        ))
+    }
+
+    var body: some View {
+        LabelReviewView(viewModel: viewModel)
+    }
+}
