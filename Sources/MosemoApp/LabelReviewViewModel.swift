@@ -83,7 +83,7 @@ final class LabelReviewViewModel: ObservableObject {
     var missingChoiceCount: Int {
         selectedGroups.flatMap(\.segments).filter { segment in
             guard let selection = selection(for: segment) else { return true }
-            return review?.canLocallyComplete(segment, with: selection) != true
+            return review?.canSelect(selection) != true
         }.count
     }
 
@@ -163,7 +163,7 @@ final class LabelReviewViewModel: ObservableObject {
         guard let review, !segments.isEmpty else { return false }
         return segments.allSatisfy { segment in
             guard let selection = selection(for: segment) else { return false }
-            return review.canLocallyComplete(segment, with: selection)
+            return review.canSelect(selection)
         }
     }
 

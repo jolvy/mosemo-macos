@@ -169,8 +169,9 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.groups.flatMap(\.segments).contains { $0.id == segment.id })
     }
 
-    func testUnchangedArchivedProposalCanBeCompletedLocally() async {
-        let labelID = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+    func testArchivedProposalMustBeChangedBeforeLocalCompletion() async {
+        let archivedLabelID = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+        let activeLabelID = UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc")!
         let segment = LabelReviewSegmentDTO(
             id: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!,
             version: String(repeating: "b", count: 64),
@@ -178,14 +179,17 @@ final class LabelReviewViewModelTests: XCTestCase {
             endedAt: Date(timeIntervalSince1970: 1_800_000_300),
             appName: "Xcode",
             title: "Editor.swift",
-            proposal: .ready(.label(id: labelID))
+            proposal: .ready(.label(id: archivedLabelID))
         )
         let response = LabelReviewResponseDTO(
-            labels: [LabelReviewLabelDTO(
-                id: labelID,
-                displayName: "옛 라벨",
-                archivedAt: Date(timeIntervalSince1970: 1_800_000_100)
-            )],
+            labels: [
+                LabelReviewLabelDTO(
+                    id: archivedLabelID,
+                    displayName: "옛 라벨",
+                    archivedAt: Date(timeIntervalSince1970: 1_800_000_100)
+                ),
+                LabelReviewLabelDTO(id: activeLabelID, displayName: "활성 라벨"),
+            ],
             segments: [segment]
         )
         let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response))
@@ -193,10 +197,14 @@ final class LabelReviewViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.title(for: viewModel.selection(for: viewModel.groups[0].segments[0])), "옛 라벨")
         viewModel.toggleAllGroups()
-        XCTAssertEqual(viewModel.missingChoiceCount, 0)
+        XCTAssertEqual(viewModel.missingChoiceCount, 1)
 
         viewModel.confirmSelectedGroups()
+        XCTAssertEqual(viewModel.segmentCount, 1)
 
+        viewModel.setSelection(.label(id: activeLabelID), for: viewModel.groups[0].segments[0])
+        XCTAssertEqual(viewModel.missingChoiceCount, 0)
+        viewModel.confirmSelectedGroups()
         XCTAssertEqual(viewModel.segmentCount, 0)
     }
 
