@@ -83,17 +83,42 @@ final class AuthCoordinatorTests: XCTestCase {
         XCTAssertNotNil(state.pendingIdempotencyKey)
     }
 
+    func testTimelineUnauthorizedOnlyClearsMatchingAccount() async {
+        let account = makeAccount()
+        let client = AuthClient(
+            currentAccountResult: .success(account),
+            registrationResult: .success(Device(id: UUID()))
+        )
+        let coordinator = AuthCoordinator(
+            client: client,
+            deviceRegistrationStateStore: MemoryDeviceRegistrationStateStore()
+        )
+        await coordinator.restoreSession()
+
+        coordinator.timelineAuthenticationFailed(for: UUID())
+        XCTAssertEqual(coordinator.account, account)
+
+        coordinator.timelineAuthenticationFailed(for: account.id)
+        XCTAssertNil(coordinator.account)
+        XCTAssertEqual(coordinator.statusMessage, "로그인이 필요합니다.")
+    }
+
     private func makeAccount() -> Account {
         Account(
             id: UUID(),
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
     }
 }
 
 private actor AuthClient: MosemoAPIClient {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        fatalError("Not used by AuthCoordinator lifecycle tests")
+    }
+
     private let currentAccountResult: Result<Account, MosemoAPIError>
     private let registrationResult: Result<Device, MosemoAPIError>
     private var registrationCalls = 0

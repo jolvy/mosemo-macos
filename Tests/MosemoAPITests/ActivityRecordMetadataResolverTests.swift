@@ -162,7 +162,8 @@ final class ActivityRecordMetadataResolverTests: XCTestCase {
             id: id,
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
     }
 

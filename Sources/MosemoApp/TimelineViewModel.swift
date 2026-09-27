@@ -48,12 +48,11 @@ struct TimelinePresentation: Identifiable {
     let context: String
 
     var displayEnd: Date? {
-        if let end { return end }
-        return kind == .detail ? observedThrough : nil
+        end
     }
 
     var durationText: String {
-        guard let end = displayEnd else {
+        guard let end else {
             if kind == .gap { return "길이 미정" }
             return isOpen ? "종료 전" : "시각만 기록"
         }
@@ -64,7 +63,7 @@ struct TimelinePresentation: Identifiable {
     }
 
     var isOpen: Bool { end == nil }
-    var isZeroLength: Bool { displayEnd == start }
+    var isZeroLength: Bool { end == start }
 
     func timeText(timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
@@ -72,7 +71,7 @@ struct TimelinePresentation: Identifiable {
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         let startText = formatter.string(from: start)
-        let endText = displayEnd.map(formatter.string(from:)) ?? (kind == .detail ? "진행 중" : "종료 시각 미상")
+        let endText = end.map(formatter.string(from:)) ?? (kind == .detail ? "진행 중" : "종료 시각 미상")
         return "\(startText)–\(endText)"
     }
 }
@@ -83,37 +82,41 @@ final class TimelineViewModel: ObservableObject {
     @Published private(set) var style: TimelineStyle = .list
     @Published private(set) var selectedSegmentID: UUID?
     @Published private(set) var loadState: TimelineLoadState = .loading
+    @Published private(set) var isRefreshing = false
     @Published private(set) var day: TimelineDay?
 
     private let fetcher: any TimelineFetching
     private var accountID: UUID
     private var requestID = UUID()
     private var requestTask: Task<Void, Never>?
-    private let initialTimeZone: TimeZone
+    private var accountTimeZone: TimeZone
+    private let authenticationFailed: @MainActor () -> Void
 
     init(
         fetcher: any TimelineFetching,
         accountID: UUID = UUID(),
         timeZone: TimeZone = TimeZone(identifier: "Asia/Seoul") ?? .current,
-        now: Date = .now
+        now: Date = .now,
+        authenticationFailed: @escaping @MainActor () -> Void = {}
     ) {
         self.fetcher = fetcher
         self.accountID = accountID
-        initialTimeZone = timeZone
+        accountTimeZone = timeZone
+        self.authenticationFailed = authenticationFailed
         selectedDate = TimelineDate(now, timeZone: timeZone)
         selectDate(selectedDate)
     }
 
     var timeZone: TimeZone {
         guard let identifier = day?.timeZoneID, let zone = TimeZone(identifier: identifier) else {
-            return initialTimeZone
+            return accountTimeZone
         }
         return zone
     }
 
     var presentations: [TimelinePresentation] {
         guard let day else { return [] }
-        return day.segments.compactMap { segment in
+        return day.segments.map { segment in
             switch segment {
             case .activity(let activity):
                 switch activity.context {
@@ -121,11 +124,10 @@ final class TimelineViewModel: ObservableObject {
                     return TimelinePresentation(id: activity.id, kind: .opaque, start: activity.startedAt,
                                                 end: activity.endedAt, observedThrough: activity.lastObservedAt,
                                                 title: "알 수 없는 활동", context: "개인정보 보호로 활동 정보가 가려졌습니다")
-                case .detailed(let appName, let windowTitle, let webURL):
-                    // A context without any displayable attributes is intentionally omitted.
-                    let values = [appName, windowTitle, webURL?.host].compactMap { $0 }.filter { !$0.isEmpty }
-                    guard !values.isEmpty else { return nil }
-                    let title = appName.flatMap { $0.isEmpty ? nil : $0 } ?? values[0]
+                case .detailed(let detail):
+                    let values = [detail.appName, detail.bundleID, detail.windowTitle,
+                                  detail.tabTitle, detail.webURL].compactMap { $0 }.filter { !$0.isEmpty }
+                    let title = values.first ?? "상세 활동"
                     return TimelinePresentation(id: activity.id, kind: .detail, start: activity.startedAt,
                                                 end: activity.endedAt, observedThrough: activity.lastObservedAt,
                                                 title: title, context: values.filter { $0 != title }.joined(separator: " · "))
@@ -154,34 +156,57 @@ final class TimelineViewModel: ObservableObject {
         selectDate(selectedDate.adding(days: days, timeZone: timeZone))
     }
 
+    func refresh() { load(selectedDate, refreshing: true) }
+
     func switchAccount(to accountID: UUID, timeZone: TimeZone? = nil) {
-        guard self.accountID != accountID else { return }
+        guard self.accountID != accountID || (timeZone != nil && accountTimeZone != timeZone) else { return }
         requestTask?.cancel()
         requestID = UUID()
         self.accountID = accountID
         day = nil
         selectedSegmentID = nil
-        if let timeZone { selectedDate = TimelineDate(.now, timeZone: timeZone) }
+        if let timeZone {
+            accountTimeZone = timeZone
+            selectedDate = TimelineDate(.now, timeZone: timeZone)
+        }
         load(selectedDate)
     }
 
-    private func load(_ date: TimelineDate) {
+    private func load(_ date: TimelineDate, refreshing: Bool = false) {
         requestTask?.cancel()
         let id = UUID()
         requestID = id
         day = nil
         loadState = .loading
+        isRefreshing = refreshing
+        let timeZoneID = timeZone.identifier
         requestTask = Task { [weak self, fetcher] in
             do {
-                let result = try await fetcher.fetch(day: date)
+                let result = try await fetcher.fetch(day: date, timeZoneID: timeZoneID)
                 guard !Task.isCancelled, let self, self.requestID == id,
                       self.selectedDate == date, result.date == date else { return }
                 self.day = result
+                self.isRefreshing = false
                 self.loadState = self.presentations.isEmpty ? .empty : .loaded
             } catch {
                 guard !Task.isCancelled, let self, self.requestID == id else { return }
-                self.loadState = .failed(error.localizedDescription)
+                self.isRefreshing = false
+                if let apiError = error as? MosemoAPIError, apiError == .authenticationRequired {
+                    self.loadState = .failed("로그인이 필요합니다.")
+                    self.authenticationFailed()
+                } else {
+                    self.loadState = .failed(Self.message(for: error))
+                }
             }
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        switch error {
+        case MosemoAPIError.networkUnavailable: "서버에 연결할 수 없습니다."
+        case MosemoAPIError.timedOut: "서버 응답 시간이 초과되었습니다."
+        case MosemoAPIError.serverError: "서버 오류가 발생했습니다."
+        default: "타임라인을 불러올 수 없습니다."
         }
     }
 }

@@ -92,6 +92,17 @@ jq -e '
     (.paths["/api/v1/devices"].post.responses["401"] != null) and
     (.paths["/api/v1/devices"].post.responses["422"] != null) and
     (.paths["/api/v1/activities"].post.operationId == "activitiesCreate") and
+    (.paths["/api/v1/activities/timeline"].get.operationId == "activitiesGetTimeline") and
+    (.paths["/api/v1/activities/timeline"].get.parameters | any(
+        .name == "date" and .in == "query" and .required == true and .schema.format == "date"
+    )) and
+    (.paths["/api/v1/activities/timeline"].get.responses["200"].content["application/json"].schema.type == "array") and
+    (.components.schemas.AccountResponse.required | index("timezone") != null) and
+    (["ActivitySegmentResponse", "CaptureGapResponse"] | all(
+        . as $schema
+        | ($document.components.schemas[$schema].properties.endedAt.anyOf
+            | map(.type) | sort == ["null", "string"])
+    )) and
     (["201", "401", "404", "405", "409", "422", "500"]
         | all(. as $status
             | $document.paths["/api/v1/activities"].post.responses[$status] != null)) and
@@ -103,11 +114,19 @@ jq -e '
 
 normalized_contract="$temporary_directory/openapi.json"
 jq '
+    def without_null_branch:
+        . as $property
+        | ($property.anyOf | map(select(.type != "null")) | first) as $value
+        | ($property | del(.anyOf)) + $value;
     (.components.schemas.CapturedText.properties.originalByteLength) |= (
         . as $property
         | ($property.anyOf | map(select(.type == "integer")) | first) as $integer
         | ($property | del(.anyOf)) + $integer
-    )
+    ) |
+    (.components.schemas.ActivitySegmentResponse.properties.endedAt) |= without_null_branch |
+    (.components.schemas.ActivitySegmentResponse.required) |= map(select(. != "endedAt")) |
+    (.components.schemas.CaptureGapResponse.properties.endedAt) |= without_null_branch |
+    (.components.schemas.CaptureGapResponse.required) |= map(select(. != "endedAt"))
 ' "$source_contract" > "$normalized_contract"
 
 if [ -d "$generated_sources" ]; then

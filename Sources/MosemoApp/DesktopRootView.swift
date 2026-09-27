@@ -1,10 +1,12 @@
 import AppKit
 import CollectorCore
+import MosemoAPI
 import SwiftUI
 
 struct DesktopRootView: View {
     @ObservedObject var model: CollectorViewModel
     @ObservedObject var auth: AuthCoordinator
+    let timelineClient: LiveMosemoAPIClient?
     @Binding var onboardingCompleted: Bool
 
     var body: some View {
@@ -12,8 +14,13 @@ struct DesktopRootView: View {
             if !auth.hasFinishedRestoringSession {
                 ProgressView("로그인 상태를 확인하는 중입니다…")
                     .controlSize(.large)
-            } else if onboardingCompleted, auth.account != nil {
-                TimelineScreen(accountID: auth.account!.id, signOut: auth.signOut)
+            } else if onboardingCompleted, let account = auth.account, let timelineClient {
+                TimelineScreen(
+                    account: account,
+                    signOut: auth.signOut,
+                    authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) },
+                    fetcher: timelineClient
+                )
             } else {
                 OnboardingView(model: model, auth: auth) {
                     onboardingCompleted = true

@@ -87,9 +87,43 @@ public enum TimelineSegment: Equatable, Sendable, Identifiable {
 }
 
 public struct TimelineActivity: Equatable, Sendable {
+    public struct Details: Equatable, Sendable {
+        public let appName: String?
+        public let bundleID: String?
+        public let windowTitle: String?
+        public let tabTitle: String?
+        public let webURL: String?
+
+        public init(
+            appName: String? = nil,
+            bundleID: String? = nil,
+            windowTitle: String? = nil,
+            tabTitle: String? = nil,
+            webURL: String? = nil
+        ) {
+            self.appName = appName
+            self.bundleID = bundleID
+            self.windowTitle = windowTitle
+            self.tabTitle = tabTitle
+            self.webURL = webURL
+        }
+    }
+
     public enum Context: Equatable, Sendable {
-        case detailed(appName: String?, windowTitle: String?, webURL: URL?)
+        case detailed(Details)
         case opaque
+
+        public static func detailed(
+            appName: String?,
+            windowTitle: String?,
+            webURL: URL?
+        ) -> Self {
+            .detailed(Details(
+                appName: appName,
+                windowTitle: windowTitle,
+                webURL: webURL?.absoluteString
+            ))
+        }
     }
 
     public let id: UUID
@@ -128,5 +162,5 @@ public struct TimelineCaptureGap: Equatable, Sendable {
 }
 
 public protocol TimelineFetching: Sendable {
-    func fetch(day: TimelineDate) async throws -> TimelineDay
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay
 }

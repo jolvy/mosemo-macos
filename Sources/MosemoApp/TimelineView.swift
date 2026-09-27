@@ -3,24 +3,43 @@ import MosemoAPI
 
 struct TimelineScreen: View {
     @StateObject private var model: TimelineViewModel
-    let accountID: UUID
+    let account: Account
     let signOut: (() -> Void)?
+    let showsPreviewNotice: Bool
 
-    init(accountID: UUID, signOut: (() -> Void)?, fetcher: any TimelineFetching = TimelineFetcherFactory.make()) {
-        self.accountID = accountID
+    init(
+        account: Account,
+        signOut: (() -> Void)?,
+        authenticationFailed: @escaping @MainActor () -> Void = {},
+        fetcher: any TimelineFetching,
+        showsPreviewNotice: Bool = false
+    ) {
+        self.account = account
         self.signOut = signOut
-        _model = StateObject(wrappedValue: TimelineViewModel(fetcher: fetcher, accountID: accountID))
+        self.showsPreviewNotice = showsPreviewNotice
+        _model = StateObject(wrappedValue: TimelineViewModel(
+            fetcher: fetcher,
+            accountID: account.id,
+            timeZone: TimeZone(identifier: account.timeZoneID)!,
+            authenticationFailed: authenticationFailed
+        ))
     }
 
     var body: some View {
-        TimelineView(model: model, signOut: signOut)
-            .onChange(of: accountID) { _, newValue in model.switchAccount(to: newValue) }
+        TimelineView(model: model, signOut: signOut, showsPreviewNotice: showsPreviewNotice)
+            .onChange(of: account) { _, newAccount in
+                model.switchAccount(
+                    to: newAccount.id,
+                    timeZone: TimeZone(identifier: newAccount.timeZoneID)
+                )
+            }
     }
 }
 
 struct TimelineView: View {
     @ObservedObject var model: TimelineViewModel
     let signOut: (() -> Void)?
+    let showsPreviewNotice: Bool
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
@@ -40,21 +59,27 @@ struct TimelineView: View {
                 if let signOut { Button("로그아웃", action: signOut) }
             }
 
-            Label("비동기 예시 조회를 사용합니다. 실제 서버 연결은 별도 작업에서 진행합니다.", systemImage: "info.circle")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            if showsPreviewNotice {
+                Label("타임라인 UI 미리보기의 예시 데이터입니다.", systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             HStack(spacing: 10) {
                 Button { model.moveDate(by: -1) } label: { Image(systemName: "chevron.left") }
                     .accessibilityLabel("이전 날짜")
                 DatePicker("날짜", selection: selectedDateBinding, displayedComponents: .date)
                     .labelsHidden().accessibilityLabel("관찰 날짜")
+                    .environment(\.timeZone, model.timeZone)
                 Button { model.moveDate(by: 1) } label: { Image(systemName: "chevron.right") }
                     .accessibilityLabel("다음 날짜")
                 Button("오늘") { model.selectDate(TimelineDate(.now, timeZone: model.timeZone)) }
+                Button("새로고침") { model.refresh() }
+                    .disabled(model.loadState == .loading)
+                    .accessibilityIdentifier("timeline-refresh")
                 Text("\(model.timeZone.identifier) 기준")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 16)
@@ -68,11 +93,13 @@ struct TimelineView: View {
 
             switch model.loadState {
             case .loading:
-                ProgressView("타임라인을 불러오는 중…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView(model.isRefreshing ? "새로고침 중…" : "타임라인을 불러오는 중…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 VStack(alignment: .leading, spacing: 12) {
                     selectedDateHeading
                     ContentUnavailableView("기록을 불러오지 못했습니다", systemImage: "exclamationmark.arrow.triangle.2.circlepath", description: Text(message))
+                    Button("다시 시도") { model.refresh() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             case .empty:

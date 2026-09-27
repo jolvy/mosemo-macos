@@ -207,7 +207,8 @@ final class DeviceRegistrationTests: XCTestCase {
             id: UUID(),
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
     }
 
@@ -245,6 +246,10 @@ private actor MemoryDeviceRegistrationStateStore: DeviceRegistrationStateStoring
 }
 
 private actor RecordingDeviceClient: MosemoAPIClient {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        fatalError("Not used by device registration tests")
+    }
+
     enum RegistrationOutcome: Sendable {
         case success(Device)
         case responseLost(Device)
