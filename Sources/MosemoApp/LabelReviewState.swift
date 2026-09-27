@@ -131,19 +131,6 @@ struct LabelReviewState: Equatable, Sendable {
         }
     }
 
-    func canLocallyComplete(
-        _ segment: LabelReviewSegment,
-        with selection: LabelReviewSelection
-    ) -> Bool {
-        if canSelect(selection) { return true }
-        guard case .label(let id) = selection,
-              segment.proposal.selection == selection,
-              labels.contains(where: { $0.id == id && $0.archivedAt != nil }) else {
-            return false
-        }
-        return true
-    }
-
     func applying(_ decisions: [LabelReviewDecision]) -> Self {
         var nextConfirmedVersions = confirmedVersions
         for decision in decisions {
