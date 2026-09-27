@@ -1,6 +1,7 @@
 import Foundation
 import HTTPTypes
 import OpenAPIRuntime
+import OpenAPIURLSession
 import XCTest
 @testable import MosemoAPI
 
@@ -39,6 +40,7 @@ final class MosemoAPITests: XCTestCase {
 
         XCTAssertEqual(account.id, accountID)
         XCTAssertEqual(account.provider, .kakao)
+        XCTAssertEqual(account.timeZoneID, "Asia/Seoul")
         XCTAssertEqual(account.createdAt, createdAt)
         XCTAssertEqual(account.lastAuthenticatedAt, authenticatedAt)
         let storedToken = await tokenStore.currentToken()
@@ -145,6 +147,163 @@ final class MosemoAPITests: XCTestCase {
         }
         let storedToken = await tokenStore.currentToken()
         XCTAssertNil(storedToken)
+    }
+
+    func testTimelineRequestMapsServerOrderAndOpenSegments() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "timeline-token", expiresAt: now.addingTimeInterval(60)
+        ))
+        let recorder = RequestRecorder()
+        let response = Data(#"""
+        [
+          {"segmentId":"00000000-0000-0000-0000-000000000001","segmentType":"activity","startedAt":"2026-09-14T00:00:00.123456Z","endedAt":"2026-09-14T00:00:00.123456Z","lastObservedAt":"2026-09-14T00:00:00.123456Z","context":{"kind":"detailed","app":{"bundleId":{"status":"captured","value":"com.apple.Safari"},"name":{"status":"captured","value":"Safari"}},"window":{"status":"captured","title":{"status":"captured","value":"Window","truncated":false}},"web":{"kind":"browser","tabTitle":{"status":"captured","value":"Tab","truncated":false},"url":{"status":"captured","value":"https://example.com/path"}}}},
+          {"segmentId":"00000000-0000-0000-0000-000000000002","segmentType":"activity","startedAt":"2026-09-14T00:00:00Z","endedAt":null,"lastObservedAt":"2026-09-14T00:00:01Z","context":{"kind":"opaque"}},
+          {"segmentId":"00000000-0000-0000-0000-000000000003","segmentType":"capture_gap","startedAt":"2026-09-14T00:00:01Z","endedAt":null,"reason":"screen_locked"},
+          {"segmentId":"00000000-0000-0000-0000-000000000004","segmentType":"activity","startedAt":"2026-09-14T00:00:02Z","endedAt":null,"lastObservedAt":"2026-09-14T00:00:02Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"unavailable","reason":"permission"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}}
+        ]
+        """#.utf8)
+        let transport = RecordingClientTransport { request, body, baseURL, operationID in
+            await recorder.record(request: request, hasBody: body != nil, baseURL: baseURL, operationID: operationID)
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(response))
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+        let requested = TimelineDate(year: 2026, month: 9, day: 14)
+
+        let day = try await client.fetch(day: requested, timeZoneID: "America/New_York")
+
+        XCTAssertEqual(day.date, requested)
+        XCTAssertEqual(day.timeZoneID, "America/New_York")
+        XCTAssertEqual(day.segments.map(\.id.uuidString), (1...4).map { String(format: "00000000-0000-0000-0000-%012d", $0) })
+        guard case .activity(let detailed) = day.segments[0],
+              case .detailed(let context) = detailed.context else { return XCTFail("Expected detailed activity") }
+        XCTAssertEqual(detailed.startedAt, detailed.endedAt)
+        XCTAssertEqual(context.appName, "Safari")
+        XCTAssertEqual(context.windowTitle, "Window")
+        XCTAssertEqual(context.tabTitle, "Tab")
+        XCTAssertEqual(context.webURL, "https://example.com/path")
+        guard case .activity(let opaque) = day.segments[1],
+              case .opaque = opaque.context else { return XCTFail("Expected opaque activity") }
+        XCTAssertNil(opaque.endedAt)
+        XCTAssertGreaterThan(opaque.lastObservedAt, opaque.startedAt)
+        guard case .captureGap(let gap) = day.segments[2] else { return XCTFail("Expected gap") }
+        XCTAssertNil(gap.endedAt)
+        XCTAssertEqual(gap.reason, "screen_locked")
+        guard case .activity(let unknown) = day.segments[3],
+              case .detailed(let unknownContext) = unknown.context else { return XCTFail("Expected detail with missing fields") }
+        XCTAssertNil(unknownContext.appName)
+
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].request.method, .get)
+        XCTAssertEqual(requests[0].request.path, "/api/v1/activities/timeline?date=2026-09-14")
+        XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer timeline-token")
+        XCTAssertFalse(requests[0].hasBody)
+        XCTAssertEqual(requests[0].operationID, "activitiesGetTimeline")
+    }
+
+    func testTimelineEmptyResponseIsAnEmptyServerDay() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "timeline-token", expiresAt: now.addingTimeInterval(60)
+        ))
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(Data("[]".utf8)))
+        }
+        let day = try await makeTransportClient(tokenStore: tokenStore, transport: transport)
+            .fetch(day: .init(year: 2026, month: 9, day: 14), timeZoneID: "UTC")
+        XCTAssertTrue(day.segments.isEmpty)
+        XCTAssertEqual(day.timeZoneID, "UTC")
+    }
+
+    func testTimelineUnauthorizedClearsToken() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "timeline-token", expiresAt: now.addingTimeInterval(60)
+        ))
+        let response = Data(#"{"error":{"code":401,"status":"AUTH_INVALID_ACCESS_TOKEN","message":"expired","details":[]}}"#.utf8)
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .unauthorized, headerFields: [.contentType: "application/json"]), HTTPBody(response))
+        }
+        let client = makeTransportClient(tokenStore: tokenStore, transport: transport)
+
+        await assertAPIError(.authenticationRequired) {
+            try await client.fetch(day: .init(year: 2026, month: 9, day: 14), timeZoneID: "UTC")
+        }
+        let token = await tokenStore.currentToken()
+        XCTAssertNil(token)
+    }
+
+    func testTimelineServerAndTransportFailuresKeepToken() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: "timeline-token", expiresAt: now.addingTimeInterval(60)
+        ))
+        let serverResponse = Data(#"{"error":{"code":500,"status":"INTERNAL_SERVER_ERROR","message":"error","details":[]}}"#.utf8)
+        let serverTransport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .internalServerError, headerFields: [.contentType: "application/json"]), HTTPBody(serverResponse))
+        }
+        let networkTransport = RecordingClientTransport { _, _, _, _ in
+            throw URLError(.notConnectedToInternet)
+        }
+
+        await assertAPIError(.serverError(statusCode: 500)) {
+            try await makeTransportClient(tokenStore: tokenStore, transport: serverTransport)
+                .fetch(day: .init(year: 2026, month: 9, day: 14), timeZoneID: "UTC")
+        }
+        await assertAPIError(.networkUnavailable) {
+            try await makeTransportClient(tokenStore: tokenStore, transport: networkTransport)
+                .fetch(day: .init(year: 2026, month: 9, day: 14), timeZoneID: "UTC")
+        }
+        let token = await tokenStore.currentToken()
+        XCTAssertEqual(token?.value, "timeline-token")
+    }
+
+    func testTimelineAgainstLocalServerWhenConfigured() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let urlString = environment["MOSEMO_TIMELINE_TEST_URL"],
+              let baseURL = URL(string: urlString),
+              let tokenPath = environment["MOSEMO_TIMELINE_TEST_TOKEN_FILE"],
+              let dateString = environment["MOSEMO_TIMELINE_TEST_DATE"] else {
+            throw XCTSkip("Set local server URL, token file and date for HTTP verification")
+        }
+        let components = dateString.split(separator: "-").compactMap { Int($0) }
+        guard components.count == 3 else { return XCTFail("Expected YYYY-MM-DD date") }
+        let token = try String(contentsOfFile: tokenPath, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokenStore = MemoryAccessTokenStore(token: .init(
+            value: token, expiresAt: Date().addingTimeInterval(3600)
+        ))
+        let transport = URLSessionTransport(configuration: .init(
+            session: URLSession(configuration: .ephemeral)
+        ))
+        let client = LiveMosemoAPIClient(
+            baseURL: baseURL,
+            anonymousClient: Client(serverURL: baseURL, configuration: .init(dateTranscoder: MosemoDateTranscoder()), transport: transport),
+            authenticatedClient: Client(
+                serverURL: baseURL,
+                configuration: .init(dateTranscoder: MosemoDateTranscoder()),
+                transport: transport,
+                middlewares: [BearerAuthenticationMiddleware(tokenStore: tokenStore, now: { Date() })]
+            ),
+            tokenStore: tokenStore,
+            now: { Date() }
+        )
+        let account = try await client.currentAccount()
+        let requested = TimelineDate(year: components[0], month: components[1], day: components[2])
+        do {
+            let generated = Client(serverURL: baseURL, configuration: .init(dateTranscoder: MosemoDateTranscoder()), transport: transport, middlewares: [
+                BearerAuthenticationMiddleware(tokenStore: tokenStore, now: { Date() })
+            ])
+            let output = try await generated.activitiesGetTimeline(query: .init(date: requested.description))
+            _ = try output.ok.body.json
+        } catch {
+            XCTFail("Generated timeline decoding failed: \(error)")
+        }
+        let day = try await client.fetch(day: requested, timeZoneID: account.timeZoneID)
+
+        XCTAssertEqual(day.date, requested)
+        XCTAssertEqual(day.timeZoneID, account.timeZoneID)
+        XCTAssertFalse(day.segments.isEmpty)
+        if let expectedID = environment["MOSEMO_TIMELINE_TEST_SEGMENT_ID"] {
+            XCTAssertTrue(day.segments.contains { $0.id.uuidString.lowercased() == expectedID.lowercased() })
+        }
     }
 
     func testRegisterDeviceMapsCreatedResponse() async throws {
@@ -470,7 +629,8 @@ final class MosemoAPITests: XCTestCase {
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
         let deviceID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
         let eventID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
@@ -516,7 +676,8 @@ final class MosemoAPITests: XCTestCase {
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
         let store = try SQLiteDeviceRegistrationStateStore(databaseURL: databaseURL)
         let resolver = ActivityRecordMetadataResolver(stateStore: store)
@@ -1226,6 +1387,7 @@ final class MosemoAPITests: XCTestCase {
             ),
             authenticatedClient: Client(
                 serverURL: baseURL,
+                configuration: .init(dateTranscoder: MosemoDateTranscoder()),
                 transport: transport,
                 middlewares: [BearerAuthenticationMiddleware(
                     tokenStore: tokenStore,
@@ -1309,11 +1471,15 @@ private struct MockGeneratedAPI: APIProtocol {
     typealias CreateActivity = @Sendable (
         Operations.ActivitiesCreate.Input
     ) async throws -> Operations.ActivitiesCreate.Output
+    typealias GetTimeline = @Sendable (
+        Operations.ActivitiesGetTimeline.Input
+    ) async throws -> Operations.ActivitiesGetTimeline.Output
 
     let exchange: Exchange
     let getMe: GetMe
     let createDevice: DevicesCreate
     let createActivity: CreateActivity
+    let getTimeline: GetTimeline = { _ in .undocumented(statusCode: 500, .init()) }
 
     func authExchangeToken(
         _ input: Operations.AuthExchangeToken.Input
@@ -1336,6 +1502,11 @@ private struct MockGeneratedAPI: APIProtocol {
         _ input: Operations.ActivitiesCreate.Input
     ) async throws -> Operations.ActivitiesCreate.Output {
         try await createActivity(input)
+    }
+    func activitiesGetTimeline(
+        _ input: Operations.ActivitiesGetTimeline.Input
+    ) async throws -> Operations.ActivitiesGetTimeline.Output {
+        try await getTimeline(input)
     }
 }
 

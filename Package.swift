@@ -66,6 +66,10 @@ let package = Package(
             dependencies: [
                 "MosemoAPI",
                 .product(
+                    name: "OpenAPIURLSession",
+                    package: "swift-openapi-urlsession"
+                ),
+                .product(
                     name: "OpenAPIRuntime",
                     package: "swift-openapi-runtime"
                 ),

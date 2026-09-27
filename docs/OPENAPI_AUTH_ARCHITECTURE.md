@@ -20,7 +20,7 @@
    분리한다.
 
 현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회,
-Device 등록과 활동 레코드 등록 API다. Collector 연결과 로컬 spool은 아직 구현
+Device 등록, 활동 레코드 등록과 날짜별 관찰 타임라인 조회 API다. Collector 연결과 로컬 spool은 아직 구현
 범위가 아니다.
 
 ## 모듈 구조
@@ -62,7 +62,7 @@ target을 만들지 않는다. 패키지 테스트는 `swift test`로 실행한�
 앱이 의존하는 인터페이스는 다음과 같다.
 
 ```swift
-public protocol MosemoAPIClient: Sendable {
+public protocol MosemoAPIClient: TimelineFetching, Sendable {
     func makeKakaoLoginURL(codeChallenge: String) throws -> URL
 
     func authenticate(
@@ -75,6 +75,10 @@ public protocol MosemoAPIClient: Sendable {
     func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult
     func signOut() async throws
 }
+
+public protocol TimelineFetching: Sendable {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay
+}
 ```
 
 모듈 밖에 공개하는 주요 타입은 `MosemoAPIClient`, `LiveMosemoAPIClient`, `Account`,
@@ -82,14 +86,15 @@ public protocol MosemoAPIClient: Sendable {
 `DeviceRegistrationStateStoring`, `KeychainDeviceRegistrationStateStore`,
 `SQLiteDeviceRegistrationStateStore`, `MosemoAPIStorage`,
 `DeviceRegistrationManager`, `ActivityRecord`, `ActivityRecordMetadata`,
-`ActivityRecordMetadataResolver`, `ActivityCreateResult`, `MosemoAPIError`와 앱
+`ActivityRecordMetadataResolver`, `ActivityCreateResult`, `TimelineDay`,
+`TimelineSegment`, `TimelineFetching`, `MosemoAPIError`와 앱
 인증에 필요한 PKCE·callback 처리 타입이다. 생성된 `Client`, `APIProtocol`,
 `Components.Schemas.*`는
 `internal`이며 앱 UI와
 `CollectorCore`에서 직접 사용할 수 없다. raw access token도 public API의
 반환값이 아니다.
 
-서버 DTO의 account UUID, provider, 생성 시각과 마지막 인증 시각은
+서버 DTO의 account UUID, provider, 계정 시간대, 생성 시각과 마지막 인증 시각은
 `LiveMosemoAPIClient`가 앱의 `Account`로 명시적으로 변환한다. 서버 스키마가
 바뀌면 생성 타입을 사용하는 이 변환 경계까지 수정 범위를 제한한다.
 활동 모델은 `ActivityRecordMetadata`에 서버 발급 Device UUID, event ID, sequence,
@@ -105,6 +110,9 @@ Device 등록 API 호출은 하지 않는다. Device 등록은 호출자가 제�
 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 정리한다. Debug
 빌드는 SQLite 저장 adapter를 사용하고 Release 빌드는 Keychain adapter를 사용한다.
 `LiveMosemoAPIClient` 자체는 멱등 키를 생성하거나 재시도하지 않는다.
+타임라인은 계정의 시간대로 선택한 날짜를 `date` 쿼리로 보낸다. 서버 응답은
+날짜·시간대 필드가 없는 구간 배열이므로 요청 날짜, 계정 시간대와 배열 순서를
+그대로 `TimelineDay`에 담는다. 미전송 로컬 이벤트는 합치지 않는다.
 
 ## OpenAPI 계약과 생성 코드
 
@@ -115,7 +123,7 @@ API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 �
 | 생성 모드 | `types`, `client` |
 | 접근 수준 | `internal` |
 | 이름 전략 | `idiomatic` |
-| 포함 operation | token 교환, 현재 계정 조회, Device 등록, 활동 레코드 생성 |
+| 포함 operation | token 교환, 현재 계정 조회, Device 등록, 활동 레코드 생성, 날짜별 타임라인 조회 |
 | generator | `1.13.0` |
 | runtime | `1.12.0` |
 | URLSession transport | `1.3.0` |
@@ -124,7 +132,8 @@ API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 �
 `/api/v1/auth/kakao/login` URL은 wrapper가 만들고 callback은
 `ASWebAuthenticationSession`이 수신한다. 생성 client가 호출하는 endpoint는
 `POST /api/v1/auth/token`, `GET /api/v1/accounts/me`,
-`POST /api/v1/devices`, `POST /api/v1/activities`다.
+`POST /api/v1/devices`, `POST /api/v1/activities`,
+`GET /api/v1/activities/timeline`이다.
 
 초기에는 build-tool plugin에서 빌드할 때마다 코드를 생성하려 했다. 실제 Xcode
 Debug build에서 plugin 검증 단계가 실패해 command plugin으로 미리 생성한
@@ -287,13 +296,14 @@ scripts/update_openapi.sh
 스크립트는 다음 순서로 동작한다.
 
 1. 상위 계약이 서버 스냅샷과 같고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header·활동 응답을 포함하는지 확인한다.
-   `CapturedText.originalByteLength`는 정확히 `integer | null` 조합이어야 한다.
+   `CapturedText.originalByteLength`는 정확히 `integer | null`, 타임라인 `endedAt`은 `string | null` 조합이어야 한다.
 2. 기존 `GeneratedSources`를 임시 위치에 백업한다.
-3. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
-4. command plugin으로 Swift 코드를 생성한다.
-5. `MosemoAPI` target build와 전체 `swift test`를 실행한다.
-6. 임시 링크를 제거한다.
-7. 검증 실패 시 generated source를 이전 상태로 복구한다.
+3. generator가 nullable `endedAt`을 누락하지 않도록 임시 입력에서 해당 속성을 optional date-time으로 정규화한다. 서버 계약 파일은 수정하지 않는다.
+4. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
+5. command plugin으로 Swift 코드를 생성한다.
+6. `MosemoAPI` target build와 전체 `swift test`를 실행한다.
+7. 임시 링크를 제거한다.
+8. 검증 실패 시 generated source를 이전 상태로 복구한다.
 
 일반 앱 build는 커밋된 generated source를 사용하므로 서버 저장소를 요구하지 않는다.
 CI는 실행 중인 서버나 네트워크 endpoint에서 명세를 다운로드하지 않고, 별도로
@@ -310,6 +320,8 @@ checkout한 서버 저장소의 계약 파일을 상위 계약으로 복사한�
 - Bearer header 삽입, token 만료와 401 정리, 로그아웃
 - SQLite Debug 및 Keychain Release 저장소의 실제 round trip
 - generated account DTO에서 앱 `Account`로의 변환
+- 타임라인 날짜·Bearer 조회, 상세·opaque·공백 매핑, 서버 순서와 열린/0초 구간 보존,
+  빈 응답·401·서버/네트워크 오류와 계정 시간대의 날짜 선택
 - 활동 observation·collection state DTO 변환, discriminator와 값 상태, 201 event ID 검증
 - 활동 401·404·409·422·500 및 네트워크 오류 매핑과 자동 재시도 없음
 - RFC 7636 PKCE vector와 무작위 verifier 형식

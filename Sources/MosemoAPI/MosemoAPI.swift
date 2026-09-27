@@ -1,6 +1,6 @@
 import Foundation
 
-public protocol MosemoAPIClient: Sendable {
+public protocol MosemoAPIClient: TimelineFetching, Sendable {
     func makeKakaoLoginURL(codeChallenge: String) throws -> URL
 
     func authenticate(

@@ -29,10 +29,11 @@ final class TimelineViewTests: XCTestCase {
         await waitUntil { model.loadState == .loaded }
 
         let entries = model.presentations
-        XCTAssertEqual(entries.map(\.title), ["Finder", "Xcode", "알 수 없는 활동", "수집 공백"])
+        XCTAssertEqual(entries.map(\.title), ["Finder", "Xcode", "알 수 없는 활동", "수집 공백", "상세 활동"])
         XCTAssertTrue(entries[0].isZeroLength)
-        XCTAssertEqual(entries[1].displayEnd, instant(9, 12))
-        XCTAssertEqual(entries[1].durationText, "11분")
+        XCTAssertNil(entries[1].displayEnd)
+        XCTAssertEqual(entries[1].durationText, "종료 전")
+        XCTAssertTrue(entries[1].timeText(timeZone: zone).contains("진행 중"))
         XCTAssertTrue(entries[2].context.contains("가려졌습니다"))
         XCTAssertNil(entries[3].displayEnd)
         XCTAssertEqual(entries[3].durationText, "길이 미정")
@@ -92,6 +93,28 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(fetchCount, 2)
     }
 
+    func testLateResponseForPreviousAccountCannotReplaceCurrentAccount() async {
+        let newYork = TimeZone(identifier: "America/New_York")!
+        let requested = date()
+        let fetcher = LateAccountResponseFetcher()
+        let model = TimelineViewModel(
+            fetcher: fetcher,
+            accountID: uuid(22),
+            timeZone: zone,
+            now: requested.startOfDay(timeZone: zone)
+        )
+        await waitForRequestCount(1, in: fetcher)
+
+        model.switchAccount(to: uuid(23), timeZone: newYork)
+        await waitUntil { model.loadState == .empty && model.day?.timeZoneID == newYork.identifier }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(model.timeZone.identifier, newYork.identifier)
+        XCTAssertEqual(model.day?.timeZoneID, newYork.identifier)
+        let timeZones = await fetcher.requestTimeZones()
+        XCTAssertEqual(timeZones, [zone.identifier, newYork.identifier])
+    }
+
     func testReturningToPreviousDateFetchesAgain() async {
         let first = date()
         let second = date(2026, 9, 24)
@@ -108,15 +131,58 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(requests, [first, second, first])
     }
 
-    func testOnlyUndisplayableActivityResultsInEmptyPresentation() async {
+    func testActivityWithoutCapturedIdentifiersRemainsVisible() async {
         let requested = date()
         let response = TimelineDay(date: requested, timeZoneID: zone.identifier, segments: [
             .activity(.init(id: uuid(31), startedAt: instant(9, 0), endedAt: instant(9, 1), lastObservedAt: instant(9, 1), context: .detailed(appName: nil, windowTitle: nil, webURL: nil)))
         ])
         let model = TimelineViewModel(fetcher: ImmediateFetcher(result: .success(response)), timeZone: zone, now: requested.startOfDay(timeZone: zone))
+        await waitUntil { model.loadState == .loaded }
+
+        XCTAssertEqual(model.presentations.map(\.title), ["상세 활동"])
+        XCTAssertEqual(model.presentations.count, 1)
+    }
+
+    func testAccountTimeZoneDefinesTodayAndRequest() async {
+        let newYork = TimeZone(identifier: "America/New_York")!
+        let now = ISO8601DateFormatter().date(from: "2026-09-15T01:00:00Z")!
+        let fetcher = ZoneRecordingFetcher()
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: newYork, now: now)
         await waitUntil { model.loadState == .empty }
 
-        XCTAssertTrue(model.presentations.isEmpty)
+        XCTAssertEqual(model.selectedDate, date(2026, 9, 14))
+        XCTAssertEqual(model.timeZone.identifier, "America/New_York")
+        let requests = await fetcher.requests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].0, date(2026, 9, 14))
+        XCTAssertEqual(requests[0].1, "America/New_York")
+    }
+
+    func testRefreshRequestsSameDateAndShowsProgress() async {
+        let requested = date()
+        let fetcher = ZoneRecordingFetcher(delayNanoseconds: 80_000_000)
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: requested.startOfDay(timeZone: zone))
+        await waitUntil { model.loadState == .empty }
+
+        model.refresh()
+        XCTAssertTrue(model.isRefreshing)
+        XCTAssertEqual(model.loadState, .loading)
+        await waitUntil { model.loadState == .empty && !model.isRefreshing }
+        let requests = await fetcher.requests()
+        XCTAssertEqual(requests.map(\.0), [requested, requested])
+    }
+
+    func testUnauthorizedTimelineResponseNotifiesAuthenticationCoordinator() async {
+        let requested = date()
+        var failureCount = 0
+        let model = TimelineViewModel(
+            fetcher: AuthenticationFailureFetcher(),
+            timeZone: zone,
+            now: requested.startOfDay(timeZone: zone),
+            authenticationFailed: { failureCount += 1 }
+        )
+        await waitUntil { failureCount == 1 }
+        XCTAssertNil(model.day)
     }
 
     private func waitUntil(
@@ -130,6 +196,16 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertTrue(condition(), "Condition did not become true before timeout")
     }
 
+    private func waitForRequestCount(_ count: Int, in fetcher: LateAccountResponseFetcher) async {
+        let start = DispatchTime.now().uptimeNanoseconds
+        while await fetcher.requestCount() < count,
+              DispatchTime.now().uptimeNanoseconds - start < 1_000_000_000 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let actualCount = await fetcher.requestCount()
+        XCTAssertEqual(actualCount, count)
+    }
+
     private func uuid(_ last: UInt8) -> UUID {
         UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, last))
     }
@@ -139,7 +215,7 @@ private enum TestError: Error { case expected }
 
 private struct ImmediateFetcher: TimelineFetching {
     let result: Result<TimelineDay, TestError>
-    func fetch(day: TimelineDate) async throws -> TimelineDay { try result.get() }
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay { try result.get() }
 }
 
 private actor CountingFetcher: TimelineFetching {
@@ -147,7 +223,7 @@ private actor CountingFetcher: TimelineFetching {
     private(set) var count = 0
     init(result: Result<TimelineDay, TestError>) { self.result = result }
     func currentCount() -> Int { count }
-    func fetch(day: TimelineDate) async throws -> TimelineDay { count += 1; return try result.get() }
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay { count += 1; return try result.get() }
 }
 
 private actor RecordingFetcher: TimelineFetching {
@@ -155,7 +231,7 @@ private actor RecordingFetcher: TimelineFetching {
 
     func requests() -> [TimelineDate] { requestedDates }
 
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         requestedDates.append(day)
         return TimelineDay(date: day, timeZoneID: "Asia/Seoul", segments: [])
     }
@@ -163,8 +239,50 @@ private actor RecordingFetcher: TimelineFetching {
 
 private struct DelayedFetcher: TimelineFetching {
     let slowDate: TimelineDate
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         try? await Task.sleep(nanoseconds: day == slowDate ? 300_000_000 : 20_000_000)
         return TimelineDay(date: day, timeZoneID: "Asia/Seoul", segments: [])
+    }
+}
+
+private actor LateAccountResponseFetcher: TimelineFetching {
+    private var requestedTimeZones: [String] = []
+
+    func requestCount() -> Int { requestedTimeZones.count }
+    func requestTimeZones() -> [String] { requestedTimeZones }
+
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        requestedTimeZones.append(timeZoneID)
+        let delay = timeZoneID == "Asia/Seoul" ? 250_000_000 : 20_000_000
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global().asyncAfter(deadline: .now() + .nanoseconds(delay)) {
+                continuation.resume(returning: TimelineDay(
+                    date: day,
+                    timeZoneID: timeZoneID,
+                    segments: []
+                ))
+            }
+        }
+    }
+}
+
+private actor ZoneRecordingFetcher: TimelineFetching {
+    let delayNanoseconds: UInt64
+    private var recorded: [(TimelineDate, String)] = []
+
+    init(delayNanoseconds: UInt64 = 0) { self.delayNanoseconds = delayNanoseconds }
+
+    func requests() -> [(TimelineDate, String)] { recorded }
+
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        recorded.append((day, timeZoneID))
+        if delayNanoseconds > 0 { try await Task.sleep(nanoseconds: delayNanoseconds) }
+        return TimelineDay(date: day, timeZoneID: timeZoneID, segments: [])
+    }
+}
+
+private struct AuthenticationFailureFetcher: TimelineFetching {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        throw MosemoAPIError.authenticationRequired
     }
 }

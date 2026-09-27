@@ -6,7 +6,7 @@ struct TimelinePreviewFetcher: TimelineFetching {
 
     init(delayNanoseconds: UInt64 = 100_000_000) { self.delayNanoseconds = delayNanoseconds }
 
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         try await Task.sleep(nanoseconds: delayNanoseconds)
         let zone = TimeZone(identifier: "Asia/Seoul")!
         let today = TimelineDate(.now, timeZone: zone)
@@ -27,21 +27,5 @@ struct TimelinePreviewFetcher: TimelineFetching {
             .captureGap(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000007")!, startedAt: at(12, 15), endedAt: nil, reason: "종료 시각을 아직 알 수 없습니다")),
             .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000008")!, startedAt: at(13, 0), endedAt: nil, lastObservedAt: at(13, 12), context: .detailed(appName: "Xcode", windowTitle: "열린 구간", webURL: nil)))
         ]
-    }
-}
-
-struct UnavailableTimelineFetcher: TimelineFetching {
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
-        throw NSError(domain: "Timeline", code: 1, userInfo: [NSLocalizedDescriptionKey: "타임라인 조회 기능이 연결되지 않았습니다."])
-    }
-}
-
-enum TimelineFetcherFactory {
-    static func make() -> any TimelineFetching {
-        #if DEBUG
-        TimelinePreviewFetcher()
-        #else
-        UnavailableTimelineFetcher()
-        #endif
     }
 }

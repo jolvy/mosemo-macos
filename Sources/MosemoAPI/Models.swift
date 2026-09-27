@@ -9,17 +9,20 @@ public struct Account: Equatable, Sendable {
     public let provider: AccountProvider
     public let createdAt: Date
     public let lastAuthenticatedAt: Date
+    public let timeZoneID: String
 
     public init(
         id: UUID,
         provider: AccountProvider,
         createdAt: Date,
-        lastAuthenticatedAt: Date
+        lastAuthenticatedAt: Date,
+        timeZoneID: String
     ) {
         self.id = id
         self.provider = provider
         self.createdAt = createdAt
         self.lastAuthenticatedAt = lastAuthenticatedAt
+        self.timeZoneID = timeZoneID
     }
 }
 

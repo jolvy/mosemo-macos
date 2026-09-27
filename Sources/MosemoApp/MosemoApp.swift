@@ -7,6 +7,7 @@ import SwiftUI
 struct MosemoApp: App {
     @StateObject private var model: CollectorViewModel
     @StateObject private var auth: AuthCoordinator
+    private let apiClient: LiveMosemoAPIClient?
     @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     init() {
@@ -21,22 +22,26 @@ struct MosemoApp: App {
                 )
                 let deviceRegistrationStateStore = try storage
                     .makeDeviceRegistrationStateStore()
+                apiClient = client
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: client,
                     deviceRegistrationStateStore: deviceRegistrationStateStore
                 ))
             } catch let error as URLError where error.code == .badURL {
+                apiClient = nil
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: nil,
                     configurationMessage: "API 서버 주소가 올바르지 않습니다."
                 ))
             } catch {
+                apiClient = nil
                 _auth = StateObject(wrappedValue: AuthCoordinator(
                     client: nil,
                     configurationMessage: "앱 저장소를 초기화할 수 없습니다."
                 ))
             }
         } else {
+            apiClient = nil
             _auth = StateObject(wrappedValue: AuthCoordinator(
                 client: nil,
                 configurationMessage: "API 서버 주소가 설정되지 않았습니다."
@@ -49,11 +54,12 @@ struct MosemoApp: App {
             Group {
                 #if DEBUG
                 if CommandLine.arguments.contains("--timeline-ui-preview") {
-                    TimelineScreen(accountID: UUID(uuidString: "00000000-0000-0000-0000-000000000019")!, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 30_000_000))
+                    TimelineScreen(account: Self.previewAccount, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000), showsPreviewNotice: true)
                 } else {
                     DesktopRootView(
                         model: model,
                         auth: auth,
+                        timelineClient: apiClient,
                         onboardingCompleted: $onboardingCompleted
                     )
                 }
@@ -61,6 +67,7 @@ struct MosemoApp: App {
                 DesktopRootView(
                     model: model,
                     auth: auth,
+                    timelineClient: apiClient,
                     onboardingCompleted: $onboardingCompleted
                 )
                 #endif
@@ -87,13 +94,21 @@ struct MosemoApp: App {
         }
         .defaultSize(width: 1050, height: 700)
         Window("타임라인 UI 미리보기", id: "timeline-preview") {
-            TimelineScreen(accountID: UUID(uuidString: "00000000-0000-0000-0000-000000000019")!, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 50_000_000))
+            TimelineScreen(account: Self.previewAccount, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 50_000_000), showsPreviewNotice: true)
                 .frame(minWidth: 760, minHeight: 520)
         }
         .defaultSize(width: 900, height: 640)
 
         #endif
     }
+
+    private static let previewAccount = Account(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000019")!,
+        provider: .kakao,
+        createdAt: .now,
+        lastAuthenticatedAt: .now,
+        timeZoneID: "Asia/Seoul"
+    )
 }
 
 private struct CollectorMenuView: View {

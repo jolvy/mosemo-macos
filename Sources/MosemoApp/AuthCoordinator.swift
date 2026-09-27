@@ -119,6 +119,12 @@ final class AuthCoordinator: NSObject, ObservableObject {
         }
     }
 
+    func timelineAuthenticationFailed(for accountID: UUID) {
+        guard account?.id == accountID else { return }
+        account = nil
+        statusMessage = "로그인이 필요합니다."
+    }
+
     private func finishLogin(callbackURL: URL?, error: Error?) async {
         guard isAuthenticating, let verifier = pendingCodeVerifier else {
             clearPendingLogin()

@@ -141,7 +141,8 @@ final class SQLiteStorageTests: XCTestCase {
             id: UUID(),
             provider: .kakao,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            timeZoneID: "Asia/Seoul"
         )
     }
 
@@ -153,6 +154,10 @@ final class SQLiteStorageTests: XCTestCase {
 }
 
 private actor SQLiteDeviceClient: MosemoAPIClient {
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        fatalError("Not used by SQLite storage tests")
+    }
+
     private let device: Device
     private var registrationKeys: [UUID] = []
 

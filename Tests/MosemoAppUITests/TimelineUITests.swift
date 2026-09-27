@@ -1,6 +1,22 @@
 import XCTest
 
 final class TimelineUITests: XCTestCase {
+    func testPreviewShowsSegmentsInBothModesAndRefreshes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--timeline-ui-preview"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["관찰 타임라인"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["timeline-list"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["8개 표시 구간"].exists)
+
+        app.radioButtons["시간축"].click()
+        XCTAssertTrue(app.scrollViews["timeline-time-axis"].waitForExistence(timeout: 5))
+        app.buttons["timeline-refresh"].click()
+        XCTAssertFalse(app.buttons["timeline-refresh"].isEnabled)
+        XCTAssertTrue(app.scrollViews["timeline-time-axis"].waitForExistence(timeout: 5))
+    }
+
     func testViewSwitchKeepsDateAndEmptyState() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview"]

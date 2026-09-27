@@ -29,12 +29,14 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         let session = URLSession(configuration: sessionConfiguration)
         let transport = URLSessionTransport(configuration: .init(session: session))
         let now: @Sendable () -> Date = { Date() }
+        let configuration = Configuration(dateTranscoder: MosemoDateTranscoder())
 
         self.init(
             baseURL: baseURL,
-            anonymousClient: Client(serverURL: baseURL, transport: transport),
+            anonymousClient: Client(serverURL: baseURL, configuration: configuration, transport: transport),
             authenticatedClient: Client(
                 serverURL: baseURL,
+                configuration: configuration,
                 transport: transport,
                 middlewares: [BearerAuthenticationMiddleware(
                     tokenStore: tokenStore,
@@ -246,6 +248,40 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         }
     }
 
+    public func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        do {
+            let response = try await authenticatedClient.activitiesGetTimeline(
+                query: .init(date: day.description)
+            )
+            switch response {
+            case .ok(let output):
+                return TimelineDay(
+                    date: day,
+                    timeZoneID: timeZoneID,
+                    segments: try TimelineResponseMapper.segments(from: output.body.json)
+                )
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent:
+                throw MosemoAPIError.validationFailed
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mapped = Self.mapActivity(error)
+            if mapped == .authenticationRequired {
+                try? await tokenStore.delete()
+            }
+            throw mapped
+        }
+    }
+
     public func signOut() async throws {
         do {
             try await tokenStore.delete()
@@ -269,7 +305,8 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
             id: id,
             provider: provider,
             createdAt: response.createdAt,
-            lastAuthenticatedAt: response.lastAuthenticatedAt
+            lastAuthenticatedAt: response.lastAuthenticatedAt,
+            timeZoneID: response.timezone.rawValue
         )
     }
 

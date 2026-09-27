@@ -25,6 +25,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/activities`.
     /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
     func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output
+    /// 날짜별 관찰 타임라인 조회
+    ///
+    /// 계정 시간대의 달력 날짜 하나에 해당하는 전체 관찰 타임라인을 날짜 경계에서 자르지 않은 구간 배열로 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)`.
+    func activitiesGetTimeline(_ input: Operations.ActivitiesGetTimeline.Input) async throws -> Operations.ActivitiesGetTimeline.Output
     /// 액세스 토큰 발급
     ///
     /// Kakao 로그인 callback에서 발급한 일회용 인증 코드와 PKCE code verifier를 검증한 뒤 Mosemo 액세스 토큰을 발급합니다.
@@ -65,6 +72,21 @@ extension APIProtocol {
         try await activitiesCreate(Operations.ActivitiesCreate.Input(
             headers: headers,
             body: body
+        ))
+    }
+    /// 날짜별 관찰 타임라인 조회
+    ///
+    /// 계정 시간대의 달력 날짜 하나에 해당하는 전체 관찰 타임라인을 날짜 경계에서 자르지 않은 구간 배열로 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)`.
+    internal func activitiesGetTimeline(
+        query: Operations.ActivitiesGetTimeline.Input.Query,
+        headers: Operations.ActivitiesGetTimeline.Input.Headers = .init()
+    ) async throws -> Operations.ActivitiesGetTimeline.Output {
+        try await activitiesGetTimeline(Operations.ActivitiesGetTimeline.Input(
+            query: query,
+            headers: headers
         ))
     }
     /// 액세스 토큰 발급
@@ -437,6 +459,112 @@ internal enum Components {
                 ])
             }
         }
+        /// 실제로 관찰된 동일 문맥의 활동 구간입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse`.
+        internal struct ActivitySegmentResponse: Codable, Hashable, Sendable {
+            /// 개인정보 필터 후 원본 전체 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/context`.
+            internal enum ContextPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/context/DetailedActivityContext`.
+                case detailed(Components.Schemas.DetailedActivityContext)
+                /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/context/OpaqueActivityContext`.
+                case opaque(Components.Schemas.OpaqueActivityContext)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "detailed":
+                        self = .detailed(try .init(from: decoder))
+                    case "opaque":
+                        self = .opaque(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .detailed(value):
+                        try value.encode(to: encoder)
+                    case let .opaque(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 개인정보 필터 후 원본 전체 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/context`.
+            internal var context: Components.Schemas.ActivitySegmentResponse.ContextPayload
+            /// 관찰로 확인되거나 침묵으로 닫힌 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 같은 문맥이 마지막으로 실제 관찰된 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/lastObservedAt`.
+            internal var lastObservedAt: Foundation.Date
+            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 활동 구간 종류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/segmentType`.
+            internal enum SegmentTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case activity = "activity"
+            }
+            /// 활동 구간 종류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/segmentType`.
+            internal var segmentType: Components.Schemas.ActivitySegmentResponse.SegmentTypePayload
+            /// 첫 활동 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `ActivitySegmentResponse`.
+            ///
+            /// - Parameters:
+            ///   - context: 개인정보 필터 후 원본 전체 문맥입니다.
+            ///   - endedAt: 관찰로 확인되거나 침묵으로 닫힌 종료 시각입니다.
+            ///   - lastObservedAt: 같은 문맥이 마지막으로 실제 관찰된 시각입니다.
+            ///   - segmentId: 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///   - segmentType: 활동 구간 종류입니다.
+            ///   - startedAt: 첫 활동 관찰 시각입니다.
+            internal init(
+                context: Components.Schemas.ActivitySegmentResponse.ContextPayload,
+                endedAt: Foundation.Date? = nil,
+                lastObservedAt: Foundation.Date,
+                segmentId: Swift.String,
+                segmentType: Components.Schemas.ActivitySegmentResponse.SegmentTypePayload,
+                startedAt: Foundation.Date
+            ) {
+                self.context = context
+                self.endedAt = endedAt
+                self.lastObservedAt = lastObservedAt
+                self.segmentId = segmentId
+                self.segmentType = segmentType
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case endedAt
+                case lastObservedAt
+                case segmentId
+                case segmentType
+                case startedAt
+            }
+        }
         /// Application identifiers observed independently by the client.
         ///
         /// - Remark: Generated from `#/components/schemas/AppContext`.
@@ -734,6 +862,65 @@ internal enum Components {
                     "tabTitle",
                     "url"
                 ])
+            }
+        }
+        /// 명시적 수집 중단으로 관찰할 수 없었던 구간입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/CaptureGapResponse`.
+        internal struct CaptureGapResponse: Codable, Hashable, Sendable {
+            /// 다음 실제 활동 관찰로 확인된 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 첫 suspended의 수집 중단 사유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/reason`.
+            internal var reason: Swift.String
+            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 수집 공백 종류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/segmentType`.
+            internal enum SegmentTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case captureGap = "capture_gap"
+            }
+            /// 수집 공백 종류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/segmentType`.
+            internal var segmentType: Components.Schemas.CaptureGapResponse.SegmentTypePayload
+            /// 첫 suspended 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `CaptureGapResponse`.
+            ///
+            /// - Parameters:
+            ///   - endedAt: 다음 실제 활동 관찰로 확인된 종료 시각입니다.
+            ///   - reason: 첫 suspended의 수집 중단 사유입니다.
+            ///   - segmentId: 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///   - segmentType: 수집 공백 종류입니다.
+            ///   - startedAt: 첫 suspended 관찰 시각입니다.
+            internal init(
+                endedAt: Foundation.Date? = nil,
+                reason: Swift.String,
+                segmentId: Swift.String,
+                segmentType: Components.Schemas.CaptureGapResponse.SegmentTypePayload,
+                startedAt: Foundation.Date
+            ) {
+                self.endedAt = endedAt
+                self.reason = reason
+                self.segmentId = segmentId
+                self.segmentType = segmentType
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case endedAt
+                case reason
+                case segmentId
+                case segmentType
+                case startedAt
             }
         }
         /// A string value captured by the client.
@@ -2705,6 +2892,478 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "serviceUnavailable",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 날짜별 관찰 타임라인 조회
+    ///
+    /// 계정 시간대의 달력 날짜 하나에 해당하는 전체 관찰 타임라인을 날짜 경계에서 자르지 않은 구간 배열로 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)`.
+    internal enum ActivitiesGetTimeline {
+        internal static let id: Swift.String = "activitiesGetTimeline"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/query`.
+            internal struct Query: Sendable, Hashable {
+                /// 계정 시간대 기준 조회할 달력 날짜(YYYY-MM-DD)입니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/query/date`.
+                internal var date: Swift.String
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - date: 계정 시간대 기준 조회할 달력 날짜(YYYY-MM-DD)입니다.
+                internal init(date: Swift.String) {
+                    self.date = date
+                }
+            }
+            internal var query: Operations.ActivitiesGetTimeline.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetTimeline.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetTimeline.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ActivitiesGetTimeline.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - query:
+            ///   - headers:
+            internal init(
+                query: Operations.ActivitiesGetTimeline.Input.Query,
+                headers: Operations.ActivitiesGetTimeline.Input.Headers = .init()
+            ) {
+                self.query = query
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content/JsonPayload`.
+                    internal enum JsonPayloadPayload: Codable, Hashable, Sendable {
+                        /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content/JsonPayload/ActivitySegmentResponse`.
+                        case activity(Components.Schemas.ActivitySegmentResponse)
+                        /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content/JsonPayload/CaptureGapResponse`.
+                        case captureGap(Components.Schemas.CaptureGapResponse)
+                        internal enum CodingKeys: String, CodingKey {
+                            case segmentType
+                        }
+                        internal init(from decoder: any Swift.Decoder) throws {
+                            let container = try decoder.container(keyedBy: CodingKeys.self)
+                            let discriminator = try container.decode(
+                                Swift.String.self,
+                                forKey: .segmentType
+                            )
+                            switch discriminator {
+                            case "activity":
+                                self = .activity(try .init(from: decoder))
+                            case "capture_gap":
+                                self = .captureGap(try .init(from: decoder))
+                            default:
+                                throw Swift.DecodingError.unknownOneOfDiscriminator(
+                                    discriminatorKey: CodingKeys.segmentType,
+                                    discriminatorValue: discriminator,
+                                    codingPath: decoder.codingPath
+                                )
+                            }
+                        }
+                        internal func encode(to encoder: any Swift.Encoder) throws {
+                            switch self {
+                            case let .activity(value):
+                                try value.encode(to: encoder)
+                            case let .captureGap(value):
+                                try value.encode(to: encoder)
+                            }
+                        }
+                    }
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content/json`.
+                    internal typealias JsonPayload = [Operations.ActivitiesGetTimeline.Output.Ok.Body.JsonPayloadPayload]
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/200/content/application\/json`.
+                    case json(Operations.ActivitiesGetTimeline.Output.Ok.Body.JsonPayload)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Operations.ActivitiesGetTimeline.Output.Ok.Body.JsonPayload {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetTimeline.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 활동 구간과 명시적 수집 공백의 관찰 순서 배열입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ActivitiesGetTimeline.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.ActivitiesGetTimeline.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesGetTimeline.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.ActivitiesGetTimeline.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetTimeline.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetTimeline.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesGetTimeline.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ActivitiesGetTimeline.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.ActivitiesGetTimeline.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetTimeline.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.ActivitiesGetTimeline.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.ActivitiesGetTimeline.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetTimeline.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetTimeline.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesGetTimeline.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.ActivitiesGetTimeline.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.ActivitiesGetTimeline.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetTimeline.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ActivitiesGetTimeline.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.ActivitiesGetTimeline.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/timeline/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetTimeline.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetTimeline.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/timeline/get(activitiesGetTimeline)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.ActivitiesGetTimeline.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.ActivitiesGetTimeline.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
                             response: self
                         )
                     }
