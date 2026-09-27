@@ -15,6 +15,10 @@
 		200000000000000000000018 /* PerformanceSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000018 /* PerformanceSampler.swift */; };
 		200000000000000000000019 /* AuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000019 /* AuthCoordinator.swift */; };
 		200000000000000000000020 /* DesktopRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000020 /* DesktopRootView.swift */; };
+		200000000000000000000021 /* LabelReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000021 /* LabelReviewView.swift */; };
+		200000000000000000000022 /* LabelReviewFetching.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000022 /* LabelReviewFetching.swift */; };
+		200000000000000000000023 /* LabelReviewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000023 /* LabelReviewData.swift */; };
+		200000000000000000000024 /* LabelReviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000024 /* LabelReviewViewModel.swift */; };
 		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
 		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
 /* End PBXBuildFile section */
@@ -29,6 +33,10 @@
 		300000000000000000000018 /* PerformanceSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSampler.swift; sourceTree = "<group>"; };
 		300000000000000000000019 /* AuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCoordinator.swift; sourceTree = "<group>"; };
 		300000000000000000000020 /* DesktopRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRootView.swift; sourceTree = "<group>"; };
+		300000000000000000000021 /* LabelReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewView.swift; sourceTree = "<group>"; };
+		300000000000000000000022 /* LabelReviewFetching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewFetching.swift; sourceTree = "<group>"; };
+		300000000000000000000023 /* LabelReviewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewData.swift; sourceTree = "<group>"; };
+		300000000000000000000024 /* LabelReviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewViewModel.swift; sourceTree = "<group>"; };
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000040 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -75,6 +83,10 @@
 				300000000000000000000018 /* PerformanceSampler.swift */,
 				300000000000000000000019 /* AuthCoordinator.swift */,
 				300000000000000000000020 /* DesktopRootView.swift */,
+				300000000000000000000021 /* LabelReviewView.swift */,
+				300000000000000000000022 /* LabelReviewFetching.swift */,
+				300000000000000000000023 /* LabelReviewData.swift */,
+				300000000000000000000024 /* LabelReviewViewModel.swift */,
 			);
 			path = MosemoApp;
 			sourceTree = "<group>";
@@ -158,6 +170,10 @@
 				200000000000000000000018 /* PerformanceSampler.swift in Sources */,
 				200000000000000000000019 /* AuthCoordinator.swift in Sources */,
 				200000000000000000000020 /* DesktopRootView.swift in Sources */,
+				200000000000000000000021 /* LabelReviewView.swift in Sources */,
+				200000000000000000000022 /* LabelReviewFetching.swift in Sources */,
+				200000000000000000000023 /* LabelReviewData.swift in Sources */,
+				200000000000000000000024 /* LabelReviewViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
