@@ -53,7 +53,8 @@ let package = Package(
         .executableTarget(
             name: "MosemoApp",
             dependencies: ["CollectorCore", "MosemoAPI"],
-            path: "Sources/MosemoApp"
+            path: "Sources/MosemoApp",
+            exclude: ["TimelineView.prototype.html"]
         ),
         .testTarget(
             name: "CollectorCoreTests",
