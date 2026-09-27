@@ -1,7 +1,6 @@
 import Combine
 import Foundation
 import MosemoAPI
-import SwiftUI
 
 enum TimelineStyle: String, CaseIterable, Identifiable {
     case list = "목록"
@@ -87,7 +86,6 @@ final class TimelineViewModel: ObservableObject {
     @Published private(set) var day: TimelineDay?
 
     private let fetcher: any TimelineFetching
-    private var store = TimelineStore()
     private var accountID: UUID
     private var requestID = UUID()
     private var requestTask: Task<Void, Never>?
@@ -103,7 +101,6 @@ final class TimelineViewModel: ObservableObject {
         self.accountID = accountID
         initialTimeZone = timeZone
         selectedDate = TimelineDate(now, timeZone: timeZone)
-        store.switchAccount(to: accountID)
         selectDate(selectedDate)
     }
 
@@ -148,11 +145,6 @@ final class TimelineViewModel: ObservableObject {
         guard selectedDate != date || day == nil else { return }
         selectedDate = date
         selectedSegmentID = nil
-        if let cached = store.day(for: date) {
-            day = cached
-            loadState = presentations.isEmpty ? .empty : .loaded
-            return
-        }
         load(date)
     }
 
@@ -167,7 +159,6 @@ final class TimelineViewModel: ObservableObject {
         requestTask?.cancel()
         requestID = UUID()
         self.accountID = accountID
-        store.switchAccount(to: accountID)
         day = nil
         selectedSegmentID = nil
         if let timeZone { selectedDate = TimelineDate(.now, timeZone: timeZone) }
@@ -185,7 +176,6 @@ final class TimelineViewModel: ObservableObject {
                 let result = try await fetcher.fetch(day: date)
                 guard !Task.isCancelled, let self, self.requestID == id,
                       self.selectedDate == date, result.date == date else { return }
-                self.store.replace(result)
                 self.day = result
                 self.loadState = self.presentations.isEmpty ? .empty : .loaded
             } catch {
@@ -193,67 +183,5 @@ final class TimelineViewModel: ObservableObject {
                 self.loadState = .failed(error.localizedDescription)
             }
         }
-    }
-}
-
-struct TimelinePreviewFetcher: TimelineFetching {
-    let delayNanoseconds: UInt64
-
-    init(delayNanoseconds: UInt64 = 100_000_000) { self.delayNanoseconds = delayNanoseconds }
-
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
-        try await Task.sleep(nanoseconds: delayNanoseconds)
-        let zone = TimeZone(identifier: "Asia/Seoul")!
-        let today = TimelineDate(.now, timeZone: zone)
-        let segments = day == today ? Self.examples(for: day, timeZone: zone) : []
-        return TimelineDay(date: day, timeZoneID: zone.identifier, segments: segments)
-    }
-
-    private static func examples(for day: TimelineDate, timeZone: TimeZone) -> [TimelineSegment] {
-        let start = day.startOfDay(timeZone: timeZone)
-        func at(_ hour: Int, _ minute: Int) -> Date { start.addingTimeInterval(Double(hour * 60 + minute) * 60) }
-        return [
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, startedAt: at(9, 0), endedAt: at(9, 42), lastObservedAt: at(9, 42), context: .detailed(appName: "Xcode", windowTitle: "MosemoApp.swift · 코드 편집", webURL: nil))),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, startedAt: at(9, 42), endedAt: at(10, 10), lastObservedAt: at(10, 10), context: .detailed(appName: "Firefox", windowTitle: "이슈 확인", webURL: URL(string: "https://github.com")))),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, startedAt: at(10, 10), endedAt: at(10, 24), lastObservedAt: at(10, 24), context: .opaque)),
-            .captureGap(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!, startedAt: at(10, 24), endedAt: at(10, 48), reason: "이 시간에는 활동을 관찰하지 못했습니다")),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!, startedAt: at(10, 48), endedAt: at(11, 31), lastObservedAt: at(11, 31), context: .detailed(appName: "Notes", windowTitle: "작업 메모", webURL: nil))),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000006")!, startedAt: at(11, 31), endedAt: at(11, 31), lastObservedAt: at(11, 31), context: .detailed(appName: "Finder", windowTitle: nil, webURL: nil))),
-            .captureGap(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000007")!, startedAt: at(12, 15), endedAt: nil, reason: "종료 시각을 아직 알 수 없습니다")),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000008")!, startedAt: at(13, 0), endedAt: nil, lastObservedAt: at(13, 12), context: .detailed(appName: "Xcode", windowTitle: "열린 구간", webURL: nil)))
-        ]
-    }
-}
-
-struct UnavailableTimelineFetcher: TimelineFetching {
-    func fetch(day: TimelineDate) async throws -> TimelineDay {
-        throw NSError(domain: "Timeline", code: 1, userInfo: [NSLocalizedDescriptionKey: "타임라인 조회 기능이 연결되지 않았습니다."])
-    }
-}
-
-struct TimelineScreen: View {
-    @StateObject private var model: TimelineViewModel
-    let accountID: UUID
-    let signOut: (() -> Void)?
-
-    init(accountID: UUID, signOut: (() -> Void)?, fetcher: any TimelineFetching = TimelineFetcherFactory.make()) {
-        self.accountID = accountID
-        self.signOut = signOut
-        _model = StateObject(wrappedValue: TimelineViewModel(fetcher: fetcher, accountID: accountID))
-    }
-
-    var body: some View {
-        TimelineView(model: model, signOut: signOut)
-            .onChange(of: accountID) { _, newValue in model.switchAccount(to: newValue) }
-    }
-}
-
-enum TimelineFetcherFactory {
-    static func make() -> any TimelineFetching {
-        #if DEBUG
-        TimelinePreviewFetcher()
-        #else
-        UnavailableTimelineFetcher()
-        #endif
     }
 }

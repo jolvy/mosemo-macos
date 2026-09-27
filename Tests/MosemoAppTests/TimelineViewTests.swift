@@ -78,32 +78,34 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(model.day?.date, second)
     }
 
-    func testAccountChangeClearsCachedDaysAndFetchesForNewAccount() async {
+    func testAccountChangeClearsCurrentResultAndFetchesForNewAccount() async {
         let requested = date()
-        var store = TimelineStore()
-        let firstAccount = uuid(20)
-        let nextAccount = uuid(21)
-        store.switchAccount(to: firstAccount)
-        let day = TimelineDay(date: requested, timeZoneID: zone.identifier, segments: [])
-        store.replace(day)
-        XCTAssertNotNil(store.day(for: requested))
-        store.switchAccount(to: nextAccount)
-        XCTAssertNil(store.day(for: requested))
-        XCTAssertEqual(store.accountID, nextAccount)
+        let fetcher = CountingFetcher(result: .success(.init(date: requested, timeZoneID: zone.identifier, segments: [])))
+        let model = TimelineViewModel(fetcher: fetcher, accountID: uuid(20), timeZone: zone, now: requested.startOfDay(timeZone: zone))
+        await waitUntil { model.loadState == .empty }
+
+        model.switchAccount(to: uuid(21))
+        XCTAssertNil(model.day)
+        XCTAssertEqual(model.loadState, .loading)
+        await waitUntil { model.loadState == .empty }
+        let fetchCount = await fetcher.currentCount()
+        XCTAssertEqual(fetchCount, 2)
     }
 
-    func testStoreReplacesThePreviousResponseForADate() {
-        var store = TimelineStore()
-        let day = date()
-        let first = TimelineDay(date: day, timeZoneID: zone.identifier, segments: [])
-        let replacement = TimelineDay(date: day, timeZoneID: zone.identifier, segments: [
-            .captureGap(.init(id: uuid(30), startedAt: instant(9, 0), endedAt: nil, reason: "새 응답"))
-        ])
+    func testReturningToPreviousDateFetchesAgain() async {
+        let first = date()
+        let second = date(2026, 9, 24)
+        let fetcher = RecordingFetcher()
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: first.startOfDay(timeZone: zone))
+        await waitUntil { model.loadState == .empty && model.day?.date == first }
 
-        store.replace(first)
-        store.replace(replacement)
+        model.selectDate(second)
+        await waitUntil { model.loadState == .empty && model.day?.date == second }
+        model.selectDate(first)
+        await waitUntil { model.loadState == .empty && model.day?.date == first }
 
-        XCTAssertEqual(store.day(for: day), replacement)
+        let requests = await fetcher.requests()
+        XCTAssertEqual(requests, [first, second, first])
     }
 
     func testOnlyUndisplayableActivityResultsInEmptyPresentation() async {
@@ -146,6 +148,17 @@ private actor CountingFetcher: TimelineFetching {
     init(result: Result<TimelineDay, TestError>) { self.result = result }
     func currentCount() -> Int { count }
     func fetch(day: TimelineDate) async throws -> TimelineDay { count += 1; return try result.get() }
+}
+
+private actor RecordingFetcher: TimelineFetching {
+    private var requestedDates: [TimelineDate] = []
+
+    func requests() -> [TimelineDate] { requestedDates }
+
+    func fetch(day: TimelineDate) async throws -> TimelineDay {
+        requestedDates.append(day)
+        return TimelineDay(date: day, timeZoneID: "Asia/Seoul", segments: [])
+    }
 }
 
 private struct DelayedFetcher: TimelineFetching {

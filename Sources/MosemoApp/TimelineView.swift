@@ -1,6 +1,23 @@
 import SwiftUI
 import MosemoAPI
 
+struct TimelineScreen: View {
+    @StateObject private var model: TimelineViewModel
+    let accountID: UUID
+    let signOut: (() -> Void)?
+
+    init(accountID: UUID, signOut: (() -> Void)?, fetcher: any TimelineFetching = TimelineFetcherFactory.make()) {
+        self.accountID = accountID
+        self.signOut = signOut
+        _model = StateObject(wrappedValue: TimelineViewModel(fetcher: fetcher, accountID: accountID))
+    }
+
+    var body: some View {
+        TimelineView(model: model, signOut: signOut)
+            .onChange(of: accountID) { _, newValue in model.switchAccount(to: newValue) }
+    }
+}
+
 struct TimelineView: View {
     @ObservedObject var model: TimelineViewModel
     let signOut: (() -> Void)?

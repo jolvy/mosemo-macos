@@ -17,10 +17,10 @@
 		200000000000000000000020 /* DesktopRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000020 /* DesktopRootView.swift */; };
 		200000000000000000000021 /* LabelReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000021 /* LabelReviewView.swift */; };
 		200000000000000000000022 /* LabelReviewFetching.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000022 /* LabelReviewFetching.swift */; };
-		200000000000000000000023 /* LabelReviewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000023 /* LabelReviewData.swift */; };
+		200000000000000000000023 /* LabelReviewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000023 /* LabelReviewState.swift */; };
 		200000000000000000000024 /* LabelReviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000024 /* LabelReviewViewModel.swift */; };
 		200000000000000000000026 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000026 /* TimelineView.swift */; };
-		200000000000000000000027 /* TimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000027 /* TimelineStore.swift */; };
+		200000000000000000000027 /* TimelineFetching.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000027 /* TimelineFetching.swift */; };
 		200000000000000000000028 /* TimelineViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000028 /* TimelineViewModel.swift */; };
 		200000000000000000000029 /* TimelineUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000029 /* TimelineUITests.swift */; };
 
@@ -40,10 +40,10 @@
 		300000000000000000000020 /* DesktopRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRootView.swift; sourceTree = "<group>"; };
 		300000000000000000000021 /* LabelReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewView.swift; sourceTree = "<group>"; };
 		300000000000000000000022 /* LabelReviewFetching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewFetching.swift; sourceTree = "<group>"; };
-		300000000000000000000023 /* LabelReviewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewData.swift; sourceTree = "<group>"; };
+		300000000000000000000023 /* LabelReviewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewState.swift; sourceTree = "<group>"; };
 		300000000000000000000024 /* LabelReviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReviewViewModel.swift; sourceTree = "<group>"; };
 		300000000000000000000026 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
-		300000000000000000000027 /* TimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineStore.swift; sourceTree = "<group>"; };
+		300000000000000000000027 /* TimelineFetching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineFetching.swift; sourceTree = "<group>"; };
 		300000000000000000000028 /* TimelineViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineViewModel.swift; sourceTree = "<group>"; };
 		300000000000000000000029 /* TimelineUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineUITests.swift; sourceTree = "<group>"; };
 		300000000000000000000025 /* MosemoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MosemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -97,12 +97,11 @@
 				300000000000000000000020 /* DesktopRootView.swift */,
 				300000000000000000000021 /* LabelReviewView.swift */,
 				300000000000000000000022 /* LabelReviewFetching.swift */,
-				300000000000000000000023 /* LabelReviewData.swift */,
+				300000000000000000000023 /* LabelReviewState.swift */,
 				300000000000000000000024 /* LabelReviewViewModel.swift */,
 				300000000000000000000026 /* TimelineView.swift */,
-				300000000000000000000027 /* TimelineStore.swift */,
+				300000000000000000000027 /* TimelineFetching.swift */,
 				300000000000000000000028 /* TimelineViewModel.swift */,
-
 			);
 			path = MosemoApp;
 			sourceTree = "<group>";
@@ -211,12 +210,11 @@
 				200000000000000000000020 /* DesktopRootView.swift in Sources */,
 				200000000000000000000021 /* LabelReviewView.swift in Sources */,
 				200000000000000000000022 /* LabelReviewFetching.swift in Sources */,
-				200000000000000000000023 /* LabelReviewData.swift in Sources */,
+				200000000000000000000023 /* LabelReviewState.swift in Sources */,
 				200000000000000000000024 /* LabelReviewViewModel.swift in Sources */,
 				200000000000000000000026 /* TimelineView.swift in Sources */,
-				200000000000000000000027 /* TimelineStore.swift in Sources */,
+				200000000000000000000027 /* TimelineFetching.swift in Sources */,
 				200000000000000000000028 /* TimelineViewModel.swift in Sources */,
-
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
