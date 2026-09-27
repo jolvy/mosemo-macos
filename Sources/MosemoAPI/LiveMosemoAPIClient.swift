@@ -304,6 +304,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         return Account(
             id: id,
             provider: provider,
+            timeZoneID: response.timezone.rawValue,
             createdAt: response.createdAt,
             lastAuthenticatedAt: response.lastAuthenticatedAt,
             timeZoneID: response.timezone.rawValue
@@ -413,5 +414,133 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         withUnsafeBytes(of: id.uuid) { bytes in
             bytes[6] >> 4 == 7 && bytes[8] >> 6 == 2
         }
+    }
+}
+
+extension LiveMosemoAPIClient: LabelReviewReading {
+    public func listLabels() async throws -> [LabelCatalogEntry] {
+        // The server's catalog endpoint is being developed alongside this client.
+        throw URLError(.unsupportedURL)
+    }
+
+    public func pendingLabelSegments(day: TimelineDate) async throws -> [PendingLabelTimelineSegment] {
+        do {
+            let response = try await authenticatedClient.activitiesGetLabelTimeline(
+                query: .init(date: day.description)
+            )
+            switch response {
+            case .ok(let result):
+                return try result.body.json.flatMap { item -> [PendingLabelTimelineSegment] in
+                    guard case .activityGroup(let group) = item, group.state == .pending else {
+                        return []
+                    }
+                    return try group.segments.map { segment in
+                        guard let id = UUID(uuidString: segment.segmentId) else {
+                            throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                        }
+                        return PendingLabelTimelineSegment(
+                            id: id,
+                            version: segment.segmentVersion,
+                            sourceGroupVersion: group.groupVersion,
+                            startedAt: segment.startedAt,
+                            endedAt: segment.endedAt,
+                            appName: Self.appName(from: segment.context),
+                            title: Self.title(from: segment.context)
+                        )
+                    }
+                }
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent:
+                throw MosemoAPIError.validationFailed
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mappedError = Self.mapCommon(error, statusCode: nil)
+            if mappedError == .authenticationRequired { try? await tokenStore.delete() }
+            throw mappedError
+        }
+    }
+
+    public func labelState(segmentID: UUID) async throws -> RemoteSegmentLabelState {
+        do {
+            let response = try await authenticatedClient.activitiesGetSegmentLabelState(
+                path: .init(segmentId: segmentID.uuidString.lowercased())
+            )
+            switch response {
+            case .ok(let result):
+                switch try result.body.json {
+                case .confirmed(let state):
+                    guard let id = UUID(uuidString: state.segmentId) else {
+                        throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                    return .confirmed(id: id, version: state.segmentVersion)
+                case .pending(let state):
+                    guard let id = UUID(uuidString: state.segmentId) else {
+                        throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                    let proposal: RemoteLabelProposal
+                    switch state.proposal {
+                    case .ready(let ready):
+                        switch ready.selection {
+                        case .label(let label):
+                            guard let labelID = UUID(uuidString: label.labelId) else {
+                                throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                            }
+                            proposal = .readyLabel(labelID)
+                        case .unclassified:
+                            proposal = .readyUnclassified
+                        }
+                    case .waiting: proposal = .waiting
+                    case .processing: proposal = .processing
+                    case .failed: proposal = .failed
+                    }
+                    return .pending(id: id, version: state.segmentVersion, proposal: proposal)
+                }
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .notFound:
+                throw Self.error(forHTTPStatus: 404)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .conflict:
+                throw Self.error(forHTTPStatus: 409)
+            case .unprocessableContent:
+                throw MosemoAPIError.validationFailed
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            let mappedError = Self.mapCommon(error, statusCode: nil)
+            if mappedError == .authenticationRequired { try? await tokenStore.delete() }
+            throw mappedError
+        }
+    }
+
+    private static func appName(from context: Components.Schemas.DetailedActivityContext) -> String {
+        if case .captured(let name) = context.app.name, !name.value.isEmpty { return name.value }
+        if case .captured(let bundle) = context.app.bundleId, !bundle.value.isEmpty { return bundle.value }
+        return "알 수 없는 앱"
+    }
+
+    private static func title(from context: Components.Schemas.DetailedActivityContext) -> String {
+        if case .captured(let window) = context.window, !window.title.value.isEmpty {
+            return window.title.value
+        }
+        if case .browser(let web) = context.web,
+           case .captured(let title) = web.tabTitle,
+           !title.value.isEmpty {
+            return title.value
+        }
+        return "제목 없음"
     }
 }

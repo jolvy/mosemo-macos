@@ -126,7 +126,27 @@ jq '
     (.components.schemas.ActivitySegmentResponse.properties.endedAt) |= without_null_branch |
     (.components.schemas.ActivitySegmentResponse.required) |= map(select(. != "endedAt")) |
     (.components.schemas.CaptureGapResponse.properties.endedAt) |= without_null_branch |
-    (.components.schemas.CaptureGapResponse.required) |= map(select(. != "endedAt"))
+    (.components.schemas.CaptureGapResponse.required) |= map(select(. != "endedAt")) |
+    (.paths["/api/v1/activities/label-timeline"].get.parameters[]
+        | select(.name == "date" and .in == "query") | .schema) |= (
+        . as $schema
+        | ($schema.anyOf | map(select(.type == "string" and .format == "date")) | first) as $date
+        | ($schema | del(.anyOf)) + $date
+    ) |
+    (.components.schemas.ActivityGroupResponse.properties.selection,
+     .components.schemas.ConfirmedActivityLabelStateResponse.properties.proposal,
+     .components.schemas.OpaqueActivityResponse.properties.endedAt,
+     .components.schemas.LabelTimelineCaptureGapResponse.properties.endedAt) |= (
+        . as $schema
+        | ($schema.anyOf | map(select(.type != "null")) | first) as $value
+        | ($schema | del(.anyOf)) + $value
+    ) |
+    (.components.schemas.InProgressActivityResponse.required,
+     .components.schemas.OpaqueActivityResponse.required,
+     .components.schemas.LabelTimelineCaptureGapResponse.required) |= map(select(. != "endedAt")) |
+    .components.schemas.InProgressActivityResponse.properties.endedAt |= (
+        . + {"type": "string", "format": "date-time"}
+    )
 ' "$source_contract" > "$normalized_contract"
 
 if [ -d "$generated_sources" ]; then

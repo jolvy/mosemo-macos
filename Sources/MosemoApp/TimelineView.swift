@@ -40,6 +40,7 @@ struct TimelineView: View {
     @ObservedObject var model: TimelineViewModel
     let signOut: (() -> Void)?
     let showsPreviewNotice: Bool
+    @Environment(\.openWindow) private var openWindow
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
@@ -56,7 +57,10 @@ struct TimelineView: View {
                     Text("하루의 활동과 관찰하지 못한 시간을 살펴봅니다.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let signOut { Button("로그아웃", action: signOut) }
+                if let signOut {
+                    Button("라벨 검토") { openWindow(id: "label-review") }
+                    Button("로그아웃", action: signOut)
+                }
             }
 
             if showsPreviewNotice {

@@ -8,5 +8,7 @@ filter:
     - accountsGetMe
     - activitiesCreate
     - activitiesGetTimeline
+    - activitiesGetLabelTimeline
+    - activitiesGetSegmentLabelState
     - authExchangeToken
     - devicesCreate
