@@ -198,12 +198,14 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.title(for: viewModel.selection(for: viewModel.groups[0].segments[0])), "옛 라벨")
         viewModel.toggleAllGroups()
         XCTAssertEqual(viewModel.missingChoiceCount, 1)
+        XCTAssertFalse(viewModel.canConfirm([viewModel.groups[0].segments[0]]))
 
         viewModel.confirmSelectedGroups()
         XCTAssertEqual(viewModel.segmentCount, 1)
 
         viewModel.setSelection(.label(id: activeLabelID), for: viewModel.groups[0].segments[0])
         XCTAssertEqual(viewModel.missingChoiceCount, 0)
+        XCTAssertTrue(viewModel.canConfirm([viewModel.groups[0].segments[0]]))
         viewModel.confirmSelectedGroups()
         XCTAssertEqual(viewModel.segmentCount, 0)
     }

@@ -137,7 +137,6 @@ API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 �
 `/api/v1/auth/kakao/login` URL은 wrapper가 만들고 callback은
 `ASWebAuthenticationSession`이 수신한다. 생성 client가 호출하는 endpoint는
 `POST /api/v1/auth/token`, `GET /api/v1/accounts/me`,
-<<<<<<< HEAD
 `POST /api/v1/devices`, `POST /api/v1/activities`,
 `GET /api/v1/labels`, `GET /api/v1/activities/label-timeline`,
 `GET /api/v1/activities/segments/{segment_id}/label-state`,
@@ -292,8 +291,9 @@ Collector와의 호출 연결은 후속 작업이다.
 
 ## OpenAPI 갱신 절차
 
-상위 `openapi.json`을 계약으로 사용한다. 서버 스냅샷이 갱신되면 macOS
-저장소에서 다음 명령을 실행한다.
+기본적으로 상위 `openapi.json`을 계약으로 사용하고 형제 서버 저장소의 스냅샷과
+일치하는지 확인한다. 서버 저장소가 다른 위치에 있거나 별도 worktree를 쓸 때는
+`MOSEMO_SERVER_OPENAPI_SNAPSHOT`으로 스냅샷 경로를 직접 지정한다.
 
 ```sh
 cp ../mosemo-server/openapi/openapi.json ../openapi.json
@@ -301,10 +301,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 scripts/update_openapi.sh
 ```
 
+```sh
+MOSEMO_SERVER_OPENAPI_SNAPSHOT=/path/to/mosemo-server/openapi/openapi.json \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+scripts/update_openapi.sh
+```
+
 스크립트는 다음 순서로 동작한다.
 
-1. 상위 계약이 서버 스냅샷과 같고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header·활동 응답을 포함하는지 확인한다.
-   `CapturedText.originalByteLength`는 정확히 `integer | null`, 타임라인 `endedAt`은 `string | null` 조합이어야 한다.
+1. 기본 모드에서는 상위 계약과 서버 스냅샷이 같은지 확인한다. 지정 경로 모드에서는 해당 서버 스냅샷을 직접 읽고, OpenAPI 3.1 및 필수 operation·응답·Device 등록 header·활동 응답을 검증한다.
+   `CapturedText.originalByteLength`와 선택 가능한 응답 필드를 생성기 입력에서 정규화한다.
 2. 기존 `GeneratedSources`를 임시 위치에 백업한다.
 3. generator가 nullable `endedAt`을 누락하지 않도록 임시 입력에서 해당 속성을 optional date-time으로 정규화한다. 서버 계약 파일은 수정하지 않는다.
 4. generator 입력용 `Sources/MosemoAPI/openapi.json` 링크를 임시로 만든다.
