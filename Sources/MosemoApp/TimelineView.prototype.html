@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosemo 관찰 타임라인 · UI 프로토타입</title>
+  <!-- Throwaway UI prototype for issue #7: three variants of the main window, switchable with ?variant=A|B|C. Synthetic server data only. -->
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #232a32; background: #eef0f2; font-size: 14px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 760px; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .window { margin: 28px auto 110px; width: min(1060px, calc(100% - 56px)); min-height: 690px; background: #fff; border: 1px solid #cfd3d9; border-radius: 12px; box-shadow: 0 18px 55px #1b2c3b1a; overflow: hidden; }
+    .titlebar { height: 42px; display: flex; align-items: center; padding: 0 17px; gap: 8px; background: #f7f7f8; border-bottom: 1px solid #e3e5e8; color: #6b737b; font-size: 12px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; background: #ff6059; }
+    .dot:nth-child(2) { background: #ffbd2e; }
+    .dot:nth-child(3) { background: #28c840; }
+    .titlebar span:last-child { margin: auto; transform: translateX(-28px); font-weight: 600; }
+    .apphead { display: flex; justify-content: space-between; align-items: center; padding: 24px 34px 18px; }
+    .apphead h1 { font-size: 27px; letter-spacing: -.04em; margin: 0 0 4px; }
+    .muted { color: #68737e; }
+    .apphead .muted { font-size: 13px; }
+    .account { font-size: 12px; color: #6b737b; }
+    .status { margin: 0 34px 22px; display: flex; gap: 24px; padding: 10px 14px; background: #f5f7f8; border: 1px solid #e9ecef; border-radius: 7px; font-size: 12px; }
+    .status strong { color: #355d4a; font-weight: 600; }
+    .status i { display: inline-block; width: 7px; height: 7px; background: #3b9d65; border-radius: 50%; margin-right: 5px; }
+    .toolbar { margin: 0 34px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e4e7e9; padding-bottom: 18px; }
+    .dategroup, .datebuttons { display: flex; align-items: center; gap: 7px; }
+    .toolbar button { border: 1px solid #d5dbe0; background: white; border-radius: 6px; padding: 5px 9px; color: #343d46; }
+    .toolbar button:hover { background: #f4f6f8; }
+    .toolbar input { border: 1px solid #d5dbe0; border-radius: 6px; padding: 5px 8px; color: #343d46; }
+    .timezone { color: #78828a; font-size: 12px; }
+    .notice { font-size: 12px; color: #717b83; text-align: right; line-height: 1.45; }
+    .content { margin: 0 34px; padding: 24px 0 30px; min-height: 460px; }
+    .sectiontitle { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+    .sectiontitle h2 { margin: 0; font-size: 18px; letter-spacing: -.03em; }
+    .sectiontitle span { color: #78828a; font-size: 12px; }
+    .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .tag.detail { background: #e9f0fa; color: #355e9d; }
+    .tag.opaque { background: #f2eff9; color: #69578e; }
+    .tag.gap { background: #f3f3f3; color: #69727a; }
+    .tag.open { background: #eaf5ef; color: #347c55; }
+    .tag.zero { background: #fff2df; color: #91611d; }
+    .vA .event { display: grid; grid-template-columns: 110px 22px 1fr; gap: 12px; position: relative; min-height: 78px; }
+    .vA .when { font-variant-numeric: tabular-nums; color: #4e5963; padding-top: 3px; font-size: 12px; }
+    .vA .rail { position: relative; display: flex; justify-content: center; }
+    .vA .rail:before { content: ''; position: absolute; width: 2px; top: 12px; bottom: -2px; background: #dfe5e8; }
+    .vA .event:last-child .rail:before { display: none; }
+    .vA .rail:after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #6b8cb8; border: 2px solid white; box-shadow: 0 0 0 1px #c5d0dc; z-index: 1; margin-top: 4px; }
+    .vA .opaque-row .rail:after { background: #917bb4; }
+    .vA .gap-row .rail:after { background: #abb0b6; }
+    .vA .eventmain { border-bottom: 1px solid #eef0f1; padding: 0 0 18px; }
+    .vA .eventmain strong { font-size: 14px; }
+    .vA .eventmain p { margin: 6px 0 0; color: #6d7680; font-size: 12px; }
+    .vA .eventmain .tag { margin-left: 8px; }
+    .vA .gap-row .eventmain { background: #f6f7f7; border: 1px dashed #d6dade; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+    .vA .gap-row { min-height: 92px; }
+    .vA .event .duration { float: right; color: #717b83; font-size: 12px; }
+    .vB .canvas { display: grid; grid-template-columns: 62px minmax(300px, 1fr) 270px; gap: 16px; }
+    .vB .ticks { position: relative; height: 520px; color: #84909a; font-size: 11px; }
+    .vB .ticks span { position: absolute; right: 0; transform: translateY(-7px); font-variant-numeric: tabular-nums; }
+    .vB .track { position: relative; height: 520px; border-left: 1px solid #e0e5e9; background: repeating-linear-gradient(to bottom, transparent 0, transparent 86px, #edf0f2 87px); }
+    .vB .block { position: absolute; left: 15px; right: 8px; border-radius: 6px; padding: 2px 10px; text-align: left; overflow: hidden; border: 1px solid #c9d8e9; background: #eaf1fa; color: #345d93; font-size: 11px; line-height: 16px; }
+    .vB .block strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vB .block.opaque { background: #f1edf8; border-color: #d8cbe9; color: #6d578d; }
+    .vB .block.gap { background: repeating-linear-gradient(135deg, #f5f5f5 0 7px, #e9eaeb 7px 14px); border: 1px dashed #afb5bc; color: #56616b; }
+    .vB .block.open { background: #eaf6ee; border-color: #a8cfb6; color: #397a52; }
+    .vB .point { position: absolute; z-index: 2; right: 8px; transform: translateY(-11px); border: 1px solid #d4a968; border-radius: 4px; background: #fff8e9; color: #855618; font-size: 11px; padding: 2px 6px; line-height: 16px; }
+    .vB .details { border: 1px solid #e1e6e9; border-radius: 7px; padding: 17px; height: fit-content; background: #fafbfc; }
+    .vB .details h3 { margin: 0 0 12px; font-size: 15px; }
+    .vB .details p { color: #65717b; font-size: 12px; line-height: 1.6; }
+    .vB .details dl { display: grid; grid-template-columns: 55px 1fr; gap: 9px; font-size: 12px; }
+    .vB .details dt { color: #81909a; }
+    .vB .details dd { margin: 0; overflow-wrap: anywhere; }
+    .vC .ledger { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .vC th { text-align: left; color: #72808b; font-weight: 600; border-bottom: 1px solid #d9dfe3; padding: 9px 10px; }
+    .vC td { border-bottom: 1px solid #e8ecef; padding: 13px 10px; vertical-align: top; }
+    .vC td:first-child, .vC td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; color: #59656f; }
+    .vC .group td { background: #f5f7f8; color: #57636d !important; font-weight: 600; padding: 8px 10px; }
+    .vC .gapline td { background: #f8f8f8; border-block: 1px dashed #ced4d8; color: #626e78; }
+    .vC .context { color: #7b8790; display: block; margin-top: 4px; }
+    .vC .footnote { color: #79838c; font-size: 12px; margin-top: 18px; }
+    .empty { max-width: 390px; margin: 90px auto; text-align: center; color: #68747e; }
+    .empty .icon { display: block; font-size: 35px; margin-bottom: 12px; }
+    .empty h2 { color: #313a42; font-size: 18px; margin: 0 0 7px; }
+    .empty p { line-height: 1.55; font-size: 13px; }
+    .state { border-top: 1px solid #e8ebed; padding: 10px 34px 13px; color: #737e87; font-size: 11px; background: #fafbfb; }
+    .switcher { position: fixed; z-index: 5; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; border-radius: 999px; color: #fff; background: #27323e; padding: 7px 9px; box-shadow: 0 9px 28px #15283e4d; }
+    .switcher button { border: 0; background: #475462; color: #fff; border-radius: 50%; width: 31px; height: 31px; font-size: 18px; line-height: 1; }
+    .switcher span { min-width: 170px; text-align: center; font-size: 12px; font-weight: 600; }
+    .switcher small { font-size: 10px; color: #c5cdd4; }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>Mosemo</span></div>
+    <header class="apphead"><div><h1>관찰 타임라인</h1><div class="muted">서버가 확인한 활동 기록</div></div><div class="account">계정 · 로그아웃</div></header>
+    <div class="status"><span><i></i><strong>수집 중</strong></span><span>마지막 서버 확인 14:16</span><span>전송 대기 2건</span></div>
+    <div class="toolbar"><div class="dategroup"><div class="datebuttons"><button id="prev" aria-label="이전 날짜">‹</button><button id="next" aria-label="다음 날짜">›</button></div><input id="date" type="date" aria-label="관찰 날짜"><button id="today">오늘</button><span class="timezone">계정 시간대 · Asia/Seoul</span></div><div class="notice">전송 대기 중인 관찰은 이 화면에 아직 나타나지 않습니다.</div></div>
+    <main id="content" class="content"></main>
+    <div id="state" class="state"></div>
+  </div>
+  <nav class="switcher" aria-label="프로토타입 시안 선택"><button id="left" aria-label="이전 시안">‹</button><span id="variant-label"></span><button id="right" aria-label="다음 시안">›</button></nav>
+  <script>
+    const DAY = '2026-09-23';
+    const names = { A: 'A · 시간순 목록', B: 'B · 실제 시간축', C: 'C · 압축 기록표' };
+    const keys = Object.keys(names);
+    const events = [
+      { type: 'detail', from: '09:00', to: '09:42', title: 'Xcode', context: 'MosemoApp.swift · 코드 편집', duration: '42분' },
+      { type: 'detail', from: '09:42', to: '10:10', title: 'Firefox', context: 'github.com · 이슈 확인', duration: '28분' },
+      { type: 'opaque', from: '10:10', to: '10:24', title: '알 수 없는 활동', context: '개인정보 보호로 활동 정보가 가려졌습니다', duration: '14분' },
+      { type: 'gap', from: '10:24', to: '10:48', title: '수집 공백', context: '이 시간에는 활동을 관찰하지 못했습니다', duration: '24분' },
+      { type: 'detail', from: '10:48', to: '11:31', title: 'Notes', context: '작업 메모 · 창 제목', duration: '43분' },
+      { type: 'zero', from: '11:31', to: '11:31', title: 'Finder', context: '순서만 확인된 관찰', duration: '0초' },
+      { type: 'detail', from: '11:31', to: '12:15', title: 'Chrome', context: 'developer.apple.com · 웹 활동', duration: '44분' },
+      { type: 'open', from: '12:15', to: null, title: 'Xcode', context: 'MosemoApp.swift · 아직 열린 구간', duration: '종료 전' }
+    ];
+    // This day is intentionally synthetic: dense enough to expose all issue #7 display states.
+    const dateInput = document.querySelector('#date');
+    const content = document.querySelector('#content');
+    const state = document.querySelector('#state');
+    const label = document.querySelector('#variant-label');
+    const params = new URLSearchParams(location.search);
+    let variant = keys.includes(params.get('variant')) ? params.get('variant') : 'A';
+    dateInput.value = params.get('date') || DAY;
+    function tag(type) {
+      const text = { detail: '상세 활동', opaque: '불투명 활동', gap: '수집 공백', open: '열린 구간', zero: '0초 관찰' }[type];
+      return `<span class="tag ${type}">${text}</span>`;
+    }
+    function time(e) { return `${e.from}–${e.to || '진행 중'}`; }
+    function y(clock) { const [hour, minute] = clock.split(':').map(Number); return ((hour - 9) * 60 + minute) * 520 / 360; }
+    function updateURL() {
+      const p = new URLSearchParams(location.search);
+      p.set('variant', variant);
+      p.set('date', dateInput.value);
+      history.replaceState(null, '', `${location.pathname}?${p}`);
+    }
+    function empty() {
+      return `<div class="empty"><span class="icon">▤</span><h2>이 날짜에 서버 관찰 기록이 없습니다</h2><p>다른 날짜를 선택해 보세요. 동기화 대기 중인 기록은 서버 확인 후 나타납니다.</p></div>`;
+    }
+    function variantA() {
+      return `<div class="vA"><div class="sectiontitle"><h2>9월 23일 수요일</h2><span>시간순 · 8개 구간</span></div>${events.map(e => `<div class="event ${e.type === 'opaque' ? 'opaque-row' : e.type === 'gap' ? 'gap-row' : ''}"><div class="when">${time(e)}</div><div class="rail"></div><div class="eventmain"><span class="duration">${e.duration}</span><strong>${e.title}</strong>${tag(e.type)}<p>${e.context}</p></div></div>`).join('')}</div>`;
+    }
+    function variantB() {
+      const blocks = events.map((e, index) => e.type === 'zero'
+        ? `<div class="point" style="top:${y(e.from)}px">11:31 · Finder · 0초 관찰</div>`
+        : `<button class="block ${e.type}" data-index="${index}" style="top:${y(e.from)}px;height:${y(e.to || '14:16') - y(e.from)}px"><strong>${e.from}–${e.to || '진행 중'} · ${e.title}</strong>${y(e.to || '14:16') - y(e.from) > 40 ? `<span>${e.context}</span>` : ''}</button>`).join('');
+      return `<div class="vB"><div class="sectiontitle"><h2>9월 23일 수요일</h2><span>위치와 길이는 경과 시간 기준</span></div><div class="canvas"><div class="ticks"><span style="top:0">09:00</span><span style="top:87px">10:00</span><span style="top:174px">11:00</span><span style="top:261px">12:00</span><span style="top:348px">13:00</span><span style="top:435px">14:00</span></div><div class="track">${blocks}</div><aside id="selected" class="details"></aside></div></div>`;
+    }
+    function detailPanel(e) {
+      return `<h3>${e.title}</h3>${tag(e.type)}<p>${e.context}</p><dl><dt>시각</dt><dd>${time(e)}</dd><dt>길이</dt><dd>${e.duration}</dd><dt>출처</dt><dd>서버 관찰 타임라인</dd></dl>`;
+    }
+    function variantC() {
+      const row = e => `<tr class="${e.type === 'gap' ? 'gapline' : ''}"><td>${e.from}</td><td>${e.to || '진행 중'}</td><td>${e.duration}</td><td><strong>${e.title}</strong><span class="context">${e.context}</span></td><td>${tag(e.type)}</td></tr>`;
+      return `<div class="vC"><div class="sectiontitle"><h2>9월 23일 수요일 · 관찰 기록</h2><span>8개 구간 · 시간순</span></div><table class="ledger"><thead><tr><th>시작</th><th>종료</th><th>길이</th><th>관찰 내용</th><th>상태</th></tr></thead><tbody><tr class="group"><td colspan="5">오전 9–10시</td></tr>${events.slice(0, 4).map(row).join('')}<tr class="group"><td colspan="5">오전 10시 이후</td></tr>${events.slice(4).map(row).join('')}</tbody></table><p class="footnote">수집 공백은 관찰된 활동이 아닙니다. 열린 구간의 종료 시각은 서버가 확인한 뒤 표시됩니다.</p></div>`;
+    }
+    function render() {
+      updateURL();
+      label.innerHTML = `${names[variant]}<br><small>← → 키로 전환</small>`;
+      const isSample = dateInput.value === DAY;
+      content.innerHTML = isSample ? ({ A: variantA, B: variantB, C: variantC }[variant])() : empty();
+      state.textContent = `프로토타입 상태 · 시안 ${variant} · 날짜 ${dateInput.value} (계정 시간대 Asia/Seoul) · ${isSample ? '서버 응답 예시 8개: 상세 3, 불투명 1, 공백 1, 0초 1, 열린 구간 1, 웹 활동 1' : '서버 응답 예시 0개'}`;
+      if (isSample && variant === 'B') {
+        const selected = document.querySelector('#selected');
+        selected.innerHTML = detailPanel(events[0]);
+        document.querySelectorAll('.block').forEach(block => block.addEventListener('click', () => {
+          selected.innerHTML = detailPanel(events[Number(block.dataset.index)]);
+        }));
+      }
+    }
+    function cycle(direction) { variant = keys[(keys.indexOf(variant) + direction + keys.length) % keys.length]; render(); }
+    function moveDay(direction) { const d = new Date(`${dateInput.value}T12:00:00`); d.setDate(d.getDate() + direction); dateInput.value = d.toISOString().slice(0, 10); render(); }
+    document.querySelector('#left').onclick = () => cycle(-1);
+    document.querySelector('#right').onclick = () => cycle(1);
+    document.querySelector('#prev').onclick = () => moveDay(-1);
+    document.querySelector('#next').onclick = () => moveDay(1);
+    document.querySelector('#today').onclick = () => { dateInput.value = DAY; render(); };
+    dateInput.onchange = render;
+    document.addEventListener('keydown', e => {
+      if (e.target.closest('input, textarea, [contenteditable]')) return;
+      if (e.key === 'ArrowLeft') cycle(-1);
+      if (e.key === 'ArrowRight') cycle(1);
+    });
+    render();
+  </script>
+</body>
+</html>

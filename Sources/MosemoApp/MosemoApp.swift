@@ -46,11 +46,25 @@ struct MosemoApp: App {
 
     var body: some Scene {
         WindowGroup("Mosemo", id: "main") {
-            DesktopRootView(
-                model: model,
-                auth: auth,
-                onboardingCompleted: $onboardingCompleted
-            )
+            Group {
+                #if DEBUG
+                if CommandLine.arguments.contains("--timeline-ui-preview") {
+                    TimelineScreen(accountID: UUID(uuidString: "00000000-0000-0000-0000-000000000019")!, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 30_000_000))
+                } else {
+                    DesktopRootView(
+                        model: model,
+                        auth: auth,
+                        onboardingCompleted: $onboardingCompleted
+                    )
+                }
+                #else
+                DesktopRootView(
+                    model: model,
+                    auth: auth,
+                    onboardingCompleted: $onboardingCompleted
+                )
+                #endif
+            }
             .frame(minWidth: 720, minHeight: 520)
         }
         .defaultSize(width: 900, height: 640)
@@ -72,6 +86,12 @@ struct MosemoApp: App {
                 .frame(minWidth: 720, minHeight: 520)
         }
         .defaultSize(width: 1050, height: 700)
+        Window("타임라인 UI 미리보기", id: "timeline-preview") {
+            TimelineScreen(accountID: UUID(uuidString: "00000000-0000-0000-0000-000000000019")!, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 50_000_000))
+                .frame(minWidth: 760, minHeight: 520)
+        }
+        .defaultSize(width: 900, height: 640)
+
         #endif
     }
 }
@@ -137,6 +157,10 @@ private struct CollectorMenuView: View {
                 #if DEBUG
                 Button("라벨 검토 시안") {
                     openWindow(id: "label-review-demo")
+                    NSApplication.shared.activate()
+                }
+                Button("타임라인 UI 미리보기") {
+                    openWindow(id: "timeline-preview")
                     NSApplication.shared.activate()
                 }
                 #endif
