@@ -304,7 +304,6 @@ public struct LiveMosemoAPIClient: MosemoAPIClient {
         return Account(
             id: id,
             provider: provider,
-            timeZoneID: response.timezone.rawValue,
             createdAt: response.createdAt,
             lastAuthenticatedAt: response.lastAuthenticatedAt,
             timeZoneID: response.timezone.rawValue
