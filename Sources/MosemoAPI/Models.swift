@@ -10,12 +10,10 @@ public struct Account: Equatable, Sendable {
     public let timeZoneID: String
     public let createdAt: Date
     public let lastAuthenticatedAt: Date
-    public let timeZoneID: String
 
     public init(
         id: UUID,
         provider: AccountProvider,
-        timeZoneID: String = "Asia/Seoul",
         createdAt: Date,
         lastAuthenticatedAt: Date,
         timeZoneID: String
@@ -25,7 +23,6 @@ public struct Account: Equatable, Sendable {
         self.timeZoneID = timeZoneID
         self.createdAt = createdAt
         self.lastAuthenticatedAt = lastAuthenticatedAt
-        self.timeZoneID = timeZoneID
     }
 }
 

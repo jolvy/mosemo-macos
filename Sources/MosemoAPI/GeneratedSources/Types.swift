@@ -25,6 +25,20 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/activities`.
     /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
     func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output
+    /// 날짜별 라벨 타임라인 조회
+    ///
+    /// 계정 시간대의 날짜별 라벨 타임라인을 반환합니다. date를 생략하면 계정 시간대의 오늘을 조회하며, 시간상 연속이고 라벨과 확정 상태가 같은 닫힌 상세 활동 구간만 하나의 항목으로 묶습니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/label-timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)`.
+    func activitiesGetLabelTimeline(_ input: Operations.ActivitiesGetLabelTimeline.Input) async throws -> Operations.ActivitiesGetLabelTimeline.Output
+    /// 관찰 구간 라벨 상태 조회
+    ///
+    /// 인증된 계정의 닫힌 상세 관찰 구간 하나에 저장된 AI 제안과 라벨 확정 상태를 구분해 조회합니다. segmentVersion은 이후 확정 요청의 대상 버전입니다. 실패하거나 처리 중인 제안도 확정 전에는 검토 대기입니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/segments/{segment_id}/label-state`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)`.
+    func activitiesGetSegmentLabelState(_ input: Operations.ActivitiesGetSegmentLabelState.Input) async throws -> Operations.ActivitiesGetSegmentLabelState.Output
     /// 날짜별 관찰 타임라인 조회
     ///
     /// 계정 시간대의 달력 날짜 하나에 해당하는 전체 관찰 타임라인을 날짜 경계에서 자르지 않은 구간 배열로 반환합니다.
@@ -46,6 +60,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/devices`.
     /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
     func devicesCreate(_ input: Operations.DevicesCreate.Input) async throws -> Operations.DevicesCreate.Output
+    /// 내 라벨 목록 조회
+    ///
+    /// 인증된 계정의 사용 중인 라벨과 보관한 라벨을 함께 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/labels`.
+    /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)`.
+    func labelsList(_ input: Operations.LabelsList.Input) async throws -> Operations.LabelsList.Output
 }
 
 /// Convenience overloads for operation inputs.
@@ -72,6 +93,36 @@ extension APIProtocol {
         try await activitiesCreate(Operations.ActivitiesCreate.Input(
             headers: headers,
             body: body
+        ))
+    }
+    /// 날짜별 라벨 타임라인 조회
+    ///
+    /// 계정 시간대의 날짜별 라벨 타임라인을 반환합니다. date를 생략하면 계정 시간대의 오늘을 조회하며, 시간상 연속이고 라벨과 확정 상태가 같은 닫힌 상세 활동 구간만 하나의 항목으로 묶습니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/label-timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)`.
+    internal func activitiesGetLabelTimeline(
+        query: Operations.ActivitiesGetLabelTimeline.Input.Query = .init(),
+        headers: Operations.ActivitiesGetLabelTimeline.Input.Headers = .init()
+    ) async throws -> Operations.ActivitiesGetLabelTimeline.Output {
+        try await activitiesGetLabelTimeline(Operations.ActivitiesGetLabelTimeline.Input(
+            query: query,
+            headers: headers
+        ))
+    }
+    /// 관찰 구간 라벨 상태 조회
+    ///
+    /// 인증된 계정의 닫힌 상세 관찰 구간 하나에 저장된 AI 제안과 라벨 확정 상태를 구분해 조회합니다. segmentVersion은 이후 확정 요청의 대상 버전입니다. 실패하거나 처리 중인 제안도 확정 전에는 검토 대기입니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/segments/{segment_id}/label-state`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)`.
+    internal func activitiesGetSegmentLabelState(
+        path: Operations.ActivitiesGetSegmentLabelState.Input.Path,
+        headers: Operations.ActivitiesGetSegmentLabelState.Input.Headers = .init()
+    ) async throws -> Operations.ActivitiesGetSegmentLabelState.Output {
+        try await activitiesGetSegmentLabelState(Operations.ActivitiesGetSegmentLabelState.Input(
+            path: path,
+            headers: headers
         ))
     }
     /// 날짜별 관찰 타임라인 조회
@@ -112,6 +163,15 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
     internal func devicesCreate(headers: Operations.DevicesCreate.Input.Headers) async throws -> Operations.DevicesCreate.Output {
         try await devicesCreate(Operations.DevicesCreate.Input(headers: headers))
+    }
+    /// 내 라벨 목록 조회
+    ///
+    /// 인증된 계정의 사용 중인 라벨과 보관한 라벨을 함께 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/labels`.
+    /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)`.
+    internal func labelsList(headers: Operations.LabelsList.Input.Headers = .init()) async throws -> Operations.LabelsList.Output {
+        try await labelsList(Operations.LabelsList.Input(headers: headers))
     }
 }
 
@@ -290,6 +350,127 @@ internal enum Components {
                 case eventId
                 case receivedAt
                 case status
+            }
+        }
+        /// Adjacent closed detailed activity segments with matching label state.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse`.
+        internal struct ActivityGroupResponse: Codable, Hashable, Sendable {
+            /// 묶음의 마지막 구간 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/endedAt`.
+            internal var endedAt: Foundation.Date
+            /// 묶음의 구성 또는 확정 상태가 바뀌면 달라지는 불투명 버전입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/groupVersion`.
+            internal var groupVersion: Swift.String
+            /// 라벨 활동 묶음입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/itemType`.
+            internal enum ItemTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case activityGroup = "activity_group"
+            }
+            /// 라벨 활동 묶음입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/itemType`.
+            internal var itemType: Components.Schemas.ActivityGroupResponse.ItemTypePayload
+            /// 묶음에 포함된 닫힌 원본 구간을 관찰 순서대로 담습니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/segments`.
+            internal var segments: [Components.Schemas.LabelTimelineSegmentResponse]
+            /// 확정 상태일 때의 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/selection`.
+            internal enum SelectionPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/selection/LabelTimelineLabelSelectionResponse`.
+                case label(Components.Schemas.LabelTimelineLabelSelectionResponse)
+                /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/selection/UnclassifiedSelectionResponse`.
+                case unclassified(Components.Schemas.UnclassifiedSelectionResponse)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "label":
+                        self = .label(try .init(from: decoder))
+                    case "unclassified":
+                        self = .unclassified(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .label(value):
+                        try value.encode(to: encoder)
+                    case let .unclassified(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 확정 상태일 때의 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/selection`.
+            internal var selection: Components.Schemas.ActivityGroupResponse.SelectionPayload?
+            /// 묶음의 첫 구간 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// 묶음의 공통 라벨 확정 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/state`.
+            internal enum StatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case pending = "pending"
+                case confirmed = "confirmed"
+            }
+            /// 묶음의 공통 라벨 확정 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityGroupResponse/state`.
+            internal var state: Components.Schemas.ActivityGroupResponse.StatePayload
+            /// Creates a new `ActivityGroupResponse`.
+            ///
+            /// - Parameters:
+            ///   - endedAt: 묶음의 마지막 구간 종료 시각입니다.
+            ///   - groupVersion: 묶음의 구성 또는 확정 상태가 바뀌면 달라지는 불투명 버전입니다.
+            ///   - itemType: 라벨 활동 묶음입니다.
+            ///   - segments: 묶음에 포함된 닫힌 원본 구간을 관찰 순서대로 담습니다.
+            ///   - selection: 확정 상태일 때의 라벨 또는 미분류 선택입니다.
+            ///   - startedAt: 묶음의 첫 구간 시작 시각입니다.
+            ///   - state: 묶음의 공통 라벨 확정 상태입니다.
+            internal init(
+                endedAt: Foundation.Date,
+                groupVersion: Swift.String,
+                itemType: Components.Schemas.ActivityGroupResponse.ItemTypePayload,
+                segments: [Components.Schemas.LabelTimelineSegmentResponse],
+                selection: Components.Schemas.ActivityGroupResponse.SelectionPayload? = nil,
+                startedAt: Foundation.Date,
+                state: Components.Schemas.ActivityGroupResponse.StatePayload
+            ) {
+                self.endedAt = endedAt
+                self.groupVersion = groupVersion
+                self.itemType = itemType
+                self.segments = segments
+                self.selection = selection
+                self.startedAt = startedAt
+                self.state = state
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case endedAt
+                case groupVersion
+                case itemType
+                case segments
+                case selection
+                case startedAt
+                case state
             }
         }
         /// A complete snapshot of the focused activity at one point in time.
@@ -1245,6 +1426,171 @@ internal enum Components {
                 ])
             }
         }
+        /// 사용자가 라벨 또는 미분류를 확정한 관찰 구간 상태입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse`.
+        internal struct ConfirmedActivityLabelStateResponse: Codable, Hashable, Sendable {
+            /// 최초 확정 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/confirmedAt`.
+            internal var confirmedAt: Foundation.Date
+            /// 확정 전에 생성된 AI 제안입니다. 직접 확정했다면 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal`.
+            internal enum ProposalPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal/FailedLabelProposalResponse`.
+                case failed(Components.Schemas.FailedLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal/ProcessingLabelProposalResponse`.
+                case processing(Components.Schemas.ProcessingLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal/ReadyLabelProposalResponse`.
+                case ready(Components.Schemas.ReadyLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal/WaitingLabelProposalResponse`.
+                case waiting(Components.Schemas.WaitingLabelProposalResponse)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "failed":
+                        self = .failed(try .init(from: decoder))
+                    case "processing":
+                        self = .processing(try .init(from: decoder))
+                    case "ready":
+                        self = .ready(try .init(from: decoder))
+                    case "waiting":
+                        self = .waiting(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .failed(value):
+                        try value.encode(to: encoder)
+                    case let .processing(value):
+                        try value.encode(to: encoder)
+                    case let .ready(value):
+                        try value.encode(to: encoder)
+                    case let .waiting(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 확정 전에 생성된 AI 제안입니다. 직접 확정했다면 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/proposal`.
+            internal var proposal: Components.Schemas.ConfirmedActivityLabelStateResponse.ProposalPayload?
+            /// 현재 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 현재 관찰 구간의 불투명 version입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/segmentVersion`.
+            internal var segmentVersion: Swift.String
+            /// 사용자가 확정한 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/selection`.
+            internal enum SelectionPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/selection/LabelSelectionResponse`.
+                case label(Components.Schemas.LabelSelectionResponse)
+                /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/selection/UnclassifiedSelectionResponse`.
+                case unclassified(Components.Schemas.UnclassifiedSelectionResponse)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "label":
+                        self = .label(try .init(from: decoder))
+                    case "unclassified":
+                        self = .unclassified(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .label(value):
+                        try value.encode(to: encoder)
+                    case let .unclassified(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 사용자가 확정한 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/selection`.
+            internal var selection: Components.Schemas.ConfirmedActivityLabelStateResponse.SelectionPayload
+            /// 사용자가 라벨 또는 미분류를 확정한 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/state`.
+            internal enum StatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case confirmed = "confirmed"
+            }
+            /// 사용자가 라벨 또는 미분류를 확정한 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/state`.
+            internal var state: Components.Schemas.ConfirmedActivityLabelStateResponse.StatePayload
+            /// 마지막 정정 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConfirmedActivityLabelStateResponse/updatedAt`.
+            internal var updatedAt: Foundation.Date
+            /// Creates a new `ConfirmedActivityLabelStateResponse`.
+            ///
+            /// - Parameters:
+            ///   - confirmedAt: 최초 확정 시각입니다.
+            ///   - proposal: 확정 전에 생성된 AI 제안입니다. 직접 확정했다면 null입니다.
+            ///   - segmentId: 현재 관찰 활동 구간 식별자입니다.
+            ///   - segmentVersion: 현재 관찰 구간의 불투명 version입니다.
+            ///   - selection: 사용자가 확정한 라벨 또는 미분류 선택입니다.
+            ///   - state: 사용자가 라벨 또는 미분류를 확정한 상태입니다.
+            ///   - updatedAt: 마지막 정정 시각입니다.
+            internal init(
+                confirmedAt: Foundation.Date,
+                proposal: Components.Schemas.ConfirmedActivityLabelStateResponse.ProposalPayload? = nil,
+                segmentId: Swift.String,
+                segmentVersion: Swift.String,
+                selection: Components.Schemas.ConfirmedActivityLabelStateResponse.SelectionPayload,
+                state: Components.Schemas.ConfirmedActivityLabelStateResponse.StatePayload,
+                updatedAt: Foundation.Date
+            ) {
+                self.confirmedAt = confirmedAt
+                self.proposal = proposal
+                self.segmentId = segmentId
+                self.segmentVersion = segmentVersion
+                self.selection = selection
+                self.state = state
+                self.updatedAt = updatedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case confirmedAt
+                case proposal
+                case segmentId
+                case segmentVersion
+                case selection
+                case state
+                case updatedAt
+            }
+        }
         /// A privacy-filtered activity context with observable identifiers.
         ///
         /// - Remark: Generated from `#/components/schemas/DetailedActivityContext`.
@@ -1523,6 +1869,349 @@ internal enum Components {
                 ])
             }
         }
+        /// AI 제안 생성에 실패했지만 활동은 검토 대기 상태입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FailedLabelProposalResponse`.
+        internal struct FailedLabelProposalResponse: Codable, Hashable, Sendable {
+            /// AI 제안 생성 실패 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FailedLabelProposalResponse/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case failed = "failed"
+            }
+            /// AI 제안 생성 실패 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FailedLabelProposalResponse/status`.
+            internal var status: Components.Schemas.FailedLabelProposalResponse.StatusPayload
+            /// Creates a new `FailedLabelProposalResponse`.
+            ///
+            /// - Parameters:
+            ///   - status: AI 제안 생성 실패 상태입니다.
+            internal init(status: Components.Schemas.FailedLabelProposalResponse.StatusPayload) {
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+            }
+        }
+        /// A detailed activity segment whose end is not yet known.
+        ///
+        /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse`.
+        internal struct InProgressActivityResponse: Codable, Hashable, Sendable {
+            /// 개인정보 필터 후 상세 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/context`.
+            internal var context: Components.Schemas.DetailedActivityContext
+            /// 종료가 아직 확인되지 않아 항상 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 아직 종료가 확인되지 않은 상세 활동입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/itemType`.
+            internal enum ItemTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case inProgressActivity = "in_progress_activity"
+            }
+            /// 아직 종료가 확인되지 않은 상세 활동입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/itemType`.
+            internal var itemType: Components.Schemas.InProgressActivityResponse.ItemTypePayload
+            /// 마지막 실제 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/lastObservedAt`.
+            internal var lastObservedAt: Foundation.Date
+            /// 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 관찰 구간 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `InProgressActivityResponse`.
+            ///
+            /// - Parameters:
+            ///   - context: 개인정보 필터 후 상세 관찰 문맥입니다.
+            ///   - endedAt: 종료가 아직 확인되지 않아 항상 null입니다.
+            ///   - itemType: 아직 종료가 확인되지 않은 상세 활동입니다.
+            ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
+            ///   - segmentId: 관찰 활동 구간 식별자입니다.
+            ///   - startedAt: 관찰 구간 시작 시각입니다.
+            internal init(
+                context: Components.Schemas.DetailedActivityContext,
+                endedAt: Foundation.Date? = nil,
+                itemType: Components.Schemas.InProgressActivityResponse.ItemTypePayload,
+                lastObservedAt: Foundation.Date,
+                segmentId: Swift.String,
+                startedAt: Foundation.Date
+            ) {
+                self.context = context
+                self.endedAt = endedAt
+                self.itemType = itemType
+                self.lastObservedAt = lastObservedAt
+                self.segmentId = segmentId
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case endedAt
+                case itemType
+                case lastObservedAt
+                case segmentId
+                case startedAt
+            }
+        }
+        /// 계정의 활성 또는 보관 라벨입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelResponse`.
+        internal struct LabelResponse: Codable, Hashable, Sendable {
+            /// 보관 시각입니다. 사용 중인 라벨이면 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/archivedAt`.
+            internal var archivedAt: Foundation.Date?
+            /// 라벨 생성 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/createdAt`.
+            internal var createdAt: Foundation.Date
+            /// 현재 라벨 표시 이름입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/displayName`.
+            internal var displayName: Swift.String
+            /// 라벨의 고유 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/labelId`.
+            internal var labelId: Swift.String
+            /// 라벨 마지막 갱신 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/updatedAt`.
+            internal var updatedAt: Foundation.Date
+            /// Creates a new `LabelResponse`.
+            ///
+            /// - Parameters:
+            ///   - archivedAt: 보관 시각입니다. 사용 중인 라벨이면 null입니다.
+            ///   - createdAt: 라벨 생성 시각입니다.
+            ///   - displayName: 현재 라벨 표시 이름입니다.
+            ///   - labelId: 라벨의 고유 식별자입니다.
+            ///   - updatedAt: 라벨 마지막 갱신 시각입니다.
+            internal init(
+                archivedAt: Foundation.Date? = nil,
+                createdAt: Foundation.Date,
+                displayName: Swift.String,
+                labelId: Swift.String,
+                updatedAt: Foundation.Date
+            ) {
+                self.archivedAt = archivedAt
+                self.createdAt = createdAt
+                self.displayName = displayName
+                self.labelId = labelId
+                self.updatedAt = updatedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case archivedAt
+                case createdAt
+                case displayName
+                case labelId
+                case updatedAt
+            }
+        }
+        /// 응답에 포함되는 라벨 선택입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelSelectionResponse`.
+        internal struct LabelSelectionResponse: Codable, Hashable, Sendable {
+            /// 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionResponse/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case label = "label"
+            }
+            /// 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionResponse/kind`.
+            internal var kind: Components.Schemas.LabelSelectionResponse.KindPayload
+            /// 선택한 라벨 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionResponse/labelId`.
+            internal var labelId: Swift.String
+            /// Creates a new `LabelSelectionResponse`.
+            ///
+            /// - Parameters:
+            ///   - kind: 라벨 선택입니다.
+            ///   - labelId: 선택한 라벨 식별자입니다.
+            internal init(
+                kind: Components.Schemas.LabelSelectionResponse.KindPayload,
+                labelId: Swift.String
+            ) {
+                self.kind = kind
+                self.labelId = labelId
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+                case labelId
+            }
+        }
+        /// A period when activity collection was explicitly suspended.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse`.
+        internal struct LabelTimelineCaptureGapResponse: Codable, Hashable, Sendable {
+            /// 수집 공백 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 명시적인 수집 공백입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/itemType`.
+            internal enum ItemTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case captureGap = "capture_gap"
+            }
+            /// 명시적인 수집 공백입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/itemType`.
+            internal var itemType: Components.Schemas.LabelTimelineCaptureGapResponse.ItemTypePayload
+            /// 첫 수집 중단의 사유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/reason`.
+            internal var reason: Swift.String
+            /// 수집 공백 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 수집 공백 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `LabelTimelineCaptureGapResponse`.
+            ///
+            /// - Parameters:
+            ///   - endedAt: 수집 공백 종료 시각입니다.
+            ///   - itemType: 명시적인 수집 공백입니다.
+            ///   - reason: 첫 수집 중단의 사유입니다.
+            ///   - segmentId: 수집 공백 구간 식별자입니다.
+            ///   - startedAt: 수집 공백 시작 시각입니다.
+            internal init(
+                endedAt: Foundation.Date? = nil,
+                itemType: Components.Schemas.LabelTimelineCaptureGapResponse.ItemTypePayload,
+                reason: Swift.String,
+                segmentId: Swift.String,
+                startedAt: Foundation.Date
+            ) {
+                self.endedAt = endedAt
+                self.itemType = itemType
+                self.reason = reason
+                self.segmentId = segmentId
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case endedAt
+                case itemType
+                case reason
+                case segmentId
+                case startedAt
+            }
+        }
+        /// A confirmed label and its current display name.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelTimelineLabelSelectionResponse`.
+        internal struct LabelTimelineLabelSelectionResponse: Codable, Hashable, Sendable {
+            /// 현재 라벨 표시 이름입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineLabelSelectionResponse/displayName`.
+            internal var displayName: Swift.String
+            /// 확정된 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineLabelSelectionResponse/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case label = "label"
+            }
+            /// 확정된 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineLabelSelectionResponse/kind`.
+            internal var kind: Components.Schemas.LabelTimelineLabelSelectionResponse.KindPayload
+            /// 확정 라벨 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineLabelSelectionResponse/labelId`.
+            internal var labelId: Swift.String
+            /// Creates a new `LabelTimelineLabelSelectionResponse`.
+            ///
+            /// - Parameters:
+            ///   - displayName: 현재 라벨 표시 이름입니다.
+            ///   - kind: 확정된 라벨 선택입니다.
+            ///   - labelId: 확정 라벨 식별자입니다.
+            internal init(
+                displayName: Swift.String,
+                kind: Components.Schemas.LabelTimelineLabelSelectionResponse.KindPayload,
+                labelId: Swift.String
+            ) {
+                self.displayName = displayName
+                self.kind = kind
+                self.labelId = labelId
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case displayName
+                case kind
+                case labelId
+            }
+        }
+        /// A closed observation segment included in a label timeline group.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse`.
+        internal struct LabelTimelineSegmentResponse: Codable, Hashable, Sendable {
+            /// 개인정보 필터 후 상세 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/context`.
+            internal var context: Components.Schemas.DetailedActivityContext
+            /// 종료가 확인된 관찰 구간 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/endedAt`.
+            internal var endedAt: Foundation.Date
+            /// 마지막 실제 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/lastObservedAt`.
+            internal var lastObservedAt: Foundation.Date
+            /// 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 현재 관찰 구간의 불투명 version입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/segmentVersion`.
+            internal var segmentVersion: Swift.String
+            /// 관찰 구간 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `LabelTimelineSegmentResponse`.
+            ///
+            /// - Parameters:
+            ///   - context: 개인정보 필터 후 상세 관찰 문맥입니다.
+            ///   - endedAt: 종료가 확인된 관찰 구간 시각입니다.
+            ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
+            ///   - segmentId: 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
+            ///   - segmentVersion: 현재 관찰 구간의 불투명 version입니다.
+            ///   - startedAt: 관찰 구간 시작 시각입니다.
+            internal init(
+                context: Components.Schemas.DetailedActivityContext,
+                endedAt: Foundation.Date,
+                lastObservedAt: Foundation.Date,
+                segmentId: Swift.String,
+                segmentVersion: Swift.String,
+                startedAt: Foundation.Date
+            ) {
+                self.context = context
+                self.endedAt = endedAt
+                self.lastObservedAt = lastObservedAt
+                self.segmentId = segmentId
+                self.segmentVersion = segmentVersion
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case endedAt
+                case lastObservedAt
+                case segmentId
+                case segmentVersion
+                case startedAt
+            }
+        }
         /// A non-browser application context.
         ///
         /// - Remark: Generated from `#/components/schemas/NotApplicableWebContext`.
@@ -1591,6 +2280,282 @@ internal enum Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "kind"
                 ])
+            }
+        }
+        /// An activity observation with identifying details removed.
+        ///
+        /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse`.
+        internal struct OpaqueActivityResponse: Codable, Hashable, Sendable {
+            /// 식별 정보가 제거된 관찰 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/context`.
+            internal var context: Components.Schemas.OpaqueActivityContext
+            /// 종료가 확인된 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 불투명 활동입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/itemType`.
+            internal enum ItemTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case opaqueActivity = "opaque_activity"
+            }
+            /// 불투명 활동입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/itemType`.
+            internal var itemType: Components.Schemas.OpaqueActivityResponse.ItemTypePayload
+            /// 마지막 실제 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/lastObservedAt`.
+            internal var lastObservedAt: Foundation.Date
+            /// 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 관찰 구간 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `OpaqueActivityResponse`.
+            ///
+            /// - Parameters:
+            ///   - context: 식별 정보가 제거된 관찰 문맥입니다.
+            ///   - endedAt: 종료가 확인된 시각입니다.
+            ///   - itemType: 불투명 활동입니다.
+            ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
+            ///   - segmentId: 관찰 활동 구간 식별자입니다.
+            ///   - startedAt: 관찰 구간 시작 시각입니다.
+            internal init(
+                context: Components.Schemas.OpaqueActivityContext,
+                endedAt: Foundation.Date? = nil,
+                itemType: Components.Schemas.OpaqueActivityResponse.ItemTypePayload,
+                lastObservedAt: Foundation.Date,
+                segmentId: Swift.String,
+                startedAt: Foundation.Date
+            ) {
+                self.context = context
+                self.endedAt = endedAt
+                self.itemType = itemType
+                self.lastObservedAt = lastObservedAt
+                self.segmentId = segmentId
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case endedAt
+                case itemType
+                case lastObservedAt
+                case segmentId
+                case startedAt
+            }
+        }
+        /// 아직 라벨을 확정하지 않은 관찰 구간 상태입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse`.
+        internal struct PendingActivityLabelStateResponse: Codable, Hashable, Sendable {
+            /// AI 제안의 처리 상태와 준비된 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal`.
+            internal enum ProposalPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal/FailedLabelProposalResponse`.
+                case failed(Components.Schemas.FailedLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal/ProcessingLabelProposalResponse`.
+                case processing(Components.Schemas.ProcessingLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal/ReadyLabelProposalResponse`.
+                case ready(Components.Schemas.ReadyLabelProposalResponse)
+                /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal/WaitingLabelProposalResponse`.
+                case waiting(Components.Schemas.WaitingLabelProposalResponse)
+                internal enum CodingKeys: String, CodingKey {
+                    case status
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .status
+                    )
+                    switch discriminator {
+                    case "failed":
+                        self = .failed(try .init(from: decoder))
+                    case "processing":
+                        self = .processing(try .init(from: decoder))
+                    case "ready":
+                        self = .ready(try .init(from: decoder))
+                    case "waiting":
+                        self = .waiting(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.status,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .failed(value):
+                        try value.encode(to: encoder)
+                    case let .processing(value):
+                        try value.encode(to: encoder)
+                    case let .ready(value):
+                        try value.encode(to: encoder)
+                    case let .waiting(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// AI 제안의 처리 상태와 준비된 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/proposal`.
+            internal var proposal: Components.Schemas.PendingActivityLabelStateResponse.ProposalPayload
+            /// 현재 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/segmentId`.
+            internal var segmentId: Swift.String
+            /// 현재 관찰 구간의 불투명 version입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/segmentVersion`.
+            internal var segmentVersion: Swift.String
+            /// 아직 라벨 또는 미분류를 확정하지 않은 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/state`.
+            internal enum StatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case pending = "pending"
+            }
+            /// 아직 라벨 또는 미분류를 확정하지 않은 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/PendingActivityLabelStateResponse/state`.
+            internal var state: Components.Schemas.PendingActivityLabelStateResponse.StatePayload
+            /// Creates a new `PendingActivityLabelStateResponse`.
+            ///
+            /// - Parameters:
+            ///   - proposal: AI 제안의 처리 상태와 준비된 선택입니다.
+            ///   - segmentId: 현재 관찰 활동 구간 식별자입니다.
+            ///   - segmentVersion: 현재 관찰 구간의 불투명 version입니다.
+            ///   - state: 아직 라벨 또는 미분류를 확정하지 않은 상태입니다.
+            internal init(
+                proposal: Components.Schemas.PendingActivityLabelStateResponse.ProposalPayload,
+                segmentId: Swift.String,
+                segmentVersion: Swift.String,
+                state: Components.Schemas.PendingActivityLabelStateResponse.StatePayload
+            ) {
+                self.proposal = proposal
+                self.segmentId = segmentId
+                self.segmentVersion = segmentVersion
+                self.state = state
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case proposal
+                case segmentId
+                case segmentVersion
+                case state
+            }
+        }
+        /// 작업자가 AI 제안을 생성하고 있습니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ProcessingLabelProposalResponse`.
+        internal struct ProcessingLabelProposalResponse: Codable, Hashable, Sendable {
+            /// AI 제안 생성 중 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProcessingLabelProposalResponse/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case processing = "processing"
+            }
+            /// AI 제안 생성 중 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProcessingLabelProposalResponse/status`.
+            internal var status: Components.Schemas.ProcessingLabelProposalResponse.StatusPayload
+            /// Creates a new `ProcessingLabelProposalResponse`.
+            ///
+            /// - Parameters:
+            ///   - status: AI 제안 생성 중 상태입니다.
+            internal init(status: Components.Schemas.ProcessingLabelProposalResponse.StatusPayload) {
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
+            }
+        }
+        /// 사용자가 검토할 수 있는 AI 제안입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse`.
+        internal struct ReadyLabelProposalResponse: Codable, Hashable, Sendable {
+            /// AI가 제안한 활성 라벨 또는 미분류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/selection`.
+            internal enum SelectionPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/selection/LabelSelectionResponse`.
+                case label(Components.Schemas.LabelSelectionResponse)
+                /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/selection/UnclassifiedSelectionResponse`.
+                case unclassified(Components.Schemas.UnclassifiedSelectionResponse)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "label":
+                        self = .label(try .init(from: decoder))
+                    case "unclassified":
+                        self = .unclassified(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .label(value):
+                        try value.encode(to: encoder)
+                    case let .unclassified(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// AI가 제안한 활성 라벨 또는 미분류입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/selection`.
+            internal var selection: Components.Schemas.ReadyLabelProposalResponse.SelectionPayload
+            /// AI 제안이 준비된 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case ready = "ready"
+            }
+            /// AI 제안이 준비된 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/status`.
+            internal var status: Components.Schemas.ReadyLabelProposalResponse.StatusPayload
+            /// 제안 생성 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ReadyLabelProposalResponse/suggestedAt`.
+            internal var suggestedAt: Foundation.Date
+            /// Creates a new `ReadyLabelProposalResponse`.
+            ///
+            /// - Parameters:
+            ///   - selection: AI가 제안한 활성 라벨 또는 미분류입니다.
+            ///   - status: AI 제안이 준비된 상태입니다.
+            ///   - suggestedAt: 제안 생성 시각입니다.
+            internal init(
+                selection: Components.Schemas.ReadyLabelProposalResponse.SelectionPayload,
+                status: Components.Schemas.ReadyLabelProposalResponse.StatusPayload,
+                suggestedAt: Foundation.Date
+            ) {
+                self.selection = selection
+                self.status = status
+                self.suggestedAt = suggestedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case selection
+                case status
+                case suggestedAt
             }
         }
         /// A value intentionally removed by the client privacy policy.
@@ -1857,6 +2822,31 @@ internal enum Components {
                 ])
             }
         }
+        /// 응답에 포함되는 미분류 선택입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionResponse`.
+        internal struct UnclassifiedSelectionResponse: Codable, Hashable, Sendable {
+            /// 활동을 미분류로 선택했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionResponse/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unclassified = "unclassified"
+            }
+            /// 활동을 미분류로 선택했음을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionResponse/kind`.
+            internal var kind: Components.Schemas.UnclassifiedSelectionResponse.KindPayload
+            /// Creates a new `UnclassifiedSelectionResponse`.
+            ///
+            /// - Parameters:
+            ///   - kind: 활동을 미분류로 선택했음을 나타냅니다.
+            internal init(kind: Components.Schemas.UnclassifiedSelectionResponse.KindPayload) {
+                self.kind = kind
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+            }
+        }
         /// RequestValidationError에서 선택한 공개 검증 오류 정보입니다.
         ///
         /// - Remark: Generated from `#/components/schemas/ValidationDetail`.
@@ -1963,6 +2953,31 @@ internal enum Components {
                     "msg",
                     "type"
                 ])
+            }
+        }
+        /// 종료된 활동의 AI 제안이 아직 생성되지 않았습니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/WaitingLabelProposalResponse`.
+        internal struct WaitingLabelProposalResponse: Codable, Hashable, Sendable {
+            /// AI 제안 생성 전 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/WaitingLabelProposalResponse/status`.
+            internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case waiting = "waiting"
+            }
+            /// AI 제안 생성 전 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/WaitingLabelProposalResponse/status`.
+            internal var status: Components.Schemas.WaitingLabelProposalResponse.StatusPayload
+            /// Creates a new `WaitingLabelProposalResponse`.
+            ///
+            /// - Parameters:
+            ///   - status: AI 제안 생성 전 상태입니다.
+            internal init(status: Components.Schemas.WaitingLabelProposalResponse.StatusPayload) {
+                self.status = status
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case status
             }
         }
     }
@@ -2892,6 +3907,1011 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "serviceUnavailable",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 날짜별 라벨 타임라인 조회
+    ///
+    /// 계정 시간대의 날짜별 라벨 타임라인을 반환합니다. date를 생략하면 계정 시간대의 오늘을 조회하며, 시간상 연속이고 라벨과 확정 상태가 같은 닫힌 상세 활동 구간만 하나의 항목으로 묶습니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/label-timeline`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)`.
+    internal enum ActivitiesGetLabelTimeline {
+        internal static let id: Swift.String = "activitiesGetLabelTimeline"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/query`.
+            internal struct Query: Sendable, Hashable {
+                /// 계정 시간대 기준 조회할 달력 날짜(YYYY-MM-DD)입니다. 생략하면 오늘을 조회합니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/query/date`.
+                internal var date: Swift.String?
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - date: 계정 시간대 기준 조회할 달력 날짜(YYYY-MM-DD)입니다. 생략하면 오늘을 조회합니다.
+                internal init(date: Swift.String? = nil) {
+                    self.date = date
+                }
+            }
+            internal var query: Operations.ActivitiesGetLabelTimeline.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetLabelTimeline.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetLabelTimeline.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ActivitiesGetLabelTimeline.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - query:
+            ///   - headers:
+            internal init(
+                query: Operations.ActivitiesGetLabelTimeline.Input.Query = .init(),
+                headers: Operations.ActivitiesGetLabelTimeline.Input.Headers = .init()
+            ) {
+                self.query = query
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/JsonPayload`.
+                    internal enum JsonPayloadPayload: Codable, Hashable, Sendable {
+                        /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/JsonPayload/ActivityGroupResponse`.
+                        case activityGroup(Components.Schemas.ActivityGroupResponse)
+                        /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/JsonPayload/LabelTimelineCaptureGapResponse`.
+                        case captureGap(Components.Schemas.LabelTimelineCaptureGapResponse)
+                        /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/JsonPayload/InProgressActivityResponse`.
+                        case inProgressActivity(Components.Schemas.InProgressActivityResponse)
+                        /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/JsonPayload/OpaqueActivityResponse`.
+                        case opaqueActivity(Components.Schemas.OpaqueActivityResponse)
+                        internal enum CodingKeys: String, CodingKey {
+                            case itemType
+                        }
+                        internal init(from decoder: any Swift.Decoder) throws {
+                            let container = try decoder.container(keyedBy: CodingKeys.self)
+                            let discriminator = try container.decode(
+                                Swift.String.self,
+                                forKey: .itemType
+                            )
+                            switch discriminator {
+                            case "activity_group":
+                                self = .activityGroup(try .init(from: decoder))
+                            case "capture_gap":
+                                self = .captureGap(try .init(from: decoder))
+                            case "in_progress_activity":
+                                self = .inProgressActivity(try .init(from: decoder))
+                            case "opaque_activity":
+                                self = .opaqueActivity(try .init(from: decoder))
+                            default:
+                                throw Swift.DecodingError.unknownOneOfDiscriminator(
+                                    discriminatorKey: CodingKeys.itemType,
+                                    discriminatorValue: discriminator,
+                                    codingPath: decoder.codingPath
+                                )
+                            }
+                        }
+                        internal func encode(to encoder: any Swift.Encoder) throws {
+                            switch self {
+                            case let .activityGroup(value):
+                                try value.encode(to: encoder)
+                            case let .captureGap(value):
+                                try value.encode(to: encoder)
+                            case let .inProgressActivity(value):
+                                try value.encode(to: encoder)
+                            case let .opaqueActivity(value):
+                                try value.encode(to: encoder)
+                            }
+                        }
+                    }
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/json`.
+                    internal typealias JsonPayload = [Operations.ActivitiesGetLabelTimeline.Output.Ok.Body.JsonPayloadPayload]
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/200/content/application\/json`.
+                    case json(Operations.ActivitiesGetLabelTimeline.Output.Ok.Body.JsonPayload)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Operations.ActivitiesGetLabelTimeline.Output.Ok.Body.JsonPayload {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetLabelTimeline.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 라벨 활동 묶음, 진행 중 활동, 불투명 활동, 수집 공백 배열입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ActivitiesGetLabelTimeline.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.ActivitiesGetLabelTimeline.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ActivitiesGetLabelTimeline.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.ActivitiesGetLabelTimeline.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetLabelTimeline.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.ActivitiesGetLabelTimeline.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.ActivitiesGetLabelTimeline.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.ActivitiesGetLabelTimeline.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetLabelTimeline.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ActivitiesGetLabelTimeline.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.ActivitiesGetLabelTimeline.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-timeline/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetLabelTimeline.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetLabelTimeline.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-timeline/get(activitiesGetLabelTimeline)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.ActivitiesGetLabelTimeline.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.ActivitiesGetLabelTimeline.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 관찰 구간 라벨 상태 조회
+    ///
+    /// 인증된 계정의 닫힌 상세 관찰 구간 하나에 저장된 AI 제안과 라벨 확정 상태를 구분해 조회합니다. segmentVersion은 이후 확정 요청의 대상 버전입니다. 실패하거나 처리 중인 제안도 확정 전에는 검토 대기입니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/activities/segments/{segment_id}/label-state`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)`.
+    internal enum ActivitiesGetSegmentLabelState {
+        internal static let id: Swift.String = "activitiesGetSegmentLabelState"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/path`.
+            internal struct Path: Sendable, Hashable {
+                /// 라벨 상태를 조회할 관찰 구간 식별자입니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/path/segment_id`.
+                internal var segmentId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - segmentId: 라벨 상태를 조회할 관찰 구간 식별자입니다.
+                internal init(segmentId: Swift.String) {
+                    self.segmentId = segmentId
+                }
+            }
+            internal var path: Operations.ActivitiesGetSegmentLabelState.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetSegmentLabelState.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesGetSegmentLabelState.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ActivitiesGetSegmentLabelState.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            internal init(
+                path: Operations.ActivitiesGetSegmentLabelState.Input.Path,
+                headers: Operations.ActivitiesGetSegmentLabelState.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/200/content/json`.
+                    internal enum JsonPayload: Codable, Hashable, Sendable {
+                        /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/200/content/json/ConfirmedActivityLabelStateResponse`.
+                        case confirmed(Components.Schemas.ConfirmedActivityLabelStateResponse)
+                        /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/200/content/json/PendingActivityLabelStateResponse`.
+                        case pending(Components.Schemas.PendingActivityLabelStateResponse)
+                        internal enum CodingKeys: String, CodingKey {
+                            case state
+                        }
+                        internal init(from decoder: any Swift.Decoder) throws {
+                            let container = try decoder.container(keyedBy: CodingKeys.self)
+                            let discriminator = try container.decode(
+                                Swift.String.self,
+                                forKey: .state
+                            )
+                            switch discriminator {
+                            case "confirmed":
+                                self = .confirmed(try .init(from: decoder))
+                            case "pending":
+                                self = .pending(try .init(from: decoder))
+                            default:
+                                throw Swift.DecodingError.unknownOneOfDiscriminator(
+                                    discriminatorKey: CodingKeys.state,
+                                    discriminatorValue: discriminator,
+                                    codingPath: decoder.codingPath
+                                )
+                            }
+                        }
+                        internal func encode(to encoder: any Swift.Encoder) throws {
+                            switch self {
+                            case let .confirmed(value):
+                                try value.encode(to: encoder)
+                            case let .pending(value):
+                                try value.encode(to: encoder)
+                            }
+                        }
+                    }
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/200/content/application\/json`.
+                    case json(Operations.ActivitiesGetSegmentLabelState.Output.Ok.Body.JsonPayload)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Operations.ActivitiesGetSegmentLabelState.Output.Ok.Body.JsonPayload {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetSegmentLabelState.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 관찰 구간의 제안 및 사용자 확정 상태입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ActivitiesGetSegmentLabelState.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.ActivitiesGetSegmentLabelState.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.ActivitiesGetSegmentLabelState.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetSegmentLabelState.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.ActivitiesGetSegmentLabelState.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.ActivitiesGetSegmentLabelState.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.ActivitiesGetSegmentLabelState.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetSegmentLabelState.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.ActivitiesGetSegmentLabelState.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.ActivitiesGetSegmentLabelState.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetSegmentLabelState.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ActivitiesGetSegmentLabelState.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.ActivitiesGetSegmentLabelState.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/segments/{segment_id}/label-state/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesGetSegmentLabelState.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesGetSegmentLabelState.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/segments/{segment_id}/label-state/get(activitiesGetSegmentLabelState)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.ActivitiesGetSegmentLabelState.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.ActivitiesGetSegmentLabelState.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
                             response: self
                         )
                     }
@@ -4216,6 +6236,368 @@ internal enum Operations {
             /// - Throws: An error if `self` is not `.internalServerError`.
             /// - SeeAlso: `.internalServerError`.
             internal var internalServerError: Operations.DevicesCreate.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 내 라벨 목록 조회
+    ///
+    /// 인증된 계정의 사용 중인 라벨과 보관한 라벨을 함께 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/labels`.
+    /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)`.
+    internal enum LabelsList {
+        internal static let id: Swift.String = "labelsList"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/labels/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.LabelsList.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.LabelsList.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.LabelsList.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.LabelsList.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/200/content/application\/json`.
+                    case json([Components.Schemas.LabelResponse])
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: [Components.Schemas.LabelResponse] {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.LabelsList.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.LabelsList.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 계정의 전체 라벨 배열입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.LabelsList.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.LabelsList.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.LabelsList.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.LabelsList.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.LabelsList.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.LabelsList.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.LabelsList.Output.Unauthorized.Headers = .init(),
+                    body: Operations.LabelsList.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.LabelsList.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.LabelsList.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.LabelsList.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.LabelsList.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.LabelsList.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.LabelsList.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.LabelsList.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.LabelsList.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.LabelsList.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.LabelsList.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.LabelsList.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.LabelsList.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/labels/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.LabelsList.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.LabelsList.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/labels/get(labelsList)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.LabelsList.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.LabelsList.Output.InternalServerError {
                 get throws {
                     switch self {
                     case let .internalServerError(response):
