@@ -51,9 +51,22 @@ else
 fi
 
 check_absent \
-    "persistent file and preference writes are absent" \
-    'UserDefaults|FileHandle|write\(to:|createFile\(|PropertyListEncoder|JSONEncoder\(\).*write' \
+    "persistent diagnostic file writes are absent" \
+    'FileHandle|write\(to:|createFile\(|PropertyListEncoder|JSONEncoder\(\).*write' \
     "$production_sources"
+
+if rg -n --glob '*.swift' 'UserDefaults' "$production_sources" \
+    | rg -v '^.*/MosemoApp/CollectorViewModel\.swift:[0-9]+:[[:space:]]*(let savedTrackingPreference = UserDefaults\.standard\.object\(forKey: Self\.activityTrackingPreferenceKey\) as\? Bool|UserDefaults\.standard\.set\(enabled, forKey: Self\.activityTrackingPreferenceKey\))$'; then
+    printf 'FAIL: only the activity tracking preference may use UserDefaults\n' >&2
+    failed=1
+elif rg -q --fixed-strings \
+    'private static let activityTrackingPreferenceKey = "io.mosemo.activityTrackingEnabled"' \
+    "$production_sources/MosemoApp/CollectorViewModel.swift"; then
+    printf 'PASS: only the activity tracking preference uses UserDefaults\n'
+else
+    printf 'FAIL: activity tracking preference key changed\n' >&2
+    failed=1
+fi
 
 check_absent \
     "application logging calls are absent" \

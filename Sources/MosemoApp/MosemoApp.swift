@@ -55,11 +55,18 @@ struct MosemoApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Mosemo", id: "main") {
+        Window("Mosemo", id: "main") {
             Group {
                 #if DEBUG
                 if CommandLine.arguments.contains("--timeline-ui-preview") {
-                    TimelineScreen(account: Self.previewAccount, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000), showsPreviewNotice: true)
+                    MainWorkspaceView(
+                        account: Self.previewAccount,
+                        timelineFetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000),
+                        reviewFetcher: MockLabelReviewFetcher.demo,
+                        reviewWriter: MockLabelConfirmationWriter(),
+                        signOut: nil,
+                        showsPreviewNotice: true
+                    )
                 } else if CommandLine.arguments.contains("--label-review-ui-preview") {
                     LabelReviewDemoView()
                 } else {
@@ -67,6 +74,7 @@ struct MosemoApp: App {
                         model: model,
                         auth: auth,
                         timelineClient: apiClient,
+                        reviewReader: reviewReader,
                         onboardingCompleted: $onboardingCompleted
                     )
                 }
@@ -75,6 +83,7 @@ struct MosemoApp: App {
                     model: model,
                     auth: auth,
                     timelineClient: apiClient,
+                    reviewReader: reviewReader,
                     onboardingCompleted: $onboardingCompleted
                 )
                 #endif
@@ -94,35 +103,6 @@ struct MosemoApp: App {
         }
         .defaultSize(width: 900, height: 700)
 
-        Window("라벨 검토", id: "label-review") {
-            if let account = auth.account, let reviewReader, let apiClient {
-                LabelReviewScreen(
-                    fetcher: LiveLabelReviewFetcher(reader: reviewReader),
-                    writer: apiClient,
-                    timeZone: TimeZone(identifier: account.timeZoneID) ?? .current
-                )
-                .id(account.id)
-                .frame(minWidth: 720, minHeight: 520)
-            } else {
-                ContentUnavailableView("로그인이 필요합니다", systemImage: "person.crop.circle.badge.exclamationmark")
-                    .frame(minWidth: 720, minHeight: 520)
-            }
-        }
-        .defaultSize(width: 1050, height: 700)
-
-        #if DEBUG
-        Window("라벨 검토 시안", id: "label-review-demo") {
-            LabelReviewDemoView()
-                .frame(minWidth: 720, minHeight: 520)
-        }
-        .defaultSize(width: 1050, height: 700)
-        Window("타임라인 UI 미리보기", id: "timeline-preview") {
-            TimelineScreen(account: Self.previewAccount, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 50_000_000), showsPreviewNotice: true)
-                .frame(minWidth: 760, minHeight: 520)
-        }
-        .defaultSize(width: 900, height: 640)
-
-        #endif
     }
 
     private static let previewAccount = Account(
@@ -162,6 +142,18 @@ private struct CollectorMenuView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            HStack {
+                Label(
+                    model.activityTrackingStatusText,
+                    systemImage: model.collectionAllowed ? "record.circle" : "pause.circle"
+                )
+                Spacer()
+                Button(model.isActivityTrackingEnabled ? "활동 추적 중지" : "활동 추적 시작") {
+                    model.setActivityTrackingEnabled(!model.isActivityTrackingEnabled)
+                }
+                .accessibilityIdentifier("activity-tracking-toggle")
+            }
+
             TextField("이번 집중 의도", text: $model.intentionDraft)
                 .textFieldStyle(.roundedBorder)
 
@@ -180,7 +172,7 @@ private struct CollectorMenuView: View {
                 Button("현재 화면을 복귀 지점으로") { model.markCurrentAsReturnPoint() }
                 Button("복귀 테스트") { model.runReturnTest() }
             }
-            .disabled(!model.collectionAllowed)
+            .disabled(!model.focusActionsAllowed)
 
             Divider()
             Text("상태: \(model.statusMessage)")
@@ -192,16 +184,6 @@ private struct CollectorMenuView: View {
             HStack {
                 Button("앱 열기", action: openApp)
                 Button("진단 열기", action: openDiagnostics)
-                #if DEBUG
-                Button("라벨 검토 시안") {
-                    openWindow(id: "label-review-demo")
-                    NSApplication.shared.activate()
-                }
-                Button("타임라인 UI 미리보기") {
-                    openWindow(id: "timeline-preview")
-                    NSApplication.shared.activate()
-                }
-                #endif
                 Spacer()
                 Button("종료") { NSApplication.shared.terminate(nil) }
             }
@@ -325,11 +307,11 @@ private struct DiagnosticsView: View {
                     }
                     HStack {
                         Button("다음 앱 전환") { model.markExpectedAppTransition() }
-                            .disabled(!model.collectionAllowed)
+                            .disabled(!model.focusActionsAllowed)
                         Button("다음 Chrome 전환") { model.markExpectedChromeTransition() }
-                            .disabled(!model.collectionAllowed)
+                            .disabled(!model.focusActionsAllowed)
                         Button("다음 Firefox 변화") { model.markExpectedFirefoxTransition() }
-                            .disabled(!model.collectionAllowed)
+                            .disabled(!model.focusActionsAllowed)
                         Button("전환 통계 초기화") { model.resetMeasurementStatistics() }
                         Text("수동 기준점 지연에는 사용자의 전환 동작 시간이 포함됩니다.")
                             .font(.caption)
@@ -341,7 +323,7 @@ private struct DiagnosticsView: View {
 
             Text("메모리 ring buffer · 최근 \(model.events.count)/600 이벤트")
                 .font(.headline)
-            Text("테스트 모드: 일반 Chrome·Firefox의 탭 제목과 전체 URL이 앱 메모리에 노출됩니다. 안전 진단 복사에는 포함되지 않으며 앱 종료 또는 새 집중 시작 때 사라집니다.")
+            Text("테스트 모드: 일반 Chrome·Firefox의 탭 제목과 전체 URL이 앱 메모리에 노출됩니다. 안전 진단 복사에는 포함되지 않으며 앱 종료 때 사라집니다.")
                 .font(.caption)
                 .foregroundStyle(.orange)
             ScrollView {

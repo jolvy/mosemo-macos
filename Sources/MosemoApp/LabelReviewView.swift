@@ -95,7 +95,9 @@ struct LabelReviewView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .task { await viewModel.load() }
+        .task {
+            if viewModel.review == nil { await viewModel.load() }
+        }
     }
 }
 
@@ -434,7 +436,7 @@ struct LabelReviewScreen: View {
 }
 
 #if DEBUG
-private struct MockLabelConfirmationWriter: LabelConfirmationWriting {
+struct MockLabelConfirmationWriter: LabelConfirmationWriting {
     func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws {}
 }
 #endif

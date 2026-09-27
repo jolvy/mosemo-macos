@@ -10,7 +10,7 @@
 현재 빌드는 feasibility 확인을 위해 일반 Chrome·Firefox의 활성 탭 제목과 전체
 URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 안전 이벤트와
 `안전 진단 복사` 결과에는 들어가지 않고, 파일·console·서버로도 보내지 않는다.
-앱을 종료하거나 새 집중 세션을 시작하면 메모리에서 사라진다. 제품 개인정보
+앱을 종료하면 메모리에서 사라진다. 제품 개인정보
 경계에는 포함할 수 없는 개발 진단 예외다.
 
 ## 설계 문서
@@ -26,7 +26,7 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 ## 구현 경계
 
 - `NSWorkspace` 알림으로 전면 앱 전환을 받는다.
-- Google Chrome이 전면이고 집중 관찰이 활성일 때만 0.5초 간격으로 Chrome
+- Google Chrome이 전면이고 활동 추적이 켜져 있을 때만 0.5초 간격으로 Chrome
   Apple Events를 호출한다.
 - 일반 Chrome 창에서는 창 ID, 탭 ID, URL, 제목을 읽는다. URL은 등록 도메인과
   surface type 및 변화 fingerprint를 만들며, 원시 URL과 제목은 테스트 진단용
@@ -55,7 +55,7 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Package.resolved` | OpenAPI generator와 runtime 의존성 버전 고정 |
 | `Mosemo.xcodeproj/` | Swift package product를 사용하는 macOS 앱 target과 공유 scheme 정의 |
 | `Info.plist` | bundle ID, 인증 callback scheme, Apple Events 사용 목적 선언 |
-| `Sources/CollectorCore/SessionStateMachine.swift` | 집중 시작·휴식·재개·종료와 수집 허용 상태 |
+| `Sources/CollectorCore/SessionStateMachine.swift` | 집중 시작·휴식·재개·종료 상태 |
 | `Sources/CollectorCore/SafeActivityEvent.swift` | 안전 이벤트 allow-list와 보호 맥락 필드 제거 |
 | `Sources/CollectorCore/SurfaceClassifier.swift` | 등록 도메인·Chrome surface·브라우저 transition 분류 |
 | `Sources/CollectorCore/ReturnTracking.swift` | 복귀 시도와 성공·실패 결과 모델링 |
@@ -166,35 +166,38 @@ macOS가 같은 팝업을 다시 띄우지 않을 수 있으므로 앱이 자동
 
 ## 기본 사용 순서
 
-1. 관찰할 작업 앱이나 Chrome 화면을 전면에 둔 채 메뉴 막대 아이콘을 연다.
-2. 집중 의도 한 줄을 입력하고 `집중 시작`을 누른다. 이때 현재 화면을 최초
-   복귀 지점으로 메모리에 잡는다.
-3. 필요하면 `현재 화면을 복귀 지점으로`를 눌러 개발자용 anchor를 갱신한다.
-4. `의도된 휴식` 동안 이벤트 수가 변하지 않는지 확인하고 `집중 재개`한다.
-5. 다른 화면으로 이동한 뒤 `복귀 테스트`를 누르고 attempt/result를 각각
-   확인한다.
-6. `집중 종료` 뒤 이벤트 수가 변하지 않는지 확인한다.
+1. 앱을 실행하면 활동 추적이 자동으로 시작된다. 메뉴 막대에서 상태를 확인할 수
+   있으며, 집중 세션을 시작하지 않아도 활동을 관찰한다.
+2. 집중 기능을 사용할 때만 집중 의도를 입력하고 `집중 시작`을 누른다. 집중 세션을
+   시작하거나 휴식·종료해도 활동 관찰은 계속된다.
+3. 활성 집중 세션에서 필요하면 `현재 화면을 복귀 지점으로`를 눌러 개발자용
+   anchor를 갱신한다.
+4. 다른 화면으로 이동한 뒤 `복귀 테스트`를 눌러 attempt/result를 확인한다.
+5. 수집을 멈추려면 `활동 추적 중지`를 누른다. 사용자가 끈 설정은 앱 재시작 뒤에도
+   유지되며, 메뉴에서 `활동 추적 시작`을 눌러 다시 켤 수 있다.
 
 진단 창의 화면에는 테스트용 제목·전체 URL이 보이지만 `안전 진단 복사`는 기존
 허용 필드와 누적 통계만 clipboard에 복사한다. 앱은 파일을 만들지 않는다.
 
 ## 이벤트가 쌓이지 않을 때
 
-권한 허용만으로는 수집을 시작하지 않는다. 다음 순서로 세션 상태부터 확인한다.
+앱 실행 시 활동 추적이 자동으로 시작된다. 사용자가 이전에 추적을 꺼 둔 경우에는
+메뉴 막대에서 다시 켤 수 있다.
 
-1. 메뉴 막대 창에서 비어 있지 않은 `이번 집중 의도`를 입력한다.
-2. `집중 시작`을 누르고 상태 문구가 `집중 중입니다.`인지 확인한다.
+1. 메뉴 막대 상태 문구가 `활동 추적 중`인지 확인한다.
+2. 진단 창에서 `activityTrackingEnabled=true`와 `observationState=observed`를
+   확인한다. `sessionPhase`는 활동 수집 여부와 독립적이다.
 3. 진단 창의 ring buffer가 탭을 바꾸기 전에도 최초 맥락을 포함해 `1/600`
    이상인지 확인한다.
 4. `안전 진단 복사` 결과에서 다음 값인지 확인한다.
 
    ```text
-   sessionPhase=active
+   activityTrackingEnabled=true
    observationState=observed
    ```
 
-`sessionPhase`가 `notStarted`, `intendedRest`, `ended`이면 활동 이벤트를 만들지
-않는 것이 정상이다. `observationState=paused`이면 화면 잠금, sleep, 비활성 사용자
+`sessionPhase`가 `notStarted`, `intendedRest`, `ended`여도 활동 추적이 켜져 있으면
+이벤트를 기록한다. `observationState=paused`이면 화면 잠금, sleep, 비활성 사용자
 세션 등 자동 일시정지 원인을 상태 문구에서 확인한다. Chrome 내부 이벤트는
 Chrome이 전면이고 `Chrome 자동화: 허용됨`인 동안에만 관찰한다.
 
