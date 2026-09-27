@@ -1,6 +1,28 @@
 import Combine
 import Foundation
 
+extension LabelReviewSelection {
+    func title(in labels: [LabelReviewLabel]) -> String {
+        switch self {
+        case .label(let id):
+            labels.first(where: { $0.id == id })?.displayName ?? "사용할 수 없는 라벨"
+        case .unclassified:
+            "미분류"
+        }
+    }
+}
+
+extension LabelReviewProposal {
+    func title(in labels: [LabelReviewLabel]) -> String {
+        switch self {
+        case .ready(let selection): "AI 제안 · \(selection.title(in: labels))"
+        case .waiting: "제안 대기 중"
+        case .processing: "제안 처리 중"
+        case .failed: "제안 실패"
+        }
+    }
+}
+
 @MainActor
 final class LabelReviewViewModel: ObservableObject {
     enum LoadState: Equatable {
@@ -20,7 +42,7 @@ final class LabelReviewViewModel: ObservableObject {
         }
     }
 
-    @Published private(set) var data: LabelReviewData?
+    @Published private(set) var review: LabelReviewState?
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var selectedGroupIDs: Set<UUID> = []
     @Published private(set) var expandedGroupIDs: Set<UUID> = []
@@ -32,9 +54,9 @@ final class LabelReviewViewModel: ObservableObject {
         self.fetcher = fetcher
     }
 
-    var groups: [LabelReviewGroup] { data?.groups ?? [] }
-    var labels: [LabelReviewLabel] { data?.labels ?? [] }
-    var segmentCount: Int { data?.pendingSegments.count ?? 0 }
+    var groups: [LabelReviewGroup] { review?.groups ?? [] }
+    var labels: [LabelReviewLabel] { review?.labels ?? [] }
+    var segmentCount: Int { review?.pendingSegments.count ?? 0 }
 
     var selectedGroups: [LabelReviewGroup] {
         groups.filter { selectedGroupIDs.contains($0.id) }
@@ -51,7 +73,7 @@ final class LabelReviewViewModel: ObservableObject {
     var missingChoiceCount: Int {
         selectedGroups.flatMap(\.segments).filter { segment in
             guard let selection = selection(for: segment) else { return true }
-            return data?.canSelect(selection) != true
+            return review?.canSelect(selection) != true
         }.count
     }
 
@@ -59,11 +81,11 @@ final class LabelReviewViewModel: ObservableObject {
         guard loadState != .loading else { return }
         loadState = .loading
         do {
-            let response = try await fetcher.fetchLabelReview()
-            if let data {
-                self.data = data.replacing(with: response)
+            let snapshot = try await fetcher.fetchLabelReview()
+            if let review {
+                self.review = review.replacing(with: snapshot)
             } else {
-                data = LabelReviewData(response: response)
+                review = LabelReviewState(snapshot: snapshot)
             }
             loadState = .loaded
             reconcileInteractionState()
@@ -109,10 +131,10 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     func canConfirm(_ segments: [LabelReviewSegment]) -> Bool {
-        guard let data, !segments.isEmpty else { return false }
+        guard let review, !segments.isEmpty else { return false }
         return segments.allSatisfy { segment in
             guard let selection = selection(for: segment) else { return false }
-            return data.canSelect(selection)
+            return review.canSelect(selection)
         }
     }
 
@@ -151,7 +173,7 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     private func confirm(_ segments: [LabelReviewSegment]) {
-        guard let data, canConfirm(segments) else { return }
+        guard let review, canConfirm(segments) else { return }
         let decisions = segments.compactMap { segment -> LabelReviewDecision? in
             guard let selection = selection(for: segment) else { return nil }
             return LabelReviewDecision(
@@ -161,7 +183,7 @@ final class LabelReviewViewModel: ObservableObject {
             )
         }
         guard decisions.count == segments.count else { return }
-        self.data = data.applying(decisions)
+        self.review = review.applying(decisions)
         reconcileInteractionState()
     }
 
@@ -170,7 +192,7 @@ final class LabelReviewViewModel: ObservableObject {
         selectedGroupIDs.formIntersection(validGroupIDs)
         expandedGroupIDs.formIntersection(validGroupIDs)
 
-        let validSegmentKeys = Set((data?.pendingSegments ?? []).map(SegmentKey.init))
+        let validSegmentKeys = Set((review?.pendingSegments ?? []).map(SegmentKey.init))
         draftOverrides = draftOverrides.filter { validSegmentKeys.contains($0.key) }
     }
 }

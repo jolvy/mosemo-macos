@@ -3,15 +3,6 @@ import Foundation
 enum LabelReviewSelection: Equatable, Hashable, Sendable {
     case label(id: UUID)
     case unclassified
-
-    func title(in labels: [LabelReviewLabel]) -> String {
-        switch self {
-        case .label(let id):
-            labels.first(where: { $0.id == id })?.displayName ?? "사용할 수 없는 라벨"
-        case .unclassified:
-            "미분류"
-        }
-    }
 }
 
 enum LabelReviewProposal: Equatable, Sendable {
@@ -23,15 +14,6 @@ enum LabelReviewProposal: Equatable, Sendable {
     var selection: LabelReviewSelection? {
         guard case .ready(let selection) = self else { return nil }
         return selection
-    }
-
-    func title(in labels: [LabelReviewLabel]) -> String {
-        switch self {
-        case .ready(let selection): "AI 제안 · \(selection.title(in: labels))"
-        case .waiting: "제안 대기 중"
-        case .processing: "제안 처리 중"
-        case .failed: "제안 실패"
-        }
     }
 }
 
@@ -68,14 +50,13 @@ struct LabelReviewGroup: Identifiable, Equatable, Sendable {
     var durationMinutes: Int { segments.reduce(0) { $0 + $1.durationMinutes } }
 }
 
-struct LabelReviewData: Equatable, Sendable {
+struct LabelReviewSnapshot: Equatable, Sendable {
     let labels: [LabelReviewLabel]
-    private let receivedSegments: [LabelReviewSegment]
-    private let confirmedVersions: [UUID: String]
+    let segments: [LabelReviewSegment]
 
     init(response: LabelReviewResponseDTO) {
         labels = response.labels.map { LabelReviewLabel(id: $0.id, displayName: $0.displayName) }
-        receivedSegments = response.segments.map { segment in
+        segments = response.segments.map { segment in
             LabelReviewSegment(
                 id: segment.id,
                 version: segment.version,
@@ -86,21 +67,40 @@ struct LabelReviewData: Equatable, Sendable {
                 proposal: Self.proposal(from: segment.proposal)
             )
         }
+    }
+
+    private static func proposal(from dto: LabelReviewProposalDTO) -> LabelReviewProposal {
+        switch dto {
+        case .ready(let selection):
+            switch selection {
+            case .label(let id): .ready(.label(id: id))
+            case .unclassified: .ready(.unclassified)
+            }
+        case .waiting: .waiting
+        case .processing: .processing
+        case .failed: .failed
+        }
+    }
+}
+
+struct LabelReviewState: Equatable, Sendable {
+    let snapshot: LabelReviewSnapshot
+    private let confirmedVersions: [UUID: String]
+
+    init(snapshot: LabelReviewSnapshot) {
+        self.snapshot = snapshot
         confirmedVersions = [:]
     }
 
-    private init(
-        labels: [LabelReviewLabel],
-        receivedSegments: [LabelReviewSegment],
-        confirmedVersions: [UUID: String]
-    ) {
-        self.labels = labels
-        self.receivedSegments = receivedSegments
+    private init(snapshot: LabelReviewSnapshot, confirmedVersions: [UUID: String]) {
+        self.snapshot = snapshot
         self.confirmedVersions = confirmedVersions
     }
 
+    var labels: [LabelReviewLabel] { snapshot.labels }
+
     var pendingSegments: [LabelReviewSegment] {
-        receivedSegments
+        snapshot.segments
             .filter { confirmedVersions[$0.id] != $0.version }
             .sorted {
                 if $0.startedAt != $1.startedAt { return $0.startedAt < $1.startedAt }
@@ -133,37 +133,15 @@ struct LabelReviewData: Equatable, Sendable {
     func applying(_ decisions: [LabelReviewDecision]) -> Self {
         var nextConfirmedVersions = confirmedVersions
         for decision in decisions {
-            guard receivedSegments.contains(where: {
+            guard snapshot.segments.contains(where: {
                 $0.id == decision.segmentID && $0.version == decision.segmentVersion
             }) else { continue }
             nextConfirmedVersions[decision.segmentID] = decision.segmentVersion
         }
-        return Self(
-            labels: labels,
-            receivedSegments: receivedSegments,
-            confirmedVersions: nextConfirmedVersions
-        )
+        return Self(snapshot: snapshot, confirmedVersions: nextConfirmedVersions)
     }
 
-    func replacing(with response: LabelReviewResponseDTO) -> Self {
-        let replacement = Self(response: response)
-        return Self(
-            labels: replacement.labels,
-            receivedSegments: replacement.receivedSegments,
-            confirmedVersions: confirmedVersions
-        )
-    }
-
-    private static func proposal(from dto: LabelReviewProposalDTO) -> LabelReviewProposal {
-        switch dto {
-        case .ready(let selection):
-            switch selection {
-            case .label(let id): .ready(.label(id: id))
-            case .unclassified: .ready(.unclassified)
-            }
-        case .waiting: .waiting
-        case .processing: .processing
-        case .failed: .failed
-        }
+    func replacing(with snapshot: LabelReviewSnapshot) -> Self {
+        Self(snapshot: snapshot, confirmedVersions: confirmedVersions)
     }
 }

@@ -33,14 +33,14 @@ struct LabelReviewResponseDTO: Equatable, Sendable {
 }
 
 protocol LabelReviewFetching: Sendable {
-    func fetchLabelReview() async throws -> LabelReviewResponseDTO
+    func fetchLabelReview() async throws -> LabelReviewSnapshot
 }
 
 struct MockLabelReviewFetcher: LabelReviewFetching {
     let response: LabelReviewResponseDTO
 
-    func fetchLabelReview() async throws -> LabelReviewResponseDTO {
-        response
+    func fetchLabelReview() async throws -> LabelReviewSnapshot {
+        LabelReviewSnapshot(response: response)
     }
 
     static var demo: Self {

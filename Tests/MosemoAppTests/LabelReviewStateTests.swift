@@ -1,23 +1,23 @@
 import XCTest
 @testable import MosemoApp
 
-final class LabelReviewDataTests: XCTestCase {
+final class LabelReviewStateTests: XCTestCase {
     func testGroupsContiguousSegmentsWithMatchingProposals() {
-        let data = LabelReviewData(response: MockLabelReviewFetcher.demo.response)
+        let review = LabelReviewState(snapshot: LabelReviewSnapshot(response: MockLabelReviewFetcher.demo.response))
 
-        XCTAssertEqual(data.pendingSegments.count, 10)
-        XCTAssertEqual(data.groups.map { $0.segments.count }, [3, 2, 1, 1, 1, 1, 1])
-        XCTAssertEqual(data.groups[0].proposal, .ready(.label(id: data.labels[0].id)))
-        XCTAssertEqual(data.groups[2].proposal, .ready(.unclassified))
-        XCTAssertEqual(data.groups[3].proposal, .processing)
-        XCTAssertEqual(data.groups[4].proposal, .failed)
-        XCTAssertEqual(data.groups[6].proposal, .waiting)
+        XCTAssertEqual(review.pendingSegments.count, 10)
+        XCTAssertEqual(review.groups.map { $0.segments.count }, [3, 2, 1, 1, 1, 1, 1])
+        XCTAssertEqual(review.groups[0].proposal, .ready(.label(id: review.labels[0].id)))
+        XCTAssertEqual(review.groups[2].proposal, .ready(.unclassified))
+        XCTAssertEqual(review.groups[3].proposal, .processing)
+        XCTAssertEqual(review.groups[4].proposal, .failed)
+        XCTAssertEqual(review.groups[6].proposal, .waiting)
     }
 
     func testConfirmingGroupRemovesOnlyMatchingVersionsAndSurvivesRefresh() {
         let response = MockLabelReviewFetcher.demo.response
-        let data = LabelReviewData(response: response)
-        let firstGroup = data.groups[0]
+        let review = LabelReviewState(snapshot: LabelReviewSnapshot(response: response))
+        let firstGroup = review.groups[0]
         let decisions = firstGroup.segments.map {
             LabelReviewDecision(
                 segmentID: $0.id,
@@ -26,9 +26,10 @@ final class LabelReviewDataTests: XCTestCase {
             )
         }
 
-        let confirmed = data.applying(decisions)
+        let confirmed = review.applying(decisions)
+        XCTAssertEqual(review.pendingSegments.count, 10)
         XCTAssertEqual(confirmed.pendingSegments.count, 7)
-        XCTAssertEqual(confirmed.replacing(with: response).pendingSegments.count, 7)
+        XCTAssertEqual(confirmed.replacing(with: LabelReviewSnapshot(response: response)).pendingSegments.count, 7)
 
         var changedSegments = response.segments
         let changed = changedSegments[0]
@@ -43,7 +44,7 @@ final class LabelReviewDataTests: XCTestCase {
         )
         let changedResponse = LabelReviewResponseDTO(labels: response.labels, segments: changedSegments)
 
-        XCTAssertEqual(confirmed.replacing(with: changedResponse).pendingSegments.count, 8)
+        XCTAssertEqual(confirmed.replacing(with: LabelReviewSnapshot(response: changedResponse)).pendingSegments.count, 8)
     }
 }
 
@@ -53,7 +54,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         let response = MockLabelReviewFetcher.demo.response
         let fetcher = SequenceLabelReviewFetcher(results: [
             .failure(.offline),
-            .success(response),
+            .success(LabelReviewSnapshot(response: response)),
         ])
         let viewModel = LabelReviewViewModel(fetcher: fetcher)
 
@@ -121,13 +122,13 @@ private enum LabelReviewFetchFailure: Error, Sendable {
 }
 
 private actor SequenceLabelReviewFetcher: LabelReviewFetching {
-    private var results: [Result<LabelReviewResponseDTO, LabelReviewFetchFailure>]
+    private var results: [Result<LabelReviewSnapshot, LabelReviewFetchFailure>]
 
-    init(results: [Result<LabelReviewResponseDTO, LabelReviewFetchFailure>]) {
+    init(results: [Result<LabelReviewSnapshot, LabelReviewFetchFailure>]) {
         self.results = results
     }
 
-    func fetchLabelReview() async throws -> LabelReviewResponseDTO {
+    func fetchLabelReview() async throws -> LabelReviewSnapshot {
         guard !results.isEmpty else { throw LabelReviewFetchFailure.offline }
         return try results.removeFirst().get()
     }
