@@ -1456,6 +1456,24 @@ final class MosemoAPITests: XCTestCase {
         }
     }
 
+    func testLabelStateMapsCurrentConfirmedSelectionForConflictReview() async throws {
+        let segmentID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let labelID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let version = String(repeating: "a", count: 64)
+        let body = Data(#"{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"\#(version)","state":"confirmed","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222"},"proposal":null,"confirmedAt":"2026-09-28T00:00:00Z","updatedAt":"2026-09-28T00:00:00Z"}"#.utf8)
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+            transport: transport
+        )
+
+        let state = try await client.labelState(segmentID: segmentID)
+
+        XCTAssertEqual(state, .confirmed(id: segmentID, version: version, selection: .label(labelID)))
+    }
+
     func testLabelTimelineIgnoresConfirmedOpenOpaqueAndCaptureGapItems() async throws {
         let body = Data(#"""
         [
@@ -1476,6 +1494,91 @@ final class MosemoAPITests: XCTestCase {
         let segments = try await client.pendingLabelSegments(day: TimelineDate(year: 2026, month: 9, day: 26))
 
         XCTAssertTrue(segments.isEmpty)
+    }
+
+    func testBatchConfirmationSendsPerSegmentChoicesInOneAuthenticatedRequest() async throws {
+        let segmentA = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let segmentB = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        let label = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let firstVersion = String(repeating: "b", count: 64)
+        let secondVersion = String(repeating: "c", count: 64)
+        let recorder = JSONBodyRecorder()
+        let response = Data(#"{"items":[{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"\#(firstVersion)","state":"confirmed","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222"},"proposal":null,"confirmedAt":"2026-09-28T00:00:00Z","updatedAt":"2026-09-28T00:00:00Z"},{"segmentId":"33333333-3333-3333-3333-333333333333","segmentVersion":"\#(secondVersion)","state":"confirmed","selection":{"kind":"unclassified"},"proposal":null,"confirmedAt":"2026-09-28T00:00:00Z","updatedAt":"2026-09-28T00:00:00Z"}]}"#.utf8)
+        let transport = RecordingClientTransport { request, body, _, operationID in
+            var data = Data()
+            if let body {
+                for try await chunk in body { data.append(contentsOf: chunk) }
+            }
+            await recorder.record(request: request, operationID: operationID, body: data)
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(response))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+            transport: transport
+        )
+
+        try await client.confirmSegmentLabels([
+            .init(segmentID: segmentA, segmentVersion: firstVersion, selection: .label(label)),
+            .init(segmentID: segmentB, segmentVersion: secondVersion, selection: .unclassified),
+        ])
+
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].request.path, "/api/v1/activities/label-confirmations")
+        XCTAssertEqual(requests[0].operationID, "activitiesConfirmSegmentLabels")
+        XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer review-token")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[0].body) as? [String: Any])
+        let items = try XCTUnwrap(json["items"] as? [[String: Any]])
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.map { $0["segmentId"] as? String }, [segmentA, segmentB].map { $0.uuidString.lowercased() })
+        XCTAssertEqual(items.map { ($0["selection"] as? [String: Any])?["kind"] as? String }, ["label", "unclassified"])
+        XCTAssertEqual((items[0]["selection"] as? [String: Any])?["labelId"] as? String, label.uuidString.lowercased())
+    }
+
+    func testBatchConfirmationMapsPriorSelectionConflictAndFailedItem() async throws {
+        let body = Data(#"{"error":{"code":409,"status":"ACTIVITY_LABEL_CONFIRMATION_CONFLICT","message":"conflict","details":[{"loc":["body","items",1,"selection"],"msg":"conflict","type":"activity_label_confirmation_conflict"}]}}"#.utf8)
+        let transport = RecordingClientTransport { _, _, _, _ in
+            (HTTPResponse(status: .conflict, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+            transport: transport
+        )
+
+        do {
+            try await client.confirmSegmentLabels([
+                .init(segmentID: UUID(), segmentVersion: String(repeating: "a", count: 64), selection: .unclassified)
+            ])
+            XCTFail("Expected conflict")
+        } catch let error as LabelConfirmationRejection {
+            XCTAssertEqual(error.reason, .priorConfirmationConflict)
+            XCTAssertEqual(error.failedIndex, 1)
+        }
+    }
+
+    func testBatchConfirmationPreservesRetryAfterForTimelineContention() async throws {
+        let body = Data(#"{"error":{"code":503,"status":"ACTIVITY_TIMELINE_BUSY","message":"busy","details":[]}}"#.utf8)
+        let transport = RecordingClientTransport { _, _, _, _ in
+            let fields: HTTPFields = [
+                .contentType: "application/json",
+                HTTPField.Name("Retry-After")!: "1",
+            ]
+            return (HTTPResponse(status: .serviceUnavailable, headerFields: fields), HTTPBody(body))
+        }
+        let client = makeTransportClient(
+            tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+            transport: transport
+        )
+
+        do {
+            try await client.confirmSegmentLabels([
+                .init(segmentID: UUID(), segmentVersion: String(repeating: "a", count: 64), selection: .unclassified)
+            ])
+            XCTFail("Expected contention")
+        } catch let error as LabelConfirmationRejection {
+            XCTAssertEqual(error.reason, .timelineBusy)
+            XCTAssertEqual(error.retryAfter, 1)
+        }
     }
 
     private func makeClient(
@@ -1660,6 +1763,12 @@ private struct MockGeneratedAPI: APIProtocol {
         .undocumented(statusCode: 500, .init())
     }
 
+    func activitiesConfirmSegmentLabels(
+        _ input: Operations.ActivitiesConfirmSegmentLabels.Input
+    ) async throws -> Operations.ActivitiesConfirmSegmentLabels.Output {
+        .undocumented(statusCode: 500, .init())
+    }
+
     func labelsList(
         _ input: Operations.LabelsList.Input
     ) async throws -> Operations.LabelsList.Output {
@@ -1694,6 +1803,21 @@ private actor RequestRecorder {
     func requests() -> [RecordedRequest] {
         values
     }
+}
+
+private actor JSONBodyRecorder {
+    struct Entry: Sendable {
+        let request: HTTPRequest
+        let operationID: String
+        let body: Data
+    }
+    private var entries: [Entry] = []
+
+    func record(request: HTTPRequest, operationID: String, body: Data) {
+        entries.append(.init(request: request, operationID: operationID, body: body))
+    }
+
+    func requests() -> [Entry] { entries }
 }
 
 private struct RecordingClientTransport: ClientTransport {

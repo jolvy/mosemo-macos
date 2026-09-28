@@ -37,3 +37,24 @@ final class TimelineUITests: XCTestCase {
         XCTAssertTrue(emptyState.exists)
     }
 }
+
+final class LabelReviewUITests: XCTestCase {
+    func testGroupSubmissionUpdatesPendingCount() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--label-review-ui-preview"]
+        app.launch()
+
+        let pendingCount = app.staticTexts["label-review-pending-count"]
+        XCTAssertTrue(pendingCount.waitForExistence(timeout: 5))
+        XCTAssertTrue(pendingCount.label.contains("10건"))
+        let confirm = app.buttons["3건 확정"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.click()
+
+        let deadline = Date().addingTimeInterval(5)
+        while !pendingCount.label.contains("7건"), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertTrue(pendingCount.label.contains("7건"))
+    }
+}

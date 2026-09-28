@@ -2,7 +2,7 @@ import Foundation
 import OpenAPIRuntime
 import OpenAPIURLSession
 
-public struct LiveMosemoAPIClient: MosemoAPIClient {
+public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
     private let baseURL: URL
     private let anonymousClient: any APIProtocol
     private let authenticatedClient: any APIProtocol
@@ -508,7 +508,17 @@ extension LiveMosemoAPIClient: LabelReviewReading {
                     guard let id = UUID(uuidString: state.segmentId) else {
                         throw MosemoAPIError.unexpectedResponse(statusCode: 200)
                     }
-                    return .confirmed(id: id, version: state.segmentVersion)
+                    let selection: LabelConfirmationSelection
+                    switch state.selection {
+                    case .label(let label):
+                        guard let labelID = UUID(uuidString: label.labelId) else {
+                            throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                        }
+                        selection = .label(labelID)
+                    case .unclassified:
+                        selection = .unclassified
+                    }
+                    return .confirmed(id: id, version: state.segmentVersion, selection: selection)
                 case .pending(let state):
                     guard let id = UUID(uuidString: state.segmentId) else {
                         throw MosemoAPIError.unexpectedResponse(statusCode: 200)
@@ -551,6 +561,97 @@ extension LiveMosemoAPIClient: LabelReviewReading {
             if mappedError == .authenticationRequired { try? await tokenStore.delete() }
             throw mappedError
         }
+    }
+
+    public func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws {
+        guard !decisions.isEmpty, Set(decisions.map(\.segmentID)).count == decisions.count else {
+            throw MosemoAPIError.validationFailed
+        }
+        let items = decisions.map { decision in
+            let selection: Components.Schemas.SegmentLabelConfirmationItemRequest.SelectionPayload
+            switch decision.selection {
+            case .label(let id):
+                selection = .label(.init(kind: .label, labelId: id.uuidString.lowercased()))
+            case .unclassified:
+                selection = .unclassified(.init(kind: .unclassified))
+            }
+            return Components.Schemas.SegmentLabelConfirmationItemRequest(
+                segmentId: decision.segmentID.uuidString.lowercased(),
+                segmentVersion: decision.segmentVersion,
+                selection: selection
+            )
+        }
+        do {
+            let response = try await authenticatedClient.activitiesConfirmSegmentLabels(
+                body: .json(.init(items: items))
+            )
+            switch response {
+            case .ok(let result):
+                let confirmed = try result.body.json.items
+                guard confirmed.count == decisions.count else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                }
+                for (state, decision) in zip(confirmed, decisions) {
+                    guard state.segmentId.lowercased() == decision.segmentID.uuidString.lowercased(),
+                          state.segmentVersion == decision.segmentVersion else {
+                        throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                    switch (state.selection, decision.selection) {
+                    case (.label(let actual), .label(let expected))
+                        where actual.labelId.lowercased() == expected.uuidString.lowercased(): break
+                    case (.unclassified, .unclassified): break
+                    default: throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                }
+            case .unauthorized:
+                throw MosemoAPIError.authenticationRequired
+            case .conflict(let result):
+                throw Self.labelConfirmationRejection(try result.body.json.error)
+            case .notFound(let result):
+                throw Self.labelConfirmationRejection(try result.body.json.error)
+            case .unprocessableContent(let result):
+                throw Self.labelConfirmationRejection(try result.body.json.error)
+            case .serviceUnavailable(let result):
+                let error = try result.body.json.error
+                let retryAfter: TimeInterval? = result.headers.retryAfter == ._1 ? 1 : nil
+                throw Self.labelConfirmationRejection(error, retryAfter: retryAfter)
+            case .methodNotAllowed:
+                throw Self.error(forHTTPStatus: 405)
+            case .internalServerError:
+                throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let statusCode, _):
+                throw Self.error(forHTTPStatus: statusCode)
+            }
+        } catch {
+            if let rejection = error as? LabelConfirmationRejection { throw rejection }
+            let mappedError = Self.mapCommon(error, statusCode: nil)
+            if mappedError == .authenticationRequired { try? await tokenStore.delete() }
+            throw mappedError
+        }
+    }
+
+    private static func labelConfirmationRejection(
+        _ error: Components.Schemas.ErrorPayload,
+        retryAfter: TimeInterval? = nil
+    ) -> LabelConfirmationRejection {
+        let index = error.details.lazy.compactMap { detail -> Int? in
+            guard detail.loc.count >= 3,
+                  detail.loc[0].value1 == "body",
+                  detail.loc[1].value1 == "items" else { return nil }
+            return detail.loc[2].value2
+        }.first
+        let reason: LabelConfirmationRejectionReason
+        switch error.status {
+        case "ACTIVITY_LABEL_CONFIRMATION_CONFLICT": reason = .priorConfirmationConflict
+        case "ACTIVITY_SEGMENT_CHANGED": reason = .segmentChanged
+        case "ACTIVITY_SEGMENT_NOT_FOUND": reason = .segmentNotFound
+        case "ACTIVITY_SEGMENT_NOT_LABELABLE": reason = .segmentNotLabelable
+        case "LABEL_NOT_AVAILABLE": reason = .labelNotAvailable
+        case "ACTIVITY_TIMELINE_BUSY": reason = .timelineBusy
+        case "VALIDATION_ERROR": reason = .validationFailed
+        default: reason = .other(error.status)
+        }
+        return LabelConfirmationRejection(reason: reason, failedIndex: index, retryAfter: retryAfter)
     }
 
     private static func appName(from context: Components.Schemas.DetailedActivityContext) -> String {

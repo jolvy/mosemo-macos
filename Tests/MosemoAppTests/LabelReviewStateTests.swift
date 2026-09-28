@@ -91,12 +91,13 @@ final class LabelReviewViewModelTests: XCTestCase {
         let today = TimelineDate(year: 2026, month: 9, day: 27)
         let model = LabelReviewViewModel(
             fetcher: fetcher,
+            writer: RecordingLabelConfirmationWriter(),
             timeZone: zone,
             now: today.startOfDay(timeZone: zone)
         )
 
         await model.load()
-        model.confirm(model.groups[0])
+        await model.confirm(model.groups[0])
         XCTAssertEqual(model.segmentCount, 7)
 
         await model.load()
@@ -105,7 +106,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         await waitUntil { model.loadState == .loaded && model.selectedDate.day == 26 }
 
         let dates = await fetcher.dates()
-        XCTAssertEqual(dates, [today, today, TimelineDate(year: 2026, month: 9, day: 26)])
+        XCTAssertEqual(dates, [today, today, today, TimelineDate(year: 2026, month: 9, day: 26)])
     }
 
     func testOldDateResponseCannotReplaceNewDate() async {
@@ -114,6 +115,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         let newDay = TimelineDate(year: 2026, month: 9, day: 26)
         let model = LabelReviewViewModel(
             fetcher: DelayedLabelReviewFetcher(slowDay: oldDay),
+            writer: RecordingLabelConfirmationWriter(),
             timeZone: zone,
             now: oldDay.startOfDay(timeZone: zone)
         )
@@ -134,7 +136,7 @@ final class LabelReviewViewModelTests: XCTestCase {
             .failure(.offline),
             .success(LabelReviewSnapshot(response: response)),
         ])
-        let viewModel = LabelReviewViewModel(fetcher: fetcher)
+        let viewModel = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
 
         await viewModel.load()
         XCTAssertEqual(viewModel.loadState, .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요."))
@@ -145,7 +147,7 @@ final class LabelReviewViewModelTests: XCTestCase {
 
         viewModel.toggleAllGroups()
         XCTAssertTrue(viewModel.allGroupsSelected)
-        viewModel.confirm(viewModel.groups[0])
+        await viewModel.confirm(viewModel.groups[0])
 
         XCTAssertEqual(viewModel.segmentCount, 7)
         XCTAssertEqual(viewModel.selectedGroups.count, 6)
@@ -154,7 +156,8 @@ final class LabelReviewViewModelTests: XCTestCase {
     func testIndividualOverrideCanBeConfirmedAndDisappearsFromReview() async {
         let response = MockLabelReviewFetcher.demo.response
         let viewModel = LabelReviewViewModel(
-            fetcher: MockLabelReviewFetcher(response: response)
+            fetcher: MockLabelReviewFetcher(response: response),
+            writer: RecordingLabelConfirmationWriter()
         )
         await viewModel.load()
 
@@ -163,7 +166,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         viewModel.setSelection(.label(id: alternateLabel.id), for: segment)
         XCTAssertEqual(viewModel.title(for: viewModel.selection(for: segment)), "학습")
 
-        viewModel.confirm(segment)
+        await viewModel.confirm(segment)
 
         XCTAssertEqual(viewModel.segmentCount, 9)
         XCTAssertFalse(viewModel.groups.flatMap(\.segments).contains { $0.id == segment.id })
@@ -192,7 +195,7 @@ final class LabelReviewViewModelTests: XCTestCase {
             ],
             segments: [segment]
         )
-        let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response))
+        let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response), writer: RecordingLabelConfirmationWriter())
         await viewModel.load()
 
         XCTAssertEqual(viewModel.title(for: viewModel.selection(for: viewModel.groups[0].segments[0])), "옛 라벨")
@@ -200,33 +203,209 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.missingChoiceCount, 1)
         XCTAssertFalse(viewModel.canConfirm([viewModel.groups[0].segments[0]]))
 
-        viewModel.confirmSelectedGroups()
+        await viewModel.confirmSelectedGroups()
         XCTAssertEqual(viewModel.segmentCount, 1)
 
         viewModel.setSelection(.label(id: activeLabelID), for: viewModel.groups[0].segments[0])
         XCTAssertEqual(viewModel.missingChoiceCount, 0)
         XCTAssertTrue(viewModel.canConfirm([viewModel.groups[0].segments[0]]))
-        viewModel.confirmSelectedGroups()
+        await viewModel.confirmSelectedGroups()
         XCTAssertEqual(viewModel.segmentCount, 0)
     }
 
     func testSelectedGroupsCanBeConfirmedTogether() async {
+        let writer = RecordingLabelConfirmationWriter()
         let viewModel = LabelReviewViewModel(
-            fetcher: MockLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
+            fetcher: MockLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response),
+            writer: writer
         )
         await viewModel.load()
 
         viewModel.toggleSelection(for: viewModel.groups[0])
         viewModel.toggleSelection(for: viewModel.groups[1])
-        viewModel.confirmSelectedGroups()
+        await viewModel.confirmSelectedGroups()
 
         XCTAssertEqual(viewModel.segmentCount, 5)
         XCTAssertTrue(viewModel.selectedGroups.isEmpty)
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].map(\.segmentID), Array(MockLabelReviewFetcher.demo.response.segments.prefix(5)).map(\.id))
+    }
+
+    func testAtomicFailureKeepsSelectionsAndRetrySendsIdenticalRequest() async {
+        let writer = RecordingLabelConfirmationWriter(failures: [
+            LabelConfirmationRejection(reason: .timelineBusy, failedIndex: 1, retryAfter: 1)
+        ])
+        let model = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo, writer: writer)
+        await model.load()
+        let segment = model.groups[0].segments[1]
+        let choice = LabelReviewSelection.label(id: model.labels[2].id)
+        model.setSelection(choice, for: segment)
+        model.toggleSelection(for: model.groups[0])
+
+        await model.confirmSelectedGroups()
+
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertEqual(model.selectedSegmentCount, 3)
+        XCTAssertEqual(model.selection(for: segment), choice)
+        XCTAssertTrue(model.canRetrySubmission)
+        XCTAssertTrue(model.submissionMessage?.contains("2번째 기록") == true)
+
+        await model.retrySubmission()
+
+        XCTAssertEqual(model.segmentCount, 7)
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0], requests[1])
+        XCTAssertEqual(requests[0][1].selection, .label(model.labels[2].id))
+    }
+
+    func testSingleSegmentStaysPendingUntilServerConfirms() async {
+        let writer = SuspendedLabelConfirmationWriter()
+        let model = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo, writer: writer)
+        await model.load()
+        let segment = model.groups[0].segments[0]
+
+        let submission = Task { await model.confirm(segment) }
+        await waitUntil { model.isSubmitting }
+        while !(await writer.isPending()) {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertFalse(model.canConfirm([segment]))
+
+        await writer.succeed()
+        await submission.value
+
+        XCTAssertEqual(model.segmentCount, 9)
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].map(\.segmentID), [segment.id])
+    }
+
+    func testRefreshCannotInterruptInFlightSubmission() async {
+        let fetcher = RecordingLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
+        let writer = SuspendedLabelConfirmationWriter()
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+        await model.load()
+        let segment = model.groups[0].segments[0]
+
+        let submission = Task { await model.confirm(segment) }
+        await waitUntil { model.isSubmitting }
+        while !(await writer.isPending()) {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        await model.load()
+        model.moveDate(by: -1)
+        XCTAssertTrue(model.isSubmitting)
+        XCTAssertEqual(model.segmentCount, 10)
+        let datesBeforeCompletion = await fetcher.dates()
+        XCTAssertEqual(datesBeforeCompletion.count, 1)
+
+        await writer.succeed()
+        await submission.value
+        XCTAssertEqual(model.segmentCount, 9)
+        let completedRequests = await writer.recordedRequests()
+        XCTAssertEqual(completedRequests.count, 1)
+    }
+
+    func testSuccessfulSubmissionFetchesLatestAndPreservesChangedVersionChoice() async {
+        let first = MockLabelReviewFetcher.demo.response
+        var latestSegments = Array(first.segments.dropFirst())
+        let changed = latestSegments[0]
+        latestSegments[0] = LabelReviewSegmentDTO(
+            id: changed.id, version: String(repeating: "f", count: 64),
+            startedAt: changed.startedAt, endedAt: changed.endedAt,
+            appName: changed.appName, title: changed.title, proposal: changed.proposal
+        )
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [
+            first, LabelReviewResponseDTO(labels: first.labels, segments: latestSegments)
+        ], confirmedByID: [:])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let target = model.groups[0].segments[1]
+        let choice = LabelReviewSelection.label(id: model.labels[2].id)
+        model.setSelection(choice, for: target)
+
+        await model.confirm(model.groups[0].segments[0])
+
+        XCTAssertEqual(model.segmentCount, 9)
+        XCTAssertEqual(model.groups[0].segments[0].version, String(repeating: "f", count: 64))
+        XCTAssertEqual(model.selection(for: model.groups[0].segments[0]), choice)
+    }
+
+    func testConflictRefreshFailureRetriesFetchWithoutResendingSubmission() async {
+        let first = MockLabelReviewFetcher.demo.response
+        let latest = LabelReviewResponseDTO(labels: first.labels, segments: Array(first.segments.dropFirst()))
+        let fetcher = SequenceLabelReviewFetcher(results: [
+            .success(LabelReviewSnapshot(response: first)),
+            .failure(.offline),
+            .success(LabelReviewSnapshot(response: latest)),
+        ])
+        let writer = RecordingLabelConfirmationWriter(failures: [
+            LabelConfirmationRejection(reason: .priorConfirmationConflict, failedIndex: 0)
+        ])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+        await model.load()
+        let target = model.groups[0].segments[1]
+        let choice = LabelReviewSelection.label(id: model.labels[2].id)
+        model.setSelection(choice, for: target)
+        model.toggleSelection(for: model.groups[0])
+
+        await model.confirmSelectedGroups()
+        XCTAssertEqual(model.retryActionTitle, "최신 상태 다시 조회")
+        XCTAssertTrue(model.canRetrySubmission)
+        XCTAssertEqual(model.selection(for: target), choice)
+
+        await model.retrySubmission()
+        XCTAssertEqual(model.segmentCount, 9)
+        XCTAssertEqual(model.selectedSegmentCount, 2)
+        XCTAssertEqual(model.selection(for: model.groups[0].segments[0]), choice)
+        XCTAssertFalse(model.canRetrySubmission)
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+    }
+
+    func testPriorConfirmationRefreshPreservesRemainingChoicesAcrossVersionChange() async {
+        let first = MockLabelReviewFetcher.demo.response
+        var refreshedSegments = first.segments
+        refreshedSegments.removeFirst()
+        let changed = refreshedSegments[0]
+        refreshedSegments[0] = LabelReviewSegmentDTO(
+            id: changed.id, version: String(repeating: "e", count: 64),
+            startedAt: changed.startedAt, endedAt: changed.endedAt,
+            appName: changed.appName, title: changed.title, proposal: changed.proposal
+        )
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [
+            first, LabelReviewResponseDTO(labels: first.labels, segments: refreshedSegments)
+        ], confirmedByID: [first.segments[0].id: .label(id: first.labels[1].id)])
+        let writer = RecordingLabelConfirmationWriter(failures: [
+            LabelConfirmationRejection(reason: .priorConfirmationConflict, failedIndex: 0)
+        ])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+        await model.load()
+        let target = model.groups[0].segments[1]
+        let choice = LabelReviewSelection.label(id: model.labels[2].id)
+        model.setSelection(choice, for: target)
+        model.toggleSelection(for: model.groups[0])
+
+        await model.confirmSelectedGroups()
+
+        XCTAssertEqual(model.segmentCount, 9)
+        XCTAssertEqual(model.selectedSegmentCount, 2)
+        XCTAssertEqual(model.selection(for: model.groups[0].segments[0]), choice)
+        XCTAssertEqual(model.groups[0].segments[0].version, String(repeating: "e", count: 64))
+        XCTAssertEqual(model.conflictedDrafts.count, 1)
+        XCTAssertEqual(model.conflictedDrafts[0].id, first.segments[0].id)
+        XCTAssertEqual(model.conflictedDrafts[0].confirmedSelection, .label(id: model.labels[1].id))
+        XCTAssertEqual(model.conflictedDrafts[0].selection, .label(id: model.labels[0].id))
+        XCTAssertFalse(model.canRetrySubmission)
+        XCTAssertTrue(model.submissionMessage?.contains("최신 목록") == true)
     }
 
     func testEmptyFetchProducesLoadedEmptyModel() async {
         let response = LabelReviewResponseDTO(labels: [], segments: [])
-        let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response))
+        let viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher(response: response), writer: RecordingLabelConfirmationWriter())
 
         await viewModel.load()
 
@@ -250,6 +429,57 @@ private enum LabelReviewFetchFailure: Error, Sendable {
     case offline
 }
 
+private actor RecordingLabelConfirmationWriter: LabelConfirmationWriting {
+    private var requests: [[LabelConfirmationDecision]] = []
+    private var failures: [LabelConfirmationRejection]
+
+    init(failures: [LabelConfirmationRejection] = []) { self.failures = failures }
+
+    func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws {
+        requests.append(decisions)
+        if !failures.isEmpty { throw failures.removeFirst() }
+    }
+
+    func recordedRequests() -> [[LabelConfirmationDecision]] { requests }
+}
+
+private actor SuspendedLabelConfirmationWriter: LabelConfirmationWriting {
+    private var requests: [[LabelConfirmationDecision]] = []
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws {
+        requests.append(decisions)
+        try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+
+    func succeed() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func recordedRequests() -> [[LabelConfirmationDecision]] { requests }
+
+    func isPending() -> Bool { continuation != nil }
+}
+
+private actor SnapshotSequenceLabelReviewFetcher: LabelReviewFetching {
+    private var responses: [LabelReviewResponseDTO]
+    private let confirmedByID: [UUID: LabelReviewSelection]
+
+    init(responses: [LabelReviewResponseDTO], confirmedByID: [UUID: LabelReviewSelection]) {
+        self.responses = responses
+        self.confirmedByID = confirmedByID
+    }
+
+    func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
+        LabelReviewSnapshot(response: responses.removeFirst())
+    }
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? {
+        confirmedByID[segmentID]
+    }
+}
+
 private actor SequenceLabelReviewFetcher: LabelReviewFetching {
     private var results: [Result<LabelReviewSnapshot, LabelReviewFetchFailure>]
 
@@ -261,6 +491,8 @@ private actor SequenceLabelReviewFetcher: LabelReviewFetching {
         guard !results.isEmpty else { throw LabelReviewFetchFailure.offline }
         return try results.removeFirst().get()
     }
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? { nil }
 }
 
 private actor RecordingLabelReviewFetcher: LabelReviewFetching {
@@ -271,6 +503,8 @@ private actor RecordingLabelReviewFetcher: LabelReviewFetching {
 
     func dates() -> [TimelineDate] { requestedDates }
 
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? { nil }
+
     func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
         requestedDates.append(day)
         return LabelReviewSnapshot(response: response)
@@ -279,6 +513,8 @@ private actor RecordingLabelReviewFetcher: LabelReviewFetching {
 
 private struct DelayedLabelReviewFetcher: LabelReviewFetching {
     let slowDay: TimelineDate
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? { nil }
 
     func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
         try? await Task.sleep(nanoseconds: day == slowDay ? 250_000_000 : 10_000_000)
