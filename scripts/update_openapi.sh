@@ -88,6 +88,14 @@ jq -e '
     (.paths["/api/v1/accounts/me"].get.responses["200"] != null) and
     (.paths["/api/v1/accounts/me"].get.responses["401"] != null) and
     (.paths["/api/v1/labels"].get.operationId == "labelsList") and
+    (.paths["/api/v1/activities/label-confirmations"].post.operationId
+        == "activitiesConfirmSegmentLabels") and
+    (.paths["/api/v1/activities/label-confirmations"].post.requestBody.content["application/json"].schema."$ref"
+        == "#/components/schemas/BatchLabelConfirmationRequest") and
+    (.paths["/api/v1/activities/label-confirmations"].post.responses["200"].content["application/json"].schema."$ref"
+        == "#/components/schemas/BatchLabelConfirmationResponse") and
+    (.paths["/api/v1/activities/label-confirmations"].post.responses["409"] != null) and
+    (.paths["/api/v1/activities/label-confirmations"].post.responses["503"].headers["Retry-After"] != null) and
     (.paths["/api/v1/labels"].get.responses["200"].content["application/json"].schema.type == "array") and
     (.paths["/api/v1/labels"].get.responses["200"].content["application/json"].schema.items."$ref"
         == "#/components/schemas/LabelResponse") and

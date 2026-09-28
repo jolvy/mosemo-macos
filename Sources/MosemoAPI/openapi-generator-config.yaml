@@ -10,6 +10,7 @@ filter:
     - activitiesGetTimeline
     - activitiesGetLabelTimeline
     - activitiesGetSegmentLabelState
+    - activitiesConfirmSegmentLabels
     - authExchangeToken
     - devicesCreate
     - labelsList

@@ -60,6 +60,8 @@ struct MosemoApp: App {
                 #if DEBUG
                 if CommandLine.arguments.contains("--timeline-ui-preview") {
                     TimelineScreen(account: Self.previewAccount, signOut: nil, fetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000), showsPreviewNotice: true)
+                } else if CommandLine.arguments.contains("--label-review-ui-preview") {
+                    LabelReviewDemoView()
                 } else {
                     DesktopRootView(
                         model: model,
@@ -93,9 +95,10 @@ struct MosemoApp: App {
         .defaultSize(width: 900, height: 700)
 
         Window("라벨 검토", id: "label-review") {
-            if let account = auth.account, let reviewReader {
+            if let account = auth.account, let reviewReader, let apiClient {
                 LabelReviewScreen(
                     fetcher: LiveLabelReviewFetcher(reader: reviewReader),
+                    writer: apiClient,
                     timeZone: TimeZone(identifier: account.timeZoneID) ?? .current
                 )
                 .id(account.id)

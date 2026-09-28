@@ -63,6 +63,23 @@ struct LabelReviewResponseDTO: Equatable, Sendable {
 
 protocol LabelReviewFetching: Sendable {
     func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection?
+}
+
+extension LabelReviewSelection {
+    init(remote: LabelConfirmationSelection) {
+        switch remote {
+        case .label(let id): self = .label(id: id)
+        case .unclassified: self = .unclassified
+        }
+    }
+
+    var remote: LabelConfirmationSelection {
+        switch self {
+        case .label(let id): .label(id)
+        case .unclassified: .unclassified
+        }
+    }
 }
 
 enum LabelReviewFetchError: Error {
@@ -72,6 +89,12 @@ enum LabelReviewFetchError: Error {
 
 struct LiveLabelReviewFetcher: LabelReviewFetching {
     let reader: any LabelReviewReading
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? {
+        guard case .confirmed(let id, _, let selection) = try await reader.labelState(segmentID: segmentID),
+              id == segmentID else { return nil }
+        return LabelReviewSelection(remote: selection)
+    }
 
     func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
         for attempt in 0..<2 {
@@ -153,6 +176,8 @@ struct LiveLabelReviewFetcher: LabelReviewFetching {
 
 struct MockLabelReviewFetcher: LabelReviewFetching {
     let response: LabelReviewResponseDTO
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? { nil }
 
     func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
         LabelReviewSnapshot(response: response)

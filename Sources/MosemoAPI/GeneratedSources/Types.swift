@@ -25,6 +25,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/activities`.
     /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
     func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output
+    /// 관찰 구간 라벨 일괄 확정
+    ///
+    /// 라벨 타임라인 그룹과 관계없이 닫힌 상세 관찰 구간마다 선택을 지정해 한 요청에서 확정합니다. 모든 항목이 유효해야 전체 요청을 적용하며, 같은 관찰 버전에 이미 다른 선택이 확정되어 있으면 충돌을 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities/label-confirmations`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)`.
+    func activitiesConfirmSegmentLabels(_ input: Operations.ActivitiesConfirmSegmentLabels.Input) async throws -> Operations.ActivitiesConfirmSegmentLabels.Output
     /// 날짜별 라벨 타임라인 조회
     ///
     /// 계정 시간대의 날짜별 라벨 타임라인을 반환합니다. date를 생략하면 계정 시간대의 오늘을 조회하며, 시간상 연속이고 라벨과 확정 상태가 같은 닫힌 상세 활동 구간만 하나의 항목으로 묶습니다.
@@ -91,6 +98,21 @@ extension APIProtocol {
         body: Operations.ActivitiesCreate.Input.Body
     ) async throws -> Operations.ActivitiesCreate.Output {
         try await activitiesCreate(Operations.ActivitiesCreate.Input(
+            headers: headers,
+            body: body
+        ))
+    }
+    /// 관찰 구간 라벨 일괄 확정
+    ///
+    /// 라벨 타임라인 그룹과 관계없이 닫힌 상세 관찰 구간마다 선택을 지정해 한 요청에서 확정합니다. 모든 항목이 유효해야 전체 요청을 적용하며, 같은 관찰 버전에 이미 다른 선택이 확정되어 있으면 충돌을 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities/label-confirmations`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)`.
+    internal func activitiesConfirmSegmentLabels(
+        headers: Operations.ActivitiesConfirmSegmentLabels.Input.Headers = .init(),
+        body: Operations.ActivitiesConfirmSegmentLabels.Input.Body
+    ) async throws -> Operations.ActivitiesConfirmSegmentLabels.Output {
+        try await activitiesConfirmSegmentLabels(Operations.ActivitiesConfirmSegmentLabels.Input(
             headers: headers,
             body: body
         ))
@@ -878,6 +900,54 @@ internal enum Components {
                     "bundleId",
                     "name"
                 ])
+            }
+        }
+        /// 여러 관찰 구간의 라벨 선택을 원자적으로 확정하는 요청입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/BatchLabelConfirmationRequest`.
+        internal struct BatchLabelConfirmationRequest: Codable, Hashable, Sendable {
+            /// 한 번에 확정할 관찰 구간과 각 구간의 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchLabelConfirmationRequest/items`.
+            internal var items: [Components.Schemas.SegmentLabelConfirmationItemRequest]
+            /// Creates a new `BatchLabelConfirmationRequest`.
+            ///
+            /// - Parameters:
+            ///   - items: 한 번에 확정할 관찰 구간과 각 구간의 선택입니다.
+            internal init(items: [Components.Schemas.SegmentLabelConfirmationItemRequest]) {
+                self.items = items
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case items
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.items = try container.decode(
+                    [Components.Schemas.SegmentLabelConfirmationItemRequest].self,
+                    forKey: .items
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "items"
+                ])
+            }
+        }
+        /// 요청한 순서대로 반환한 관찰 구간별 확정 결과입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/BatchLabelConfirmationResponse`.
+        internal struct BatchLabelConfirmationResponse: Codable, Hashable, Sendable {
+            /// 요청한 각 관찰 구간의 최신 확정 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchLabelConfirmationResponse/items`.
+            internal var items: [Components.Schemas.ConfirmedActivityLabelStateResponse]
+            /// Creates a new `BatchLabelConfirmationResponse`.
+            ///
+            /// - Parameters:
+            ///   - items: 요청한 각 관찰 구간의 최신 확정 상태입니다.
+            internal init(items: [Components.Schemas.ConfirmedActivityLabelStateResponse]) {
+                self.items = items
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case items
             }
         }
         /// Browser tab and URL values observed independently by the client.
@@ -2014,6 +2084,56 @@ internal enum Components {
                 case updatedAt
             }
         }
+        /// 라벨 하나를 선택하는 확정 요청입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/LabelSelectionRequest`.
+        internal struct LabelSelectionRequest: Codable, Hashable, Sendable {
+            /// 활동에 확정할 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionRequest/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case label = "label"
+            }
+            /// 활동에 확정할 라벨 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionRequest/kind`.
+            internal var kind: Components.Schemas.LabelSelectionRequest.KindPayload
+            /// 확정할 활성 라벨 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelSelectionRequest/labelId`.
+            internal var labelId: Swift.String
+            /// Creates a new `LabelSelectionRequest`.
+            ///
+            /// - Parameters:
+            ///   - kind: 활동에 확정할 라벨 선택입니다.
+            ///   - labelId: 확정할 활성 라벨 식별자입니다.
+            internal init(
+                kind: Components.Schemas.LabelSelectionRequest.KindPayload,
+                labelId: Swift.String
+            ) {
+                self.kind = kind
+                self.labelId = labelId
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+                case labelId
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.kind = try container.decode(
+                    Components.Schemas.LabelSelectionRequest.KindPayload.self,
+                    forKey: .kind
+                )
+                self.labelId = try container.decode(
+                    Swift.String.self,
+                    forKey: .labelId
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "kind",
+                    "labelId"
+                ])
+            }
+        }
         /// 응답에 포함되는 라벨 선택입니다.
         ///
         /// - Remark: Generated from `#/components/schemas/LabelSelectionResponse`.
@@ -2608,6 +2728,102 @@ internal enum Components {
                 ])
             }
         }
+        /// 관찰 구간 하나에 적용할 라벨 확정 선택입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest`.
+        internal struct SegmentLabelConfirmationItemRequest: Codable, Hashable, Sendable {
+            /// 확정할 관찰 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/segmentId`.
+            internal var segmentId: Swift.String
+            /// 확정 대상 관찰 구간의 불투명 version입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/segmentVersion`.
+            internal var segmentVersion: Swift.String
+            /// 이 관찰 구간에 확정할 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/selection`.
+            internal enum SelectionPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/selection/LabelSelectionRequest`.
+                case label(Components.Schemas.LabelSelectionRequest)
+                /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/selection/UnclassifiedSelectionRequest`.
+                case unclassified(Components.Schemas.UnclassifiedSelectionRequest)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "label":
+                        self = .label(try .init(from: decoder))
+                    case "unclassified":
+                        self = .unclassified(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .label(value):
+                        try value.encode(to: encoder)
+                    case let .unclassified(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 이 관찰 구간에 확정할 라벨 또는 미분류 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/SegmentLabelConfirmationItemRequest/selection`.
+            internal var selection: Components.Schemas.SegmentLabelConfirmationItemRequest.SelectionPayload
+            /// Creates a new `SegmentLabelConfirmationItemRequest`.
+            ///
+            /// - Parameters:
+            ///   - segmentId: 확정할 관찰 구간 식별자입니다.
+            ///   - segmentVersion: 확정 대상 관찰 구간의 불투명 version입니다.
+            ///   - selection: 이 관찰 구간에 확정할 라벨 또는 미분류 선택입니다.
+            internal init(
+                segmentId: Swift.String,
+                segmentVersion: Swift.String,
+                selection: Components.Schemas.SegmentLabelConfirmationItemRequest.SelectionPayload
+            ) {
+                self.segmentId = segmentId
+                self.segmentVersion = segmentVersion
+                self.selection = selection
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case segmentId
+                case segmentVersion
+                case selection
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.segmentId = try container.decode(
+                    Swift.String.self,
+                    forKey: .segmentId
+                )
+                self.segmentVersion = try container.decode(
+                    Swift.String.self,
+                    forKey: .segmentVersion
+                )
+                self.selection = try container.decode(
+                    Components.Schemas.SegmentLabelConfirmationItemRequest.SelectionPayload.self,
+                    forKey: .selection
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "segmentId",
+                    "segmentVersion",
+                    "selection"
+                ])
+            }
+        }
         /// IANA timezones accepted by the public API.
         ///
         /// - Remark: Generated from `#/components/schemas/Timezone`.
@@ -2819,6 +3035,41 @@ internal enum Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "reason",
                     "status"
+                ])
+            }
+        }
+        /// 미분류 상태를 선택하는 확정 요청입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionRequest`.
+        internal struct UnclassifiedSelectionRequest: Codable, Hashable, Sendable {
+            /// 활동을 미분류로 확정하는 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionRequest/kind`.
+            internal enum KindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unclassified = "unclassified"
+            }
+            /// 활동을 미분류로 확정하는 선택입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/UnclassifiedSelectionRequest/kind`.
+            internal var kind: Components.Schemas.UnclassifiedSelectionRequest.KindPayload
+            /// Creates a new `UnclassifiedSelectionRequest`.
+            ///
+            /// - Parameters:
+            ///   - kind: 활동을 미분류로 확정하는 선택입니다.
+            internal init(kind: Components.Schemas.UnclassifiedSelectionRequest.KindPayload) {
+                self.kind = kind
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case kind
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.kind = try container.decode(
+                    Components.Schemas.UnclassifiedSelectionRequest.KindPayload.self,
+                    forKey: .kind
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "kind"
                 ])
             }
         }
@@ -3900,6 +4151,557 @@ internal enum Operations {
             /// - Throws: An error if `self` is not `.serviceUnavailable`.
             /// - SeeAlso: `.serviceUnavailable`.
             internal var serviceUnavailable: Operations.ActivitiesCreate.Output.ServiceUnavailable {
+                get throws {
+                    switch self {
+                    case let .serviceUnavailable(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "serviceUnavailable",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 관찰 구간 라벨 일괄 확정
+    ///
+    /// 라벨 타임라인 그룹과 관계없이 닫힌 상세 관찰 구간마다 선택을 지정해 한 요청에서 확정합니다. 모든 항목이 유효해야 전체 요청을 적용하며, 같은 관찰 버전에 이미 다른 선택이 확정되어 있으면 충돌을 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/activities/label-confirmations`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)`.
+    internal enum ActivitiesConfirmSegmentLabels {
+        internal static let id: Swift.String = "activitiesConfirmSegmentLabels"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesConfirmSegmentLabels.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesConfirmSegmentLabels.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.ActivitiesConfirmSegmentLabels.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.BatchLabelConfirmationRequest)
+            }
+            internal var body: Operations.ActivitiesConfirmSegmentLabels.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                headers: Operations.ActivitiesConfirmSegmentLabels.Input.Headers = .init(),
+                body: Operations.ActivitiesConfirmSegmentLabels.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.BatchLabelConfirmationResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.BatchLabelConfirmationResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesConfirmSegmentLabels.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 요청한 구간 순서대로 반환한 최신 확정 상태입니다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ActivitiesConfirmSegmentLabels.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.ActivitiesConfirmSegmentLabels.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.ActivitiesConfirmSegmentLabels.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesConfirmSegmentLabels.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.ActivitiesConfirmSegmentLabels.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.ActivitiesConfirmSegmentLabels.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.ActivitiesConfirmSegmentLabels.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesConfirmSegmentLabels.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.ActivitiesConfirmSegmentLabels.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.ActivitiesConfirmSegmentLabels.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesConfirmSegmentLabels.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ActivitiesConfirmSegmentLabels.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.ActivitiesConfirmSegmentLabels.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.ActivitiesConfirmSegmentLabels.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.ActivitiesConfirmSegmentLabels.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.ActivitiesConfirmSegmentLabels.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct ServiceUnavailable: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/503/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/503/headers/Retry-After`.
+                    internal enum RetryAfterPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case _1 = "1"
+                    }
+                    /// 확정 요청을 재시도하기 전 대기할 초입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/503/headers/Retry-After`.
+                    internal var retryAfter: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Headers.RetryAfterPayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - retryAfter: 확정 요청을 재시도하기 전 대기할 초입니다.
+                    internal init(retryAfter: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Headers.RetryAfterPayload? = nil) {
+                        self.retryAfter = retryAfter
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/503/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/activities/label-confirmations/POST/responses/503/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Body
+                /// Creates a new `ServiceUnavailable`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Headers = .init(),
+                    body: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Service Unavailable
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/activities/label-confirmations/post(activitiesConfirmSegmentLabels)/responses/503`.
+            ///
+            /// HTTP response code: `503 serviceUnavailable`.
+            case serviceUnavailable(Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable)
+            /// The associated value of the enum case if `self` is `.serviceUnavailable`.
+            ///
+            /// - Throws: An error if `self` is not `.serviceUnavailable`.
+            /// - SeeAlso: `.serviceUnavailable`.
+            internal var serviceUnavailable: Operations.ActivitiesConfirmSegmentLabels.Output.ServiceUnavailable {
                 get throws {
                     switch self {
                     case let .serviceUnavailable(response):

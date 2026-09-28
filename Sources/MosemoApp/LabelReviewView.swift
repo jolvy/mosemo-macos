@@ -35,10 +35,33 @@ struct LabelReviewView: View {
                     Task { await viewModel.load() }
                 }
             }
+            .disabled(viewModel.isSubmitting)
 
-            Label("이 화면의 완료 처리는 임시 표시입니다. 서버에 저장되지 않으며 새로고침하면 서버 상태로 돌아옵니다.", systemImage: "info.circle")
+            if let message = viewModel.submissionMessage {
+                HStack {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                    Spacer()
+                    if viewModel.canRetrySubmission {
+                        Button(viewModel.retryActionTitle) { Task { await viewModel.retrySubmission() } }
+                            .disabled(viewModel.isSubmitting)
+                    }
+                }
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .padding(10)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            }
+            if !viewModel.conflictedDrafts.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("최신 검토 목록에서 빠진 기록의 보존한 선택")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(viewModel.conflictedDrafts) { draft in
+                        Text("\(draft.title) · \(draft.confirmedSelection.map { "서버 확정: \(viewModel.title(for: $0))" } ?? "서버 확정 정보 없음") · 내 선택: \(viewModel.title(for: draft.selection))")
+                            .font(.caption)
+                    }
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             switch viewModel.loadState {
             case .idle, .loading:
@@ -63,7 +86,8 @@ struct LabelReviewView: View {
                         selectedGroupCount: viewModel.selectedGroups.count,
                         selectedSegmentCount: viewModel.selectedSegmentCount,
                         missingChoiceCount: viewModel.missingChoiceCount,
-                        onConfirm: viewModel.confirmSelectedGroups
+                        isSubmitting: viewModel.isSubmitting,
+                        onConfirm: { Task { await viewModel.confirmSelectedGroups() } }
                     )
                     LabelReviewTable(viewModel: viewModel)
                 }
@@ -83,9 +107,11 @@ private struct LabelReviewHeader: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("라벨 제안")
                     .font(.largeTitle.bold())
+                    .accessibilityIdentifier("label-review-title")
                 Text("검토 대기 중인 활동 \(segmentCount)건 · 이어진 기록은 한 묶음으로 표시됩니다.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("label-review-pending-count")
             }
             Spacer()
             Label("검토 대기", systemImage: "tray.full")
@@ -99,6 +125,7 @@ private struct LabelReviewSelectionSummary: View {
     let selectedGroupCount: Int
     let selectedSegmentCount: Int
     let missingChoiceCount: Int
+    let isSubmitting: Bool
     let onConfirm: () -> Void
 
     var body: some View {
@@ -107,15 +134,15 @@ private struct LabelReviewSelectionSummary: View {
                 Text("\(selectedGroupCount)개 묶음 선택 · \(selectedSegmentCount)개 기록")
                     .font(.subheadline.weight(.semibold))
                 Text(missingChoiceCount == 0
-                     ? "각 기록의 현재 선택으로 로컬 완료 처리합니다."
+                     ? "각 기록의 현재 선택을 한 요청으로 확정합니다."
                      : "라벨 선택이 필요한 기록 \(missingChoiceCount)건을 먼저 지정하세요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("선택한 묶음 로컬 완료", action: onConfirm)
+            Button(isSubmitting ? "제출 중…" : "선택한 묶음 확정", action: onConfirm)
                 .buttonStyle(.borderedProminent)
-                .disabled(selectedGroupCount == 0 || missingChoiceCount > 0)
+                .disabled(selectedGroupCount == 0 || missingChoiceCount > 0 || isSubmitting)
         }
         .padding(14)
         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -135,14 +162,14 @@ private struct LabelReviewTable: View {
                             group: group,
                             timeZone: viewModel.timeZone,
                             labels: viewModel.labels,
-                            isSelected: viewModel.selectedGroupIDs.contains(group.id),
+                            isSelected: group.segments.allSatisfy { viewModel.selectedSegmentIDs.contains($0.id) },
                             isExpanded: viewModel.expandedGroupIDs.contains(group.id),
                             selectionSummary: viewModel.selectionSummary(for: group.segments),
                             actionTitle: viewModel.groupActionTitle(group),
                             canConfirm: viewModel.canConfirm(group.segments),
                             onToggleSelection: { viewModel.toggleSelection(for: group) },
                             onToggleExpansion: { viewModel.toggleExpansion(for: group) },
-                            onConfirm: { viewModel.confirm(group) }
+                            onConfirm: { Task { await viewModel.confirm(group) } }
                         )
                         if viewModel.expandedGroupIDs.contains(group.id) {
                             ForEach(group.segments) { segment in
@@ -151,9 +178,10 @@ private struct LabelReviewTable: View {
                                     timeZone: viewModel.timeZone,
                                     labels: viewModel.labels,
                                     selectionTitle: viewModel.title(for: viewModel.selection(for: segment)),
+                                    isSubmitting: viewModel.isSubmitting,
                                     canConfirm: viewModel.canConfirm([segment]),
                                     onSelect: { viewModel.setSelection($0, for: segment) },
-                                    onConfirm: { viewModel.confirm(segment) }
+                                    onConfirm: { Task { await viewModel.confirm(segment) } }
                                 )
                             }
                         }
@@ -176,6 +204,7 @@ private struct LabelReviewTable: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             .accessibilityLabel(viewModel.allGroupsSelected ? "전체 선택 해제" : "모든 묶음 선택")
+            .disabled(viewModel.isSubmitting)
             .frame(width: 36)
             columnHeader("시간", width: 110)
             columnHeader("묶음 / 기록", width: 215)
@@ -266,6 +295,7 @@ private struct LabelReviewSegmentRow: View {
     let timeZone: TimeZone
     let labels: [LabelReviewLabel]
     let selectionTitle: String
+    let isSubmitting: Bool
     let canConfirm: Bool
     let onSelect: (LabelReviewSelection) -> Void
     let onConfirm: () -> Void
@@ -292,11 +322,12 @@ private struct LabelReviewSegmentRow: View {
             LabelReviewChoiceMenu(
                 labels: labels,
                 selectionTitle: selectionTitle,
+                isSubmitting: isSubmitting,
                 onSelect: onSelect
             )
             .frame(width: 160, alignment: .leading)
 
-            Button("이 기록 로컬 완료", action: onConfirm)
+            Button("이 기록 확정", action: onConfirm)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(!canConfirm)
@@ -312,6 +343,7 @@ private struct LabelReviewSegmentRow: View {
 private struct LabelReviewChoiceMenu: View {
     let labels: [LabelReviewLabel]
     let selectionTitle: String
+    let isSubmitting: Bool
     let onSelect: (LabelReviewSelection) -> Void
 
     var body: some View {
@@ -333,6 +365,7 @@ private struct LabelReviewChoiceMenu: View {
                 .strokeBorder(Color.secondary.opacity(0.65), lineWidth: 1)
         }
         .accessibilityLabel("라벨 선택: \(selectionTitle)")
+        .disabled(isSubmitting)
     }
 }
 
@@ -367,12 +400,15 @@ private extension Date {
 
 #if DEBUG
 struct LabelReviewDemoView: View {
-    @StateObject private var viewModel = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo)
+    @StateObject private var viewModel = LabelReviewViewModel(
+        fetcher: MockLabelReviewFetcher.demo,
+        writer: MockLabelConfirmationWriter()
+    )
 
     var body: some View {
         LabelReviewView(viewModel: viewModel)
             .overlay(alignment: .bottomTrailing) {
-                Text("DEBUG · 모의 API 응답")
+                Text("DEBUG · 모의 API 응답 및 제출")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .padding(12)
@@ -384,9 +420,10 @@ struct LabelReviewDemoView: View {
 struct LabelReviewScreen: View {
     @StateObject private var viewModel: LabelReviewViewModel
 
-    init(fetcher: any LabelReviewFetching, timeZone: TimeZone) {
+    init(fetcher: any LabelReviewFetching, writer: any LabelConfirmationWriting, timeZone: TimeZone) {
         _viewModel = StateObject(wrappedValue: LabelReviewViewModel(
             fetcher: fetcher,
+            writer: writer,
             timeZone: timeZone
         ))
     }
@@ -395,3 +432,9 @@ struct LabelReviewScreen: View {
         LabelReviewView(viewModel: viewModel)
     }
 }
+
+#if DEBUG
+private struct MockLabelConfirmationWriter: LabelConfirmationWriting {
+    func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws {}
+}
+#endif

@@ -79,11 +79,55 @@ public enum RemoteLabelProposal: Equatable, Sendable {
 
 public enum RemoteSegmentLabelState: Equatable, Sendable {
     case pending(id: UUID, version: String, proposal: RemoteLabelProposal)
-    case confirmed(id: UUID, version: String)
+    case confirmed(id: UUID, version: String, selection: LabelConfirmationSelection)
 }
 
 public protocol LabelReviewReading: Sendable {
     func listLabels() async throws -> [LabelCatalogEntry]
     func pendingLabelSegments(day: TimelineDate) async throws -> [PendingLabelTimelineSegment]
     func labelState(segmentID: UUID) async throws -> RemoteSegmentLabelState
+}
+
+public enum LabelConfirmationSelection: Equatable, Sendable {
+    case label(UUID)
+    case unclassified
+}
+
+public struct LabelConfirmationDecision: Equatable, Sendable {
+    public let segmentID: UUID
+    public let segmentVersion: String
+    public let selection: LabelConfirmationSelection
+
+    public init(segmentID: UUID, segmentVersion: String, selection: LabelConfirmationSelection) {
+        self.segmentID = segmentID
+        self.segmentVersion = segmentVersion
+        self.selection = selection
+    }
+}
+
+public enum LabelConfirmationRejectionReason: Equatable, Sendable {
+    case priorConfirmationConflict
+    case segmentChanged
+    case segmentNotFound
+    case segmentNotLabelable
+    case labelNotAvailable
+    case timelineBusy
+    case validationFailed
+    case other(String)
+}
+
+public struct LabelConfirmationRejection: Error, Equatable, Sendable {
+    public let reason: LabelConfirmationRejectionReason
+    public let failedIndex: Int?
+    public let retryAfter: TimeInterval?
+
+    public init(reason: LabelConfirmationRejectionReason, failedIndex: Int? = nil, retryAfter: TimeInterval? = nil) {
+        self.reason = reason
+        self.failedIndex = failedIndex
+        self.retryAfter = retryAfter
+    }
+}
+
+public protocol LabelConfirmationWriting: Sendable {
+    func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws
 }
