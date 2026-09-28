@@ -45,8 +45,6 @@ struct DiagnosticActivityEvent: Equatable {
 
 @MainActor
 final class CollectorViewModel: ObservableObject {
-    @Published var intentionDraft = ""
-    @Published private(set) var session = FocusSessionStateMachine()
     @Published private(set) var isActivityTrackingEnabled: Bool
     @Published private(set) var events: [DiagnosticActivityEvent] = []
     @Published private(set) var statistics = DetectionStatistics()
@@ -108,10 +106,6 @@ final class CollectorViewModel: ObservableObject {
         isActivityTrackingEnabled && automaticPauseReason == nil
     }
 
-    var focusActionsAllowed: Bool {
-        session.phase == .active && collectionAllowed
-    }
-
     var activityTrackingStatusText: String {
         guard isActivityTrackingEnabled else { return "활동 추적 꺼짐" }
         if let automaticPauseReason {
@@ -129,17 +123,14 @@ final class CollectorViewModel: ObservableObject {
             lastObservationFailure = nil
             stopActiveCollection()
             if automaticPauseReason == nil {
-                if session.phase == .active {
-                    currentAnchor = anchorStore.captureCurrent()
-                }
                 resumeActiveCollection()
-                statusMessage = "활동 추적을 시작했습니다. 집중 세션과 별도로 수집합니다."
+                statusMessage = "활동 추적을 시작했습니다."
             } else {
                 statusMessage = "활동 추적을 켰습니다. 자동 일시정지가 해제되면 수집을 재개합니다."
             }
         } else {
             stopActiveCollection()
-            statusMessage = "활동 추적을 중지했습니다. 집중 세션 상태는 유지됩니다."
+            statusMessage = "활동 추적을 중지했습니다."
         }
     }
 
@@ -149,51 +140,9 @@ final class CollectorViewModel: ObservableObject {
         return "\(anchor.appBundleID) · \(anchor.kind.rawValue)"
     }
 
-    func startSession() {
-        do {
-            try session.start(intention: intentionDraft)
-        } catch {
-            statusMessage = "집중 의도를 입력한 뒤 시작해 주세요."
-            return
-        }
-
-        anchorStore.removeAll()
-        currentAnchor = collectionAllowed ? anchorStore.captureCurrent() : nil
-        statusMessage = collectionAllowed && currentAnchor == nil
-            ? "집중 세션을 시작했지만 최초 복귀 지점을 저장하지 못했습니다."
-            : "집중 세션을 시작했습니다. 활동 추적은 별도로 설정됩니다."
-    }
-
-    func beginIntendedRest() {
-        do {
-            try session.beginIntendedRest()
-            statusMessage = "의도된 휴식 중입니다. 활동 추적 상태는 유지됩니다."
-        } catch {
-            statusMessage = "활성 집중 세션에서만 휴식을 시작할 수 있습니다."
-        }
-    }
-
-    func resumeSession() {
-        do {
-            try session.resume()
-            statusMessage = "집중 세션을 재개했습니다. 활동 추적 상태는 유지됩니다."
-        } catch {
-            statusMessage = "의도된 휴식 중일 때만 재개할 수 있습니다."
-        }
-    }
-
-    func endSession() {
-        do {
-            try session.end()
-            statusMessage = "집중 세션을 종료했습니다. 활동 추적 상태는 유지됩니다."
-        } catch {
-            statusMessage = "종료할 집중 세션이 없습니다."
-        }
-    }
-
     func markCurrentAsReturnPoint() {
-        guard focusActionsAllowed else {
-            statusMessage = "집중 관찰 중에만 복귀 지점을 지정할 수 있습니다."
+        guard collectionAllowed else {
+            statusMessage = "활동 추적 중에만 복귀 지점을 지정할 수 있습니다."
             return
         }
         guard let anchor = anchorStore.captureCurrent() else {
@@ -207,8 +156,8 @@ final class CollectorViewModel: ObservableObject {
     }
 
     func runReturnTest() {
-        guard focusActionsAllowed else {
-            statusMessage = "집중 관찰 중에만 복귀 테스트를 실행할 수 있습니다."
+        guard collectionAllowed else {
+            statusMessage = "활동 추적 중에만 복귀 테스트를 실행할 수 있습니다."
             return
         }
         guard let anchor = currentAnchor else {
@@ -267,8 +216,8 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func markExpectedTransition(kind: ExpectedTransitionKind) {
-        guard focusActionsAllowed else {
-            statusMessage = "집중 관찰 중에만 전환 기준점을 기록할 수 있습니다."
+        guard collectionAllowed else {
+            statusMessage = "활동 추적 중에만 전환 기준점을 기록할 수 있습니다."
             return
         }
         statistics.expectTransition()
@@ -330,7 +279,6 @@ final class CollectorViewModel: ObservableObject {
         let p95 = statistics.p95LatencyMilliseconds.map(String.init) ?? "n/a"
         let lines = events.map { safeLine($0.safeEvent) }
         return ([
-            "sessionPhase=\(session.phase.rawValue)",
             "activityTrackingEnabled=\(isActivityTrackingEnabled)",
             "observationState=\(collectionAllowed ? "observed" : "paused")",
             "systemEventsAutomationPermission=\(systemEventsAutomationPermission.rawValue)",
@@ -714,9 +662,12 @@ final class CollectorViewModel: ObservableObject {
         lastChromePollCompletedAt = nil
         lastFirefoxPollCompletedAt = nil
         pendingExpectedTransition = nil
+        currentAnchor = nil
+        anchorStore.removeAll()
     }
 
     private func resumeActiveCollection() {
+        currentAnchor = anchorStore.captureCurrent()
         observeCurrentApplication(initial: true)
     }
 

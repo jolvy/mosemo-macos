@@ -8,6 +8,11 @@ info_plist="$component_root/Info.plist"
 openapi_contract="$component_root/../mosemo-server/openapi/openapi.json"
 failed=0
 
+if ! command -v rg >/dev/null 2>&1; then
+    printf 'FAIL: ripgrep (rg) is required for the collector privacy checks.\n' >&2
+    exit 69
+fi
+
 if [ ! -f "$openapi_contract" ]; then
     printf 'FAIL: Server OpenAPI contract not found: %s\n' "$openapi_contract" >&2
     exit 66

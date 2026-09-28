@@ -40,8 +40,8 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
   `firefox_page_context` 관찰 불가로 기록한다.
 - 일반 앱 복귀는 PID로 앱을 활성화하고, Chrome 복귀는 창·탭 ID를 사용한다.
   현재 화면이나 탭을 닫지 않는다.
-- 화면 잠금, 사용자 세션 비활성, sleep 중에는 자동 일시정지한다. 명시적
-  휴식과 세션 종료 중에도 collector를 중지한다.
+- 화면 잠금, 사용자 세션 비활성, sleep 중에는 관찰을 자동 일시정지한다. 다시
+  관찰할 수 있고 활동 추적 설정이 켜져 있으면 자동으로 재개한다.
 
 등록 도메인은 외부 Public Suffix List 없이 보수적인 마지막 2개 label과 자주
 쓰는 compound suffix 목록으로 계산한다. 낯선 public suffix는 도메인을 덜
@@ -55,14 +55,13 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Package.resolved` | OpenAPI generator와 runtime 의존성 버전 고정 |
 | `Mosemo.xcodeproj/` | Swift package product를 사용하는 macOS 앱 target과 공유 scheme 정의 |
 | `Info.plist` | bundle ID, 인증 callback scheme, Apple Events 사용 목적 선언 |
-| `Sources/CollectorCore/SessionStateMachine.swift` | 집중 시작·휴식·재개·종료 상태 |
 | `Sources/CollectorCore/SafeActivityEvent.swift` | 안전 이벤트 allow-list와 보호 맥락 필드 제거 |
 | `Sources/CollectorCore/SurfaceClassifier.swift` | 등록 도메인·Chrome surface·브라우저 transition 분류 |
 | `Sources/CollectorCore/ReturnTracking.swift` | 복귀 시도와 성공·실패 결과 모델링 |
 | `Sources/CollectorCore/DetectionStatistics.swift` | ring buffer와 지연·누락 통계 |
 | `Sources/MosemoApp/MosemoApp.swift` | 기본 창, 메뉴 막대 UI와 진단 창 구성 |
 | `Sources/MosemoApp/DesktopRootView.swift` | 로그인, 권한 온보딩과 홈 화면 전환 |
-| `Sources/MosemoApp/CollectorViewModel.swift` | 세션, 관찰 adapter, ring buffer, 진단 상태 조정 |
+| `Sources/MosemoApp/CollectorViewModel.swift` | 활동 추적 설정, 관찰 adapter, ring buffer, 진단 상태 조정 |
 | `Sources/MosemoApp/WorkspaceObserver.swift` | 전면 앱·Chrome 수명·sleep·사용자 세션 알림 수신 |
 | `Sources/MosemoApp/ChromeAppleEventClient.swift` | Chrome 권한 요청, 활성 창·탭 관찰, 저장된 탭 활성화 |
 | `Sources/MosemoApp/SystemEventsClient.swift` | System Events 자동화 권한과 실험적 Firefox 맥락 관찰 |
@@ -160,20 +159,16 @@ designated requirement는 `CDHash` 기반이며, 바이너리를 교체한 뒤�
 결과에 따라 진단 화면에 반영한다.
 
 Chrome 자동화 권한 요청 버튼은 권한 항목을 노출하기 위해 Chrome의 버전만 한 번
-확인하고 결과 값을 즉시 버린다. 이 요청은 집중 세션 밖에서도 사용할 수 있지만
-활동 이벤트를 만들거나 창·탭·URL·제목을 읽지 않는다. 최초 요청을 거부한 뒤에는
+확인하고 결과 값을 즉시 버린다. 이 요청은 활동 이벤트를 만들거나 창·탭·URL·제목을 읽지
+않는다. 최초 요청을 거부한 뒤에는
 macOS가 같은 팝업을 다시 띄우지 않을 수 있으므로 앱이 자동화 설정 화면을 연다.
 
 ## 기본 사용 순서
 
-1. 앱을 실행하면 활동 추적이 자동으로 시작된다. 메뉴 막대에서 상태를 확인할 수
-   있으며, 집중 세션을 시작하지 않아도 활동을 관찰한다.
-2. 집중 기능을 사용할 때만 집중 의도를 입력하고 `집중 시작`을 누른다. 집중 세션을
-   시작하거나 휴식·종료해도 활동 관찰은 계속된다.
-3. 활성 집중 세션에서 필요하면 `현재 화면을 복귀 지점으로`를 눌러 개발자용
-   anchor를 갱신한다.
-4. 다른 화면으로 이동한 뒤 `복귀 테스트`를 눌러 attempt/result를 확인한다.
-5. 수집을 멈추려면 `활동 추적 중지`를 누른다. 사용자가 끈 설정은 앱 재시작 뒤에도
+1. 앱을 실행하면 활동 추적이 자동으로 시작된다. 메뉴 막대에서 상태를 확인할 수 있다.
+2. 다른 화면으로 이동한 뒤 필요하면 `현재 화면을 복귀 지점으로`와 `복귀 테스트`를
+   사용해 개발용 attempt/result를 확인한다.
+3. 수집을 멈추려면 `활동 추적 중지`를 누른다. 사용자가 끈 설정은 앱 재시작 뒤에도
    유지되며, 메뉴에서 `활동 추적 시작`을 눌러 다시 켤 수 있다.
 
 진단 창의 화면에는 테스트용 제목·전체 URL이 보이지만 `안전 진단 복사`는 기존
@@ -186,7 +181,7 @@ macOS가 같은 팝업을 다시 띄우지 않을 수 있으므로 앱이 자동
 
 1. 메뉴 막대 상태 문구가 `활동 추적 중`인지 확인한다.
 2. 진단 창에서 `activityTrackingEnabled=true`와 `observationState=observed`를
-   확인한다. `sessionPhase`는 활동 수집 여부와 독립적이다.
+   확인한다.
 3. 진단 창의 ring buffer가 탭을 바꾸기 전에도 최초 맥락을 포함해 `1/600`
    이상인지 확인한다.
 4. `안전 진단 복사` 결과에서 다음 값인지 확인한다.
@@ -196,9 +191,8 @@ macOS가 같은 팝업을 다시 띄우지 않을 수 있으므로 앱이 자동
    observationState=observed
    ```
 
-`sessionPhase`가 `notStarted`, `intendedRest`, `ended`여도 활동 추적이 켜져 있으면
-이벤트를 기록한다. `observationState=paused`이면 화면 잠금, sleep, 비활성 사용자
-세션 등 자동 일시정지 원인을 상태 문구에서 확인한다. Chrome 내부 이벤트는
+활동 추적을 명시적으로 끄면 관찰을 중지한다. `observationState=paused`이면 화면 잠금,
+sleep, 비활성 사용자 세션 등 자동 일시정지 원인을 상태 문구에서 확인한다. Chrome 내부 이벤트는
 Chrome이 전면이고 `Chrome 자동화: 허용됨`인 동안에만 관찰한다.
 
 위 조건이 모두 맞는데 최초 맥락도 생기지 않으면 `안전 진단 복사` 내용을 결과
@@ -236,8 +230,8 @@ NSWorkspace notification 수신 뒤 pipeline latency이고, OS에서 실제 전�
 
 추가 경계 검증:
 
-- 집중 전 2분, 의도된 휴식 2분, 종료 후 2분 동안 앱·Chrome·입력을 바꾸고
-  ring buffer event 수가 각각 0 증가인지 확인한다.
+- 활동 추적을 켠 채 앱·Chrome·입력을 바꿔 ring buffer가 새 이벤트를 기록하는지
+  확인한다. 추적을 명시적으로 끈 뒤에는 같은 조작 중 이벤트 수가 늘지 않는지 확인한다.
 - 시크릿 창에서 2분 동안 전환하고 진단 행에 시각과 `protected`만 나타나는지
   확인한다.
 - Chrome 창·탭을 anchor 저장 뒤 닫고 복귀하여 `windowUnavailable` 또는
@@ -254,13 +248,13 @@ scripts/sample_collector_process.sh <PID> 28800 5 > /tmp/collector-8h.csv
 scripts/summarize_collector_samples.sh /tmp/collector-8h.csv
 ```
 
-8시간 동안 위 100회 시나리오와 평상시 집중·휴식을 섞는다. 완료 뒤 다음을
+8시간 동안 위 100회 시나리오와 평상시 앱 사용을 섞는다. 완료 뒤 다음을
 함께 기록한다.
 
 - sampler `average_cpu_percent <= 3.0`
 - sampler `maximum_rss_mb <= 200.0`
 - 앱 진단 `p95LatencyMs <= 2000`, `missedTransitions <= 1`
-- 앱이 살아 있고 세션 state가 일관적인지
+- 앱이 살아 있고 활동 추적 설정과 관찰 상태가 일관적인지
 - Chrome 종료·재시작 뒤 관찰이 회복됐는지
 
 `ps %CPU`는 sample 시점의 프로세스 CPU 비율이다. 앱 진단의 실행 평균은 5초

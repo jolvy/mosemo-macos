@@ -121,7 +121,7 @@ private struct CollectorMenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("macOS Collector Feasibility Spike")
+            Text("Mosemo 활동 추적")
                 .font(.headline)
 
             GroupBox("계정") {
@@ -154,25 +154,11 @@ private struct CollectorMenuView: View {
                 .accessibilityIdentifier("activity-tracking-toggle")
             }
 
-            TextField("이번 집중 의도", text: $model.intentionDraft)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Button("집중 시작") { model.startSession() }
-                    .disabled(model.session.phase == .active || model.session.phase == .intendedRest)
-                Button("의도된 휴식") { model.beginIntendedRest() }
-                    .disabled(model.session.phase != .active)
-                Button("집중 재개") { model.resumeSession() }
-                    .disabled(model.session.phase != .intendedRest)
-                Button("집중 종료") { model.endSession() }
-                    .disabled(model.session.phase != .active && model.session.phase != .intendedRest)
-            }
-
             HStack {
                 Button("현재 화면을 복귀 지점으로") { model.markCurrentAsReturnPoint() }
                 Button("복귀 테스트") { model.runReturnTest() }
             }
-            .disabled(!model.focusActionsAllowed)
+            .disabled(!model.collectionAllowed)
 
             Divider()
             Text("상태: \(model.statusMessage)")
@@ -281,7 +267,7 @@ private struct DiagnosticsView: View {
                             model.requestChromeAutomationPermission()
                         }
                         .disabled(model.chromeAutomationPermissionRequestInFlight)
-                        Text("Chrome을 먼저 실행하세요. 집중 시작 전에도 권한만 요청할 수 있습니다.")
+                        Text("Chrome을 먼저 실행한 뒤 권한을 요청하세요.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -307,11 +293,11 @@ private struct DiagnosticsView: View {
                     }
                     HStack {
                         Button("다음 앱 전환") { model.markExpectedAppTransition() }
-                            .disabled(!model.focusActionsAllowed)
+                            .disabled(!model.collectionAllowed)
                         Button("다음 Chrome 전환") { model.markExpectedChromeTransition() }
-                            .disabled(!model.focusActionsAllowed)
+                            .disabled(!model.collectionAllowed)
                         Button("다음 Firefox 변화") { model.markExpectedFirefoxTransition() }
-                            .disabled(!model.focusActionsAllowed)
+                            .disabled(!model.collectionAllowed)
                         Button("전환 통계 초기화") { model.resetMeasurementStatistics() }
                         Text("수동 기준점 지연에는 사용자의 전환 동작 시간이 포함됩니다.")
                             .font(.caption)
