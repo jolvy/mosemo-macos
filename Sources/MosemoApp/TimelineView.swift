@@ -1,46 +1,9 @@
 import SwiftUI
 import MosemoAPI
 
-struct TimelineScreen: View {
-    @StateObject private var model: TimelineViewModel
-    let account: Account
-    let signOut: (() -> Void)?
-    let showsPreviewNotice: Bool
-
-    init(
-        account: Account,
-        signOut: (() -> Void)?,
-        authenticationFailed: @escaping @MainActor () -> Void = {},
-        fetcher: any TimelineFetching,
-        showsPreviewNotice: Bool = false
-    ) {
-        self.account = account
-        self.signOut = signOut
-        self.showsPreviewNotice = showsPreviewNotice
-        _model = StateObject(wrappedValue: TimelineViewModel(
-            fetcher: fetcher,
-            accountID: account.id,
-            timeZone: TimeZone(identifier: account.timeZoneID)!,
-            authenticationFailed: authenticationFailed
-        ))
-    }
-
-    var body: some View {
-        TimelineView(model: model, signOut: signOut, showsPreviewNotice: showsPreviewNotice)
-            .onChange(of: account) { _, newAccount in
-                model.switchAccount(
-                    to: newAccount.id,
-                    timeZone: TimeZone(identifier: newAccount.timeZoneID)
-                )
-            }
-    }
-}
-
 struct TimelineView: View {
     @ObservedObject var model: TimelineViewModel
-    let signOut: (() -> Void)?
     let showsPreviewNotice: Bool
-    @Environment(\.openWindow) private var openWindow
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
@@ -57,10 +20,6 @@ struct TimelineView: View {
                     Text("하루의 활동과 관찰하지 못한 시간을 살펴봅니다.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let signOut {
-                    Button("라벨 검토") { openWindow(id: "label-review") }
-                    Button("로그아웃", action: signOut)
-                }
             }
 
             if showsPreviewNotice {

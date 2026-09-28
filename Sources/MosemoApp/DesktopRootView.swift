@@ -7,6 +7,7 @@ struct DesktopRootView: View {
     @ObservedObject var model: CollectorViewModel
     @ObservedObject var auth: AuthCoordinator
     let timelineClient: LiveMosemoAPIClient?
+    let reviewReader: (any LabelReviewReading)?
     @Binding var onboardingCompleted: Bool
 
     var body: some View {
@@ -14,13 +15,17 @@ struct DesktopRootView: View {
             if !auth.hasFinishedRestoringSession {
                 ProgressView("로그인 상태를 확인하는 중입니다…")
                     .controlSize(.large)
-            } else if onboardingCompleted, let account = auth.account, let timelineClient {
-                TimelineScreen(
+            } else if onboardingCompleted, let account = auth.account,
+                      let timelineClient, let reviewReader {
+                MainWorkspaceView(
                     account: account,
+                    timelineFetcher: timelineClient,
+                    reviewFetcher: LiveLabelReviewFetcher(reader: reviewReader),
+                    reviewWriter: timelineClient,
                     signOut: auth.signOut,
-                    authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) },
-                    fetcher: timelineClient
+                    authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) }
                 )
+                .id(account.id)
             } else {
                 OnboardingView(model: model, auth: auth) {
                     onboardingCompleted = true
@@ -30,6 +35,143 @@ struct DesktopRootView: View {
         .task {
             await auth.restoreSession()
         }
+    }
+}
+
+private enum WorkspacePage: Hashable {
+    case timeline
+    case labelReview
+
+    var title: String {
+        switch self {
+        case .timeline: "관찰 타임라인"
+        case .labelReview: "라벨 검토"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .timeline: "calendar"
+        case .labelReview: "checkmark.rectangle.stack"
+        }
+    }
+}
+
+struct MainWorkspaceView: View {
+    @State private var selectedPage: WorkspacePage = .timeline
+    @StateObject private var timelineModel: TimelineViewModel
+    @StateObject private var reviewModel: LabelReviewViewModel
+
+    let signOut: (() -> Void)?
+    let showsPreviewNotice: Bool
+
+    init(
+        account: Account,
+        timelineFetcher: any TimelineFetching,
+        reviewFetcher: any LabelReviewFetching,
+        reviewWriter: any LabelConfirmationWriting,
+        signOut: (() -> Void)?,
+        authenticationFailed: @escaping @MainActor () -> Void = {},
+        showsPreviewNotice: Bool = false
+    ) {
+        self.signOut = signOut
+        self.showsPreviewNotice = showsPreviewNotice
+        let timeZone = TimeZone(identifier: account.timeZoneID) ?? .current
+        _timelineModel = StateObject(wrappedValue: TimelineViewModel(
+            fetcher: timelineFetcher,
+            accountID: account.id,
+            timeZone: timeZone,
+            authenticationFailed: authenticationFailed
+        ))
+        _reviewModel = StateObject(wrappedValue: LabelReviewViewModel(
+            fetcher: reviewFetcher,
+            writer: reviewWriter,
+            timeZone: timeZone
+        ))
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+
+            Group {
+                switch selectedPage {
+                case .timeline:
+                    TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice)
+                case .labelReview:
+                    LabelReviewView(viewModel: reviewModel)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .frame(minWidth: 720, minHeight: 520)
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .font(.title3)
+                    .foregroundStyle(.mint)
+                Text("MOSEMO")
+                    .font(.headline.weight(.bold))
+                    .tracking(2)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 25)
+            .padding(.bottom, 35)
+
+            Text("화면")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 9)
+
+            pageButton(.timeline)
+            pageButton(.labelReview)
+
+            Spacer()
+
+            if let signOut {
+                Divider().overlay(.white.opacity(0.15))
+                    .padding(.bottom, 10)
+                Button(action: signOut) {
+                    Label("로그아웃", systemImage: "rectangle.portrait.and.arrow.right")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .accessibilityIdentifier("workspace-sign-out")
+            }
+        }
+        .frame(width: 205)
+        .frame(maxHeight: .infinity)
+        .foregroundStyle(.white)
+        .background(Color(red: 0.08, green: 0.09, blue: 0.12))
+    }
+
+    private func pageButton(_ page: WorkspacePage) -> some View {
+        Button {
+            selectedPage = page
+        } label: {
+            Label(page.title, systemImage: page.symbol)
+                .font(.subheadline.weight(selectedPage == page ? .semibold : .regular))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(
+                    selectedPage == page ? Color.white.opacity(0.14) : .clear,
+                    in: RoundedRectangle(cornerRadius: 9)
+                )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(selectedPage == page ? .white : .white.opacity(0.68))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+        .accessibilityIdentifier(page == .timeline ? "navigation-timeline" : "navigation-label-review")
     }
 }
 
@@ -51,8 +193,6 @@ private struct OnboardingView: View {
     @ObservedObject var model: CollectorViewModel
     @ObservedObject var auth: AuthCoordinator
     let onComplete: () -> Void
-    @Environment(\.openWindow) private var openWindow
-
     @State private var step: OnboardingStep = .login
 
     private var allPermissionsGranted: Bool {
@@ -104,11 +244,6 @@ private struct OnboardingView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(auth.isAuthenticating)
-                #if DEBUG
-                Button("타임라인 UI 미리보기") {
-                    openWindow(id: "timeline-preview")
-                }
-                #endif
                 Text(auth.statusMessage)
                     .font(.caption)
                     .multilineTextAlignment(.center)

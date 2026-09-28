@@ -45,12 +45,11 @@ struct DiagnosticActivityEvent: Equatable {
 
 @MainActor
 final class CollectorViewModel: ObservableObject {
-    @Published var intentionDraft = ""
-    @Published private(set) var session = FocusSessionStateMachine()
+    @Published private(set) var isActivityTrackingEnabled: Bool
     @Published private(set) var events: [DiagnosticActivityEvent] = []
     @Published private(set) var statistics = DetectionStatistics()
     @Published private(set) var currentAnchor: ReturnAnchorDescriptor?
-    @Published private(set) var statusMessage = "집중 세션을 시작하지 않았습니다."
+    @Published private(set) var statusMessage = "활동 추적 상태를 확인하는 중입니다."
     @Published private(set) var automaticPauseReason: String?
     @Published private(set) var systemEventsAutomationPermission: AutomationPermissionStatus = .notRequested
     @Published private(set) var chromeAutomationPermission: AutomationPermissionStatus = .notRequested
@@ -85,14 +84,54 @@ final class CollectorViewModel: ObservableObject {
     private var cpuSampleCount = 0
     private var automaticPauseReasons: Set<String> = []
 
+    private static let activityTrackingPreferenceKey = "io.mosemo.activityTrackingEnabled"
+
     init() {
+        let savedTrackingPreference = UserDefaults.standard.object(forKey: Self.activityTrackingPreferenceKey) as? Bool
+        isActivityTrackingEnabled = savedTrackingPreference ?? true
         configureCallbacks()
         workspaceObserver.start()
         startTimers()
+        if isActivityTrackingEnabled {
+            statusMessage = savedTrackingPreference == nil
+                ? "앱 시작과 함께 활동 추적을 시작했습니다."
+                : "활동 추적 설정을 복원했습니다."
+            resumeActiveCollection()
+        } else {
+            statusMessage = "활동 추적 설정이 꺼져 있습니다."
+        }
     }
 
     var collectionAllowed: Bool {
-        session.allowsCollection && automaticPauseReason == nil
+        isActivityTrackingEnabled && automaticPauseReason == nil
+    }
+
+    var activityTrackingStatusText: String {
+        guard isActivityTrackingEnabled else { return "활동 추적 꺼짐" }
+        if let automaticPauseReason {
+            return "활동 추적 일시정지 · \(automaticPauseReason)"
+        }
+        return "활동 추적 중"
+    }
+
+    func setActivityTrackingEnabled(_ enabled: Bool) {
+        guard isActivityTrackingEnabled != enabled else { return }
+        isActivityTrackingEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.activityTrackingPreferenceKey)
+
+        if enabled {
+            lastObservationFailure = nil
+            stopActiveCollection()
+            if automaticPauseReason == nil {
+                resumeActiveCollection()
+                statusMessage = "활동 추적을 시작했습니다."
+            } else {
+                statusMessage = "활동 추적을 켰습니다. 자동 일시정지가 해제되면 수집을 재개합니다."
+            }
+        } else {
+            stopActiveCollection()
+            statusMessage = "활동 추적을 중지했습니다."
+        }
     }
 
     var currentAnchorText: String {
@@ -101,67 +140,9 @@ final class CollectorViewModel: ObservableObject {
         return "\(anchor.appBundleID) · \(anchor.kind.rawValue)"
     }
 
-    func startSession() {
-        do {
-            try session.start(intention: intentionDraft)
-        } catch {
-            statusMessage = "집중 의도를 입력한 뒤 시작해 주세요."
-            return
-        }
-
-        automaticPauseReason = nil
-        automaticPauseReasons.removeAll()
-        eventBuffer.removeAll()
-        events = []
-        statistics.reset()
-        anchorStore.removeAll()
-        currentAnchor = anchorStore.captureCurrent()
-        chromeObservation = nil
-        firefoxObservation = nil
-        lastChromePollCompletedAt = nil
-        lastFirefoxPollCompletedAt = nil
-        lastObservationFailure = nil
-        observeCurrentApplication(initial: true)
-        statusMessage = currentAnchor == nil
-            ? "집중을 시작했지만 최초 복귀 지점을 저장하지 못했습니다."
-            : "집중 중입니다."
-    }
-
-    func beginIntendedRest() {
-        do {
-            try session.beginIntendedRest()
-            stopActiveCollection()
-            statusMessage = "의도된 휴식 중입니다. 활동 이벤트를 만들지 않습니다."
-        } catch {
-            statusMessage = "활성 집중 세션에서만 휴식을 시작할 수 있습니다."
-        }
-    }
-
-    func resumeSession() {
-        do {
-            try session.resume()
-            automaticPauseReason = nil
-            automaticPauseReasons.removeAll()
-            resumeActiveCollection()
-            statusMessage = "집중 관찰을 재개했습니다."
-        } catch {
-            statusMessage = "의도된 휴식 중일 때만 재개할 수 있습니다."
-        }
-    }
-
-    func endSession() {
-        do {
-            try session.end()
-            stopActiveCollection()
-            statusMessage = "집중 세션을 종료했습니다. 이후 활동 이벤트는 생성하지 않습니다."
-        } catch {
-            statusMessage = "종료할 집중 세션이 없습니다."
-        }
-    }
-
     func markCurrentAsReturnPoint() {
         guard collectionAllowed else {
-            statusMessage = "집중 관찰 중에만 복귀 지점을 지정할 수 있습니다."
+            statusMessage = "활동 추적 중에만 복귀 지점을 지정할 수 있습니다."
             return
         }
         guard let anchor = anchorStore.captureCurrent() else {
@@ -176,7 +157,7 @@ final class CollectorViewModel: ObservableObject {
 
     func runReturnTest() {
         guard collectionAllowed else {
-            statusMessage = "집중 관찰 중에만 복귀 테스트를 실행할 수 있습니다."
+            statusMessage = "활동 추적 중에만 복귀 테스트를 실행할 수 있습니다."
             return
         }
         guard let anchor = currentAnchor else {
@@ -236,7 +217,7 @@ final class CollectorViewModel: ObservableObject {
 
     private func markExpectedTransition(kind: ExpectedTransitionKind) {
         guard collectionAllowed else {
-            statusMessage = "집중 관찰 중에만 전환 기준점을 기록할 수 있습니다."
+            statusMessage = "활동 추적 중에만 전환 기준점을 기록할 수 있습니다."
             return
         }
         statistics.expectTransition()
@@ -298,7 +279,7 @@ final class CollectorViewModel: ObservableObject {
         let p95 = statistics.p95LatencyMilliseconds.map(String.init) ?? "n/a"
         let lines = events.map { safeLine($0.safeEvent) }
         return ([
-            "sessionPhase=\(session.phase.rawValue)",
+            "activityTrackingEnabled=\(isActivityTrackingEnabled)",
             "observationState=\(collectionAllowed ? "observed" : "paused")",
             "systemEventsAutomationPermission=\(systemEventsAutomationPermission.rawValue)",
             "chromeAutomationPermission=\(chromeAutomationPermission.rawValue)",
@@ -646,7 +627,7 @@ final class CollectorViewModel: ObservableObject {
         _ event: SafeActivityEvent,
         browserContext: TransientBrowserContext? = nil
     ) {
-        guard session.allowsCollection else { return }
+        guard isActivityTrackingEnabled else { return }
         eventBuffer.append(DiagnosticActivityEvent(
             safeEvent: event,
             browserContext: browserContext
@@ -655,23 +636,24 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func handleAutomaticPause(reason: String) {
-        guard session.allowsCollection else { return }
-        let wasActive = automaticPauseReasons.isEmpty
+        let wasActive = collectionAllowed
         automaticPauseReasons.insert(reason)
         automaticPauseReason = automaticPauseReasons.sorted().joined(separator: ",")
         if wasActive { stopActiveCollection() }
-        statusMessage = "필수 관찰 조건 상실로 자동 일시정지했습니다: \(reason)"
+        if isActivityTrackingEnabled {
+            statusMessage = "필수 관찰 조건 상실로 자동 일시정지했습니다: \(reason)"
+        }
     }
 
     private func handleAutomaticResume(reason: String) {
-        guard session.allowsCollection, automaticPauseReasons.contains(reason) else { return }
+        guard automaticPauseReasons.contains(reason) else { return }
         automaticPauseReasons.remove(reason)
         automaticPauseReason = automaticPauseReasons.isEmpty
             ? nil
             : automaticPauseReasons.sorted().joined(separator: ",")
-        guard automaticPauseReasons.isEmpty else { return }
+        guard automaticPauseReasons.isEmpty, isActivityTrackingEnabled else { return }
         resumeActiveCollection()
-        statusMessage = "필수 관찰 조건이 돌아와 관찰을 재개했습니다."
+        statusMessage = "필수 관찰 조건이 돌아와 활동 추적을 재개했습니다."
     }
 
     private func stopActiveCollection() {
@@ -680,9 +662,12 @@ final class CollectorViewModel: ObservableObject {
         lastChromePollCompletedAt = nil
         lastFirefoxPollCompletedAt = nil
         pendingExpectedTransition = nil
+        currentAnchor = nil
+        anchorStore.removeAll()
     }
 
     private func resumeActiveCollection() {
+        currentAnchor = anchorStore.captureCurrent()
         observeCurrentApplication(initial: true)
     }
 

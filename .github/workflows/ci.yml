@@ -32,6 +32,9 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Install privacy check tools
+        run: brew install ripgrep
+
       - name: Resolve exact dependencies
         run: swift package resolve
 

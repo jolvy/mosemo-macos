@@ -36,6 +36,23 @@ final class TimelineUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["timeline-selected-date"].label, selectedDate)
         XCTAssertTrue(emptyState.exists)
     }
+
+    func testWorkspaceNavigationKeepsTimelineDate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--timeline-ui-preview"]
+        app.launch()
+
+        let timelineDate = app.staticTexts["timeline-selected-date"]
+        XCTAssertTrue(timelineDate.waitForExistence(timeout: 5))
+        app.buttons["이전 날짜"].click()
+        let selectedDate = timelineDate.label
+
+        app.buttons["navigation-label-review"].click()
+        XCTAssertTrue(app.staticTexts["label-review-title"].waitForExistence(timeout: 5))
+
+        app.buttons["navigation-timeline"].click()
+        XCTAssertEqual(timelineDate.label, selectedDate)
+    }
 }
 
 final class LabelReviewUITests: XCTestCase {
