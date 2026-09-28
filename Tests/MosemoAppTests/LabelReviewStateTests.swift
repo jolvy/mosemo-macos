@@ -366,6 +366,58 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
     }
 
+    func testTerminalSegmentRejectionsRefreshInsteadOfRetryingStaleDecision() async {
+        let first = MockLabelReviewFetcher.demo.response
+        let latest = LabelReviewResponseDTO(labels: first.labels, segments: Array(first.segments.dropFirst()))
+        for reason: LabelConfirmationRejectionReason in [.segmentNotFound, .segmentNotLabelable] {
+            let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [first, latest], confirmedByID: [:])
+            let writer = RecordingLabelConfirmationWriter(failures: [
+                LabelConfirmationRejection(reason: reason, failedIndex: 0)
+            ])
+            let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+            await model.load()
+
+            await model.confirm(model.groups[0].segments[0])
+
+            XCTAssertEqual(model.segmentCount, 9)
+            XCTAssertEqual(model.conflictedDrafts.map(\.id), [first.segments[0].id])
+            XCTAssertFalse(model.canRetrySubmission)
+            let requests = await writer.recordedRequests()
+            XCTAssertEqual(requests.count, 1)
+        }
+    }
+
+    func testUnavailableLabelRejectionRefreshesCatalogAndKeepsChoiceVisible() async {
+        let first = MockLabelReviewFetcher.demo.response
+        let unavailableID = first.labels[0].id
+        let latest = LabelReviewResponseDTO(
+            labels: first.labels.map { label in
+                LabelReviewLabelDTO(
+                    id: label.id,
+                    displayName: label.displayName,
+                    archivedAt: label.id == unavailableID ? Date() : label.archivedAt
+                )
+            },
+            segments: first.segments
+        )
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [first, latest], confirmedByID: [:])
+        let writer = RecordingLabelConfirmationWriter(failures: [
+            LabelConfirmationRejection(reason: .labelNotAvailable, failedIndex: 0)
+        ])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+        await model.load()
+        let segment = model.groups[0].segments[0]
+
+        await model.confirm(segment)
+
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertEqual(model.selection(for: model.groups[0].segments[0]), .label(id: unavailableID))
+        XCTAssertFalse(model.canConfirm([model.groups[0].segments[0]]))
+        XCTAssertFalse(model.canRetrySubmission)
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+    }
+
     func testPriorConfirmationRefreshPreservesRemainingChoicesAcrossVersionChange() async {
         let first = MockLabelReviewFetcher.demo.response
         var refreshedSegments = first.segments

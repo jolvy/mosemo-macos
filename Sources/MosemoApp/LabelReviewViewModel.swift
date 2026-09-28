@@ -313,7 +313,13 @@ final class LabelReviewViewModel: ObservableObject {
                 retryAvailableAt = nil
             }
             if let rejection = error as? LabelConfirmationRejection,
-               rejection.reason == .priorConfirmationConflict || rejection.reason == .segmentChanged {
+               [
+                   .priorConfirmationConflict,
+                   .segmentChanged,
+                   .segmentNotFound,
+                   .segmentNotLabelable,
+                   .labelNotAvailable,
+               ].contains(rejection.reason) {
                 retryConflictReview = originalReview
                 await refreshAfterConflict(decisions: decisions, previous: originalReview, requestID: id)
             } else {
@@ -355,11 +361,11 @@ final class LabelReviewViewModel: ObservableObject {
             retryAvailableAt = nil
             retryConflictReview = nil
             reconcileInteractionState()
-            submissionMessage = "기록 상태가 변경되어 최신 목록을 불러왔습니다. 남은 선택을 확인해 주세요."
+            submissionMessage = "라벨 또는 기록 상태가 변경되어 최신 목록을 불러왔습니다. 남은 선택을 확인해 주세요."
         } catch {
             guard requestID == id else { return }
             canRetrySubmission = true
-            submissionMessage = "기록 상태 변경 후 최신 목록을 불러오지 못했습니다. 다시 조회해 주세요."
+            submissionMessage = "상태 변경 후 최신 목록을 불러오지 못했습니다. 다시 조회해 주세요."
         }
     }
 

@@ -55,7 +55,7 @@ struct LabelReviewView: View {
                     Text("최신 검토 목록에서 빠진 기록의 보존한 선택")
                         .font(.subheadline.weight(.semibold))
                     ForEach(viewModel.conflictedDrafts) { draft in
-                        Text("\(draft.title) · 서버 확정: \(draft.confirmedSelection.map { viewModel.title(for: $0) } ?? "확인할 수 없음") · 내 선택: \(viewModel.title(for: draft.selection))")
+                        Text("\(draft.title) · \(draft.confirmedSelection.map { "서버 확정: \(viewModel.title(for: $0))" } ?? "서버 확정 정보 없음") · 내 선택: \(viewModel.title(for: draft.selection))")
                             .font(.caption)
                     }
                 }
