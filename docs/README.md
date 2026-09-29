@@ -2,16 +2,15 @@
 
 이 디렉터리는 네이티브 수집 방식의 가능성을 검증하는 macOS 앱과 서버 인증
 경계를 함께 담는다. 앱은 고정 bundle ID `io.mosemo.app`을 사용한다.
-`CollectorCore`는 네트워크를 모르며, 수집 데이터는 SQLite·파일·서버·영속
-로그에 기록하지 않고 최근 600개의 안전 이벤트와 테스트용 브라우저 원시
-맥락만 메모리 ring buffer에 둔다. 서버 통신은 `MosemoAPI`의 로그인과 현재
-계정 조회, Device 등록과 날짜별 관찰 타임라인 조회를 포함한다.
+`CollectorCore`는 네트워크를 모른다. 앱의 진단 화면은 최근 600개의 안전 이벤트만
+메모리 ring buffer에 두고, 제목·URL 원문을 표시하거나 복사하지 않는다. 전송 대상
+활동은 개인정보 필터를 적용한 뒤 `MosemoAPI`의 암호화 SQLite 대기열에 먼저 저장하고,
+등록된 Device에서 단건 API로 순서대로 전송한다. 서버 통신은 로그인과 현재 계정 조회,
+Device 등록, 활동 등록과 날짜별 관찰 타임라인 조회를 포함한다.
 
-현재 빌드는 feasibility 확인을 위해 일반 Chrome·Firefox의 활성 탭 제목과 전체
-URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 안전 이벤트와
-`안전 진단 복사` 결과에는 들어가지 않고, 파일·console·서버로도 보내지 않는다.
-앱을 종료하면 메모리에서 사라진다. 제품 개인정보
-경계에는 포함할 수 없는 개발 진단 예외다.
+일반 Chrome·Firefox에서 읽은 활성 탭 제목과 URL은 관찰 분류에 사용한다. 보호 여부를
+확인하기 전에는 상세 정보를 영속 저장하지 않으며, 허용된 값만 길이·scheme 필터를 거쳐
+암호화 대기열에 저장한다. 진단 버퍼와 `안전 진단 복사`에는 원문이 들어가지 않는다.
 
 ## 설계 문서
 
@@ -32,8 +31,8 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 - Google Chrome이 전면이고 활동 추적이 켜져 있을 때만 0.5초 간격으로 Chrome
   Apple Events를 호출한다.
 - 일반 Chrome 창에서는 창 ID, 탭 ID, URL, 제목을 읽는다. URL은 등록 도메인과
-  surface type 및 변화 fingerprint를 만들며, 원시 URL과 제목은 테스트 진단용
-  ring buffer 항목에만 함께 보관한다.
+  surface type 및 변화 fingerprint를 만드는 데 사용하고, 전송 대상 원문은 개인정보
+  필터 후 암호화 대기열에 저장한다. 진단 ring buffer에는 원문을 보관하지 않는다.
 - 시크릿 창은 `mode`를 먼저 확인하고 URL·제목을 요청하는 Apple Event 분기로
   들어가지 않는다.
 - Firefox가 전면이면 System Events UI scripting으로 Accessibility tree의 활성
@@ -71,7 +70,9 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 | `Sources/MosemoApp/ReturnAnchorStore.swift` | 앱 활성화와 Chrome 창·탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
 | `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
-| `Sources/MosemoAPI/` | internal 생성 코드, generator 설정, Keychain·오류·모델 경계 |
+| `Sources/MosemoApp/OfflineActivityCoordinator.swift` | 필터 완료 명령의 순차 저장, 계정별 단건 전송과 자동 재시도 조정 |
+| `Sources/MosemoAPI/EncryptedActivityQueue.swift` | AES-GCM 암호화 SQLite 대기열과 Keychain 키 관리 |
+| `Sources/MosemoAPI/` | internal 생성 코드, generator 설정, 인증 저장·오류·활동 모델 경계 |
 | `Tests/CollectorCoreTests/` | OS API와 분리된 Core 조건·경계 XCTest |
 | `Tests/MosemoAPITests/` | fake generated API를 사용한 인증·오류·PKCE 단위 테스트 |
 | `scripts/update_openapi.sh` | 서버 OpenAPI 계약으로부터 생성·테스트 검증 |

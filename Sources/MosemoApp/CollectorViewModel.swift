@@ -2,6 +2,7 @@ import AppKit
 import CollectorCore
 import Combine
 import Foundation
+import MosemoAPI
 
 enum AutomationPermissionStatus: String {
     case notRequested = "요청 전"
@@ -35,12 +36,6 @@ private enum ExpectedTransitionKind {
 
 struct DiagnosticActivityEvent: Equatable {
     let safeEvent: SafeActivityEvent
-    let browserContext: TransientBrowserContext?
-
-    init(safeEvent: SafeActivityEvent, browserContext: TransientBrowserContext?) {
-        self.safeEvent = safeEvent
-        self.browserContext = safeEvent.protectedContext ? nil : browserContext
-    }
 }
 
 @MainActor
@@ -59,6 +54,8 @@ final class CollectorViewModel: ObservableObject {
     @Published private(set) var averageCPUPercent = 0.0
     @Published private(set) var currentMemoryBytes: UInt64 = 0
     @Published private(set) var maximumMemoryBytes: UInt64 = 0
+    @Published private(set) var pendingActivityCount = 0
+    @Published private(set) var synchronizationStatus = "동기화 준비 안 됨"
 
     private let chrome = ChromeAppleEventClient()
     private let systemEvents = SystemEventsClient()
@@ -67,6 +64,7 @@ final class CollectorViewModel: ObservableObject {
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
     private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-system-events")
     private lazy var anchorStore = ReturnAnchorStore(chrome: chrome)
+    private var synchronization: OfflineActivityCoordinator?
 
     private var eventBuffer = RingBuffer<DiagnosticActivityEvent>(capacity: 600)
     private var chromeObservation: ChromeObservationIdentity?
@@ -83,8 +81,10 @@ final class CollectorViewModel: ObservableObject {
     private var cpuSampleSum = 0.0
     private var cpuSampleCount = 0
     private var automaticPauseReasons: Set<String> = []
+    private var activityStorageUnavailable = false
 
     private static let activityTrackingPreferenceKey = "io.mosemo.activityTrackingEnabled"
+    private static let activityStoragePauseReason = "저장소 복구 필요"
 
     init() {
         let savedTrackingPreference = UserDefaults.standard.object(forKey: Self.activityTrackingPreferenceKey) as? Bool
@@ -118,20 +118,59 @@ final class CollectorViewModel: ObservableObject {
         guard isActivityTrackingEnabled != enabled else { return }
         isActivityTrackingEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.activityTrackingPreferenceKey)
+        guard !activityStorageUnavailable else {
+            stopActiveCollection()
+            publishActivityStorageFailureStatus()
+            return
+        }
 
         if enabled {
             lastObservationFailure = nil
             stopActiveCollection()
             if automaticPauseReason == nil {
+                synchronization?.recordCollectionState(.active, reason: "user_enabled")
                 resumeActiveCollection()
                 statusMessage = "활동 추적을 시작했습니다."
             } else {
+                synchronization?.recordCollectionState(.suspended, reason: automaticPauseReason ?? "automatic_pause")
                 statusMessage = "활동 추적을 켰습니다. 자동 일시정지가 해제되면 수집을 재개합니다."
             }
         } else {
+            synchronization?.recordCollectionState(.suspended, reason: "user_disabled")
             stopActiveCollection()
             statusMessage = "활동 추적을 중지했습니다."
         }
+    }
+
+    func configureSynchronization(client: any MosemoAPIClient,
+                                  deviceStateStore: any DeviceRegistrationStateStoring,
+                                  queue: EncryptedActivityQueue) {
+        synchronization = OfflineActivityCoordinator(queue: queue, client: client,
+            deviceStateStore: deviceStateStore,
+            onStorageFailure: { [weak self] in
+                self?.handleActivityStorageFailure()
+            }) { [weak self] count, status in
+                self?.pendingActivityCount = count
+                if self?.activityStorageUnavailable == false {
+                    self?.synchronizationStatus = status
+                }
+            }
+    }
+
+    func synchronizationAccountChanged(_ account: Account?) async {
+        await synchronization?.activate(account)
+        guard account != nil else { return }
+        if !activityStorageUnavailable {
+            synchronization?.recordCollectionState(
+                collectionAllowed ? .active : .suspended,
+                reason: collectionAllowed ? "application_started" : (automaticPauseReason ?? "user_disabled")
+            )
+        }
+        if collectionAllowed { resumeActiveCollection() }
+    }
+
+    func synchronizationUnavailable() {
+        handleActivityStorageFailure()
     }
 
     var currentAnchorText: String {
@@ -627,12 +666,12 @@ final class CollectorViewModel: ObservableObject {
         _ event: SafeActivityEvent,
         browserContext: TransientBrowserContext? = nil
     ) {
-        guard isActivityTrackingEnabled else { return }
+        guard collectionAllowed else { return }
         eventBuffer.append(DiagnosticActivityEvent(
-            safeEvent: event,
-            browserContext: browserContext
+            safeEvent: event
         ))
         events = eventBuffer.elements
+        synchronization?.record(event, browserContext: browserContext)
     }
 
     private func handleAutomaticPause(reason: String) {
@@ -640,12 +679,14 @@ final class CollectorViewModel: ObservableObject {
         automaticPauseReasons.insert(reason)
         automaticPauseReason = automaticPauseReasons.sorted().joined(separator: ",")
         if wasActive { stopActiveCollection() }
+        if wasActive { synchronization?.recordCollectionState(.suspended, reason: reason) }
         if isActivityTrackingEnabled {
             statusMessage = "필수 관찰 조건 상실로 자동 일시정지했습니다: \(reason)"
         }
     }
 
     private func handleAutomaticResume(reason: String) {
+        guard !activityStorageUnavailable else { return }
         guard automaticPauseReasons.contains(reason) else { return }
         automaticPauseReasons.remove(reason)
         automaticPauseReason = automaticPauseReasons.isEmpty
@@ -653,6 +694,7 @@ final class CollectorViewModel: ObservableObject {
             : automaticPauseReasons.sorted().joined(separator: ",")
         guard automaticPauseReasons.isEmpty, isActivityTrackingEnabled else { return }
         resumeActiveCollection()
+        synchronization?.recordCollectionState(.active, reason: reason)
         statusMessage = "필수 관찰 조건이 돌아와 활동 추적을 재개했습니다."
     }
 
@@ -664,6 +706,28 @@ final class CollectorViewModel: ObservableObject {
         pendingExpectedTransition = nil
         currentAnchor = nil
         anchorStore.removeAll()
+    }
+
+    private func handleActivityStorageFailure() {
+        guard !activityStorageUnavailable else { return }
+        activityStorageUnavailable = true
+        automaticPauseReasons.insert(Self.activityStoragePauseReason)
+        automaticPauseReason = automaticPauseReasons.sorted().joined(separator: ",")
+        stopActiveCollection()
+        stopCollectionTimers()
+        publishActivityStorageFailureStatus()
+    }
+
+    private func publishActivityStorageFailureStatus() {
+        synchronizationStatus = "저장소 복구 필요 · 기록되지 않음"
+        statusMessage = "활동 저장소를 사용할 수 없어 수집을 중단했습니다. 새 활동은 기록되지 않습니다."
+    }
+
+    private func stopCollectionTimers() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+        performanceTimer?.invalidate()
+        performanceTimer = nil
     }
 
     private func resumeActiveCollection() {

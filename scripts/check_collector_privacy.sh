@@ -48,11 +48,11 @@ check_absent \
 
 if rg -n --glob '*.swift' 'SQLite|CoreData|NSPersistentContainer' \
     "$production_sources/MosemoAPI" \
-    | rg -v '/SQLiteStorage\.swift:'; then
-    printf 'FAIL: database APIs are confined to SQLiteStorage.swift\n' >&2
+    | rg -v '/(SQLiteStorage|EncryptedActivityQueue)\.swift:'; then
+    printf 'FAIL: database APIs are confined to storage adapters\n' >&2
     failed=1
 else
-    printf 'PASS: database APIs are confined to SQLiteStorage.swift\n'
+    printf 'PASS: database APIs are confined to storage adapters\n'
 fi
 
 check_absent \

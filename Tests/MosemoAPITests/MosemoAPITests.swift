@@ -1152,14 +1152,41 @@ final class MosemoAPITests: XCTestCase {
         await assertAPIError(.validationFailed) {
             _ = try await validationClient.createActivity(record)
         }
-        await assertAPIError(.serverError(statusCode: 500)) {
+        await assertAPIError(.retryableServerError(statusCode: 500, retryAfter: nil)) {
             _ = try await serverClient.createActivity(record)
         }
-        await assertAPIError(.serverError(statusCode: 503)) {
+        await assertAPIError(.retryableServerError(statusCode: 503, retryAfter: nil)) {
             _ = try await undocumentedClient.createActivity(record)
         }
         await assertAPIError(.unexpectedResponse(statusCode: 405)) {
             _ = try await methodClient.createActivity(record)
+        }
+    }
+
+    func testCreateActivityPreservesRetryAfterForUndocumentedRateLimit() async {
+        let metadata = makeActivityMetadata()
+        let record = ActivityRecord.observation(.init(metadata: metadata, context: .opaque))
+        let client = makeClient(createActivity: { _ in
+            .undocumented(statusCode: 429, .init(headerFields: [HTTPField.Name("Retry-After")!: "4"]))
+        })
+
+        await assertAPIError(.retryableServerError(statusCode: 429, retryAfter: 4)) {
+            _ = try await client.createActivity(record)
+        }
+    }
+
+    func testCreateActivityPreservesRetryAfterForServiceUnavailable() async {
+        let metadata = makeActivityMetadata()
+        let record = ActivityRecord.observation(.init(metadata: metadata, context: .opaque))
+        let client = makeClient(createActivity: { _ in
+            .serviceUnavailable(.init(
+                headers: .init(retryAfter: ._1),
+                body: .json(makeErrorResponse(code: 503, status: "BUSY", message: "retry later"))
+            ))
+        })
+
+        await assertAPIError(.retryableServerError(statusCode: 503, retryAfter: 1)) {
+            _ = try await client.createActivity(record)
         }
     }
 
