@@ -35,6 +35,9 @@ struct DesktopRootView: View {
         .task {
             await auth.restoreSession()
         }
+        .task(id: "\(auth.account?.id.uuidString ?? ""):\(auth.registeredDeviceID?.uuidString ?? "")") {
+            await model.synchronizationAccountChanged(auth.account)
+        }
     }
 }
 

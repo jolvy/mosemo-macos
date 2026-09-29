@@ -7,6 +7,7 @@ import MosemoAPI
 @MainActor
 final class AuthCoordinator: NSObject, ObservableObject {
     @Published private(set) var account: Account?
+    @Published private(set) var registeredDeviceID: UUID?
     @Published private(set) var statusMessage: String
     @Published private(set) var isAuthenticating = false
     @Published private(set) var hasFinishedRestoringSession = false
@@ -53,9 +54,11 @@ final class AuthCoordinator: NSObject, ObservableObject {
             )
         } catch MosemoAPIError.authenticationRequired {
             account = nil
+            registeredDeviceID = nil
             statusMessage = "로그인이 필요합니다."
         } catch {
             account = nil
+            registeredDeviceID = nil
             statusMessage = Self.message(for: error)
         }
     }
@@ -104,6 +107,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
     func signOut() {
         guard let client else {
             account = nil
+            registeredDeviceID = nil
             statusMessage = "로그아웃했습니다."
             return
         }
@@ -112,6 +116,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
             do {
                 try await client.signOut()
                 account = nil
+                registeredDeviceID = nil
                 statusMessage = "로그아웃했습니다."
             } catch {
                 statusMessage = Self.message(for: error)
@@ -122,6 +127,7 @@ final class AuthCoordinator: NSObject, ObservableObject {
     func timelineAuthenticationFailed(for accountID: UUID) {
         guard account?.id == accountID else { return }
         account = nil
+        registeredDeviceID = nil
         statusMessage = "로그인이 필요합니다."
     }
 
@@ -174,14 +180,17 @@ final class AuthCoordinator: NSObject, ObservableObject {
         successMessage: String
     ) async {
         account = authenticatedAccount
+        registeredDeviceID = nil
         do {
-            _ = try await deviceRegistrationManager.ensureRegistered(
+            let device = try await deviceRegistrationManager.ensureRegistered(
                 for: authenticatedAccount,
                 using: client
             )
+            registeredDeviceID = device.id
             statusMessage = successMessage
         } catch MosemoAPIError.authenticationRequired {
             account = nil
+            registeredDeviceID = nil
             statusMessage = "로그인이 필요합니다."
         } catch {
             statusMessage = "Device 등록에 실패했습니다. 다시 시도해 주세요."

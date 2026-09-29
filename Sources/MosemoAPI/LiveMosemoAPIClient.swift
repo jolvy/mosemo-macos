@@ -1,4 +1,5 @@
 import Foundation
+import HTTPTypes
 import OpenAPIRuntime
 import OpenAPIURLSession
 
@@ -233,10 +234,19 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
             case .unprocessableContent:
                 throw MosemoAPIError.validationFailed
             case .internalServerError:
-                throw Self.error(forHTTPStatus: 500)
-            case .serviceUnavailable:
-                throw Self.error(forHTTPStatus: 503)
-            case .undocumented(let statusCode, _):
+                throw MosemoAPIError.retryableServerError(statusCode: 500, retryAfter: nil)
+            case .serviceUnavailable(let response):
+                throw MosemoAPIError.retryableServerError(
+                    statusCode: 503,
+                    retryAfter: response.headers.retryAfter == ._1 ? 1 : nil
+                )
+            case .undocumented(let statusCode, let payload):
+                if statusCode == 408 || statusCode == 429 || (500...599).contains(statusCode) {
+                    throw MosemoAPIError.retryableServerError(
+                        statusCode: statusCode,
+                        retryAfter: Self.retryAfter(payload.headerFields[HTTPField.Name("Retry-After")!])
+                    )
+                }
                 throw Self.error(forHTTPStatus: statusCode)
             }
         } catch {
@@ -363,6 +373,12 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
     private static func mapActivity(_ error: Error) -> MosemoAPIError {
         if let clientError = error as? ClientError,
            let statusCode = clientError.response?.status.code {
+            if statusCode == 408 || statusCode == 429 || (500...599).contains(statusCode) {
+                return .retryableServerError(
+                    statusCode: statusCode,
+                    retryAfter: retryAfter(clientError.response?.headerFields[HTTPField.Name("Retry-After")!])
+                )
+            }
             switch statusCode {
             case 401:
                 return .authenticationRequired
@@ -373,6 +389,17 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
             }
         }
         return mapCommon(error, statusCode: nil)
+    }
+
+    private static func retryAfter(_ value: String?) -> TimeInterval? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        if let seconds = TimeInterval(value), seconds >= 0 { return seconds }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+        guard let date = formatter.date(from: value) else { return nil }
+        return max(0, date.timeIntervalSinceNow)
     }
 
     private static func mapCommon(

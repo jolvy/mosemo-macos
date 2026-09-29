@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ActivityRecordMetadata: Equatable, Sendable {
+public struct ActivityRecordMetadata: Codable, Equatable, Sendable {
     public let deviceRegistrationID: UUID
     public let eventID: UUID
     public let sequence: Int
@@ -25,12 +25,12 @@ public struct ActivityRecordMetadata: Equatable, Sendable {
     }
 }
 
-public enum ActivityRecord: Equatable, Sendable {
+public enum ActivityRecord: Codable, Equatable, Sendable {
     case observation(ActivityObservation)
     case collectionStateChanged(CollectionStateChange)
 }
 
-public struct ActivityObservation: Equatable, Sendable {
+public struct ActivityObservation: Codable, Equatable, Sendable {
     public let metadata: ActivityRecordMetadata
     public let context: ActivityContext
 
@@ -40,8 +40,8 @@ public struct ActivityObservation: Equatable, Sendable {
     }
 }
 
-public struct CollectionStateChange: Equatable, Sendable {
-    public enum State: String, Equatable, Sendable {
+public struct CollectionStateChange: Codable, Equatable, Sendable {
+    public enum State: String, Codable, Equatable, Sendable {
         case active
         case suspended
     }
@@ -61,12 +61,12 @@ public struct CollectionStateChange: Equatable, Sendable {
     }
 }
 
-public enum ActivityContext: Equatable, Sendable {
+public enum ActivityContext: Codable, Equatable, Sendable {
     case detailed(DetailedActivityContext)
     case opaque
 }
 
-public struct DetailedActivityContext: Equatable, Sendable {
+public struct DetailedActivityContext: Codable, Equatable, Sendable {
     public let app: ActivityApplicationContext
     public let window: ActivityWindowContext
     public let web: ActivityWebContext
@@ -82,7 +82,7 @@ public struct DetailedActivityContext: Equatable, Sendable {
     }
 }
 
-public struct ActivityApplicationContext: Equatable, Sendable {
+public struct ActivityApplicationContext: Codable, Equatable, Sendable {
     public let bundleID: ActivityObservedString
     public let name: ActivityObservedString
 
@@ -95,13 +95,13 @@ public struct ActivityApplicationContext: Equatable, Sendable {
     }
 }
 
-public enum ActivityObservedString: Equatable, Sendable {
+public enum ActivityObservedString: Codable, Equatable, Sendable {
     case captured(String)
     case absent
     case unavailable(reason: String)
 }
 
-public struct ActivityCapturedText: Equatable, Sendable {
+public struct ActivityCapturedText: Codable, Equatable, Sendable {
     public let value: String
     public let truncated: Bool
     public let originalByteLength: Int?
@@ -117,18 +117,18 @@ public struct ActivityCapturedText: Equatable, Sendable {
     }
 }
 
-public enum ActivityWindowContext: Equatable, Sendable {
+public enum ActivityWindowContext: Codable, Equatable, Sendable {
     case captured(title: ActivityCapturedText)
     case absent
     case unavailable(reason: String)
 }
 
-public enum ActivityWebContext: Equatable, Sendable {
+public enum ActivityWebContext: Codable, Equatable, Sendable {
     case browser(ActivityBrowserContext)
     case notApplicable
 }
 
-public struct ActivityBrowserContext: Equatable, Sendable {
+public struct ActivityBrowserContext: Codable, Equatable, Sendable {
     public let tabTitle: ActivityObservedText
     public let url: ActivityPrivacyFilteredString
 
@@ -141,18 +141,50 @@ public struct ActivityBrowserContext: Equatable, Sendable {
     }
 }
 
-public enum ActivityObservedText: Equatable, Sendable {
+public enum ActivityObservedText: Codable, Equatable, Sendable {
     case captured(ActivityCapturedText)
     case absent
     case unavailable(reason: String)
     case redacted(reason: String)
 }
 
-public enum ActivityPrivacyFilteredString: Equatable, Sendable {
+public enum ActivityPrivacyFilteredString: Codable, Equatable, Sendable {
     case captured(String)
     case absent
     case unavailable(reason: String)
     case redacted(reason: String)
+}
+
+public enum ActivityPrivacyFilter {
+    public static let maximumURLBytes = 8_192
+    public static let maximumTitleBytes = 4_096
+
+    public static func url(_ value: String) -> ActivityPrivacyFilteredString {
+        if let scheme = URLComponents(string: value)?.scheme?.lowercased(),
+           scheme == "data" || scheme == "javascript" {
+            return .redacted(reason: "embedded_content_scheme")
+        }
+        guard value.utf8.count <= maximumURLBytes else {
+            return .redacted(reason: "length_exceeded")
+        }
+        return .captured(value)
+    }
+
+    public static func title(_ value: String) -> ActivityCapturedText {
+        let byteCount = value.utf8.count
+        guard byteCount > maximumTitleBytes else {
+            return ActivityCapturedText(value: value)
+        }
+        var prefix = ""
+        var count = 0
+        for scalar in value.unicodeScalars {
+            let scalarBytes = String(scalar).utf8.count
+            guard count + scalarBytes <= maximumTitleBytes else { break }
+            prefix.unicodeScalars.append(scalar)
+            count += scalarBytes
+        }
+        return ActivityCapturedText(value: prefix, truncated: true, originalByteLength: byteCount)
+    }
 }
 
 public struct ActivityCreateResult: Equatable, Sendable {
