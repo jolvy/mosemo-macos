@@ -20,8 +20,8 @@
    분리한다.
 
 현재 서버 통신 범위는 Kakao 로그인 시작, access token 교환, 현재 계정 조회,
-Device 등록, 활동 레코드 등록과 날짜별 관찰 타임라인 조회 API다. Collector 연결과 로컬 spool은 아직 구현
-범위가 아니다.
+Device 등록, 활동 레코드 등록과 날짜별 관찰 타임라인 조회 API다. 앱은 Collector 관찰을
+개인정보 필터 후 암호화 로컬 대기열에 먼저 저장하고 이 API로 순차 전송한다.
 
 ## 모듈 구조
 
@@ -115,6 +115,10 @@ Device 등록 API 호출은 하지 않는다. Device 등록은 호출자가 제�
 API 호출 전에 저장하며, 성공한 `deviceId`와 함께 pending 키를 정리한다. Debug
 빌드는 SQLite 저장 adapter를 사용하고 Release 빌드는 Keychain adapter를 사용한다.
 `LiveMosemoAPIClient` 자체는 멱등 키를 생성하거나 재시도하지 않는다.
+`EncryptedActivityQueue`는 계정·Device별 event ID와 sequence를 원자적으로 배정하고
+AES-GCM으로 본문을 암호화한다. 암호화 키는 Debug·Release 모두 Keychain에 저장한다.
+앱의 `OfflineActivityCoordinator`가 필터 완료 명령을 FIFO로 저장한 뒤 선두 레코드의
+일치하는 ACK를 확인할 때만 제거하며, 재시도와 계정 세대 격리를 맡는다.
 타임라인은 계정의 시간대로 선택한 날짜를 `date` 쿼리로 보낸다. 서버 응답은
 날짜·시간대 필드가 없는 구간 배열이므로 요청 날짜, 계정 시간대와 배열 순서를
 그대로 `TimelineDay`에 담는다. 미전송 로컬 이벤트는 합치지 않는다.
@@ -277,15 +281,15 @@ Release 설정이 비어 있거나 잘못되면 앱을 crash시키지 않고 로
 ## Privacy 경계
 
 `CollectorCore`에는 network framework, database framework와 API DTO가 들어갈 수
-없다. 네트워크와 인증 저장은 `MosemoAPI`에서만 허용한다. Debug 빌드의 앱 전용
-SQLite는 인증·Device 상태에 한해 임시 허용하며 활동 payload나 수집 원문을 저장하지
-않는다. Release 빌드의 인증·Device 상태는 Keychain에 저장한다. application logging
-금지는 production source 전체에 적용한다.
+없다. 네트워크와 저장 adapter는 `MosemoAPI`에서만 허용한다. 인증·Device 상태는
+Debug에서 앱 전용 SQLite, Release에서 Keychain에 저장한다. 필터 완료 활동 payload는
+두 구성 모두 앱 전용 SQLite에 AES-GCM 암호문으로 저장하고 키는 Keychain에서 관리한다.
+application logging 금지는 production source 전체에 적용한다.
 
 access token, callback code, PKCE verifier는 로그와 사용자용 오류 설명에 넣지
 않는다. 활동 payload에는 원문 URL·제목·키 입력 내용·클릭 좌표 등의 금지 필드를
 추가할 수 없다. 활동 API는 개인정보 필터링이 끝난 공개 활동 모델만 받으며
-Collector와의 호출 연결은 후속 작업이다.
+보호 상태를 확인하지 못한 상세 맥락과 일반 관찰 실패는 영속 활동으로 만들지 않는다.
 
 이 경계는 `scripts/check_collector_privacy.sh`에서 정적으로 확인한다.
 
@@ -368,11 +372,9 @@ status를 `validationFailed`로 매핑한다.
 - 서버 OpenAPI 계약의 작성·배포
 - refresh token과 token refresh
 - 범용 HTTP 재시도 정책
-- Collector 이벤트 변환과 호출 연결, sequence 생성, batching, spool, ACK 처리
+- 활동 API batching
 - `ActivitySyncClient` 빈 인터페이스
 - 실제 Kakao 계정이 필요한 자동 end-to-end 테스트
 
-추후 Collector를 연결할 때는 `CollectorCore` 이벤트를 공개 활동 모델로 명시적으로
-변환하고, `ActivityRecordMetadataResolver`로 저장된 Device UUID가 주입된
-메타데이터를 준비한다. event ID와 sequence는 Resolver 호출 전에 확정해
-재전송에서도 동일하게 유지해야 한다.
+Collector 연결과 대기열 전송은 `OfflineActivityCoordinator`가 담당한다. event ID와
+sequence, 관찰 시각과 필터 후 본문은 첫 저장에서 확정하며 재전송에서 바꾸지 않는다.

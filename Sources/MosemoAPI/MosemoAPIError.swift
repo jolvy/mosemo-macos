@@ -1,3 +1,5 @@
+import Foundation
+
 public enum MosemoAPIError: Error, Equatable, Sendable {
     case authenticationRequired
     case invalidAuthorizationCode
@@ -7,8 +9,10 @@ public enum MosemoAPIError: Error, Equatable, Sendable {
     case activityEventIDConflict
     case activitySequenceConflict
     case serverError(statusCode: Int)
+    case retryableServerError(statusCode: Int, retryAfter: TimeInterval?)
     case networkUnavailable
     case timedOut
     case unexpectedResponse(statusCode: Int)
     case credentialStorageFailed
+    case activityQueueStorageFailed
 }

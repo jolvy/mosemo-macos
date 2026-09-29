@@ -12,7 +12,8 @@ struct MosemoApp: App {
     private let reviewReader: (any LabelReviewReading)?
 
     init() {
-        _model = StateObject(wrappedValue: CollectorViewModel())
+        let collector = CollectorViewModel()
+        _model = StateObject(wrappedValue: collector)
 
         if let baseURL = AppConfiguration.apiBaseURL {
             do {
@@ -29,6 +30,20 @@ struct MosemoApp: App {
                     deviceRegistrationStateStore: deviceRegistrationStateStore
                 ))
                 reviewReader = client
+                do {
+                    let queueDirectory = try FileManager.default.url(
+                        for: .applicationSupportDirectory, in: .userDomainMask,
+                        appropriateFor: nil, create: true
+                    ).appendingPathComponent("io.mosemo.app", isDirectory: true)
+                    try FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
+                    let activityQueue = try EncryptedActivityQueue(
+                        databaseURL: queueDirectory.appendingPathComponent("activity-queue.sqlite")
+                    )
+                    collector.configureSynchronization(client: client,
+                        deviceStateStore: deviceRegistrationStateStore, queue: activityQueue)
+                } catch {
+                    collector.synchronizationUnavailable()
+                }
             } catch let error as URLError where error.code == .badURL {
                 apiClient = nil
                 reviewReader = nil
@@ -147,6 +162,8 @@ private struct CollectorMenuView: View {
                     model.activityTrackingStatusText,
                     systemImage: model.collectionAllowed ? "record.circle" : "pause.circle"
                 )
+                Text("동기화 대기 \(model.pendingActivityCount)건 · \(model.synchronizationStatus)")
+                    .font(.caption)
                 Spacer()
                 Button(model.isActivityTrackingEnabled ? "활동 추적 중지" : "활동 추적 시작") {
                     model.setActivityTrackingEnabled(!model.isActivityTrackingEnabled)
@@ -309,9 +326,9 @@ private struct DiagnosticsView: View {
 
             Text("메모리 ring buffer · 최근 \(model.events.count)/600 이벤트")
                 .font(.headline)
-            Text("테스트 모드: 일반 Chrome·Firefox의 탭 제목과 전체 URL이 앱 메모리에 노출됩니다. 안전 진단 복사에는 포함되지 않으며 앱 종료 때 사라집니다.")
+            Text("진단 기록에는 제목과 URL을 보관하지 않습니다.")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(model.events.enumerated().reversed()), id: \.offset) { _, record in
@@ -326,6 +343,8 @@ private struct DiagnosticsView: View {
             Text(model.statusMessage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text("동기화 대기 \(model.pendingActivityCount)건 · \(model.synchronizationStatus)")
+                .font(.caption)
         }
         .padding()
     }
@@ -377,12 +396,6 @@ private struct SafeEventRow: View {
                     "\(event.detectionLatencyMilliseconds)ms",
                 ].filter { !$0.isEmpty }.joined(separator: " · "))
 
-                if let context = record.browserContext {
-                    Text("title=\(context.title ?? "관찰 불가")")
-                        .foregroundStyle(.secondary)
-                    Text("url=\(context.url ?? "관찰 불가")")
-                        .foregroundStyle(.secondary)
-                }
             }
             .font(.system(.caption, design: .monospaced))
             .textSelection(.enabled)
