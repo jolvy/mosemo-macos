@@ -15,6 +15,9 @@ URL을 진단 화면에 표시하는 임시 테스트 모드다. 이 두 값은 
 
 ## 설계 문서
 
+- [macOS 오프라인 활동 동기화 PRD](PRD_MACOS_OFFLINE_ACTIVITY_SYNC.md): 영속 대기열,
+  단건 순차 전송, 자동 복구와 용량 제한
+- [ADR-0003: 활동을 먼저 저장하고 순차 전송한다](adr/0003-persist-activity-before-sequential-upload.md)
 - [macOS 활동 라벨 검토와 집계 PRD](PRD_MACOS_ACTIVITY_LABELING.md): 제안 표시,
   사용자 확정, 라벨 타임라인과 대시보드의 앱 동작
 - [macOS OpenAPI·인증 아키텍처](OPENAPI_AUTH_ARCHITECTURE.md): 모듈 경계,
