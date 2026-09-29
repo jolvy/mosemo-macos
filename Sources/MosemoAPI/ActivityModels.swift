@@ -159,9 +159,13 @@ public enum ActivityPrivacyFilter {
     public static let maximumURLBytes = 8_192
     public static let maximumTitleBytes = 4_096
 
+    public static func isEmbeddedContentURL(_ value: String) -> Bool {
+        guard let scheme = URLComponents(string: value)?.scheme?.lowercased() else { return false }
+        return scheme == "data" || scheme == "javascript"
+    }
+
     public static func url(_ value: String) -> ActivityPrivacyFilteredString {
-        if let scheme = URLComponents(string: value)?.scheme?.lowercased(),
-           scheme == "data" || scheme == "javascript" {
+        if isEmbeddedContentURL(value) {
             return .redacted(reason: "embedded_content_scheme")
         }
         guard value.utf8.count <= maximumURLBytes else {

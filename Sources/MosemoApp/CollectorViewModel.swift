@@ -118,13 +118,14 @@ final class CollectorViewModel: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: Self.activityTrackingPreferenceKey)
 
         if enabled {
-            synchronization?.recordCollectionState(.active, reason: "user_enabled")
             lastObservationFailure = nil
             stopActiveCollection()
             if automaticPauseReason == nil {
+                synchronization?.recordCollectionState(.active, reason: "user_enabled")
                 resumeActiveCollection()
                 statusMessage = "활동 추적을 시작했습니다."
             } else {
+                synchronization?.recordCollectionState(.suspended, reason: automaticPauseReason ?? "automatic_pause")
                 statusMessage = "활동 추적을 켰습니다. 자동 일시정지가 해제되면 수집을 재개합니다."
             }
         } else {

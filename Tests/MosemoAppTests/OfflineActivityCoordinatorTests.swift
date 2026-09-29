@@ -115,6 +115,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let pendingAfterNewRecord = try await queue.count(accountID: account.id)
         XCTAssertEqual(sequencesAfterNewRecord, [1])
         XCTAssertEqual(pendingAfterNewRecord, 2)
+        XCTAssertEqual(statuses.last, "수락 확인 필요")
     }
 
     func testProtectedActivityPersistsOnlyOpaqueContext() async throws {
@@ -175,6 +176,86 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(sequences, [])
         XCTAssertEqual(pending, 1)
         XCTAssertTrue(statuses.contains("복구 필요 · 기록 보존 중"))
+    }
+
+    func testEmbeddedContentURLIsPersistedAsRedactedEvenWhenClassifierMarkedItUnavailable() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let account = Account(id: UUID(), provider: .kakao, createdAt: .now,
+                              lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
+        let device = UUID()
+        let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
+                                               keyStore: QueueTestKeyStore())
+        let coordinator = OfflineActivityCoordinator(queue: queue, client: QueueTestClient(firstError: .validationFailed),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+        await coordinator.activate(account)
+
+        coordinator.record(SafeActivityEvent(eventType: .activity, appBundleID: "com.google.Chrome",
+            registeredDomain: nil, surfaceType: .unavailable, transitionType: .observationUnavailable,
+            observationState: .unavailable, inputOccurred: nil, occurredAt: .now,
+            detectionLatencyMilliseconds: 0, protectedContext: false),
+            browserContext: TransientBrowserContext(title: "private", url: "javascript:secret()"))
+        for _ in 0..<100 {
+            if try await queue.count(accountID: account.id) == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let saved = try await queue.first(accountID: account.id, deviceID: device)
+        guard case .observation(let observation)? = saved?.record,
+              case .detailed(let detail) = observation.context,
+              case .browser(let browser) = detail.web else {
+            return XCTFail("Expected a detailed browser observation")
+        }
+        XCTAssertEqual(browser.url, .redacted(reason: "embedded_content_scheme"))
+        XCTAssertEqual(detail.app.bundleID, .absent)
+        XCTAssertEqual(browser.tabTitle, .unavailable(reason: "observation_unavailable"))
+    }
+
+    func testRestartAfterLostResponseReplaysTheExactPersistedRecord() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let databaseURL = directory.appendingPathComponent("queue.sqlite")
+        let account = Account(id: UUID(), provider: .kakao, createdAt: .now,
+                              lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
+        let device = UUID()
+        let keyStore = QueueTestKeyStore()
+        let originalQueue = try EncryptedActivityQueue(databaseURL: databaseURL, keyStore: keyStore)
+        let original = try await originalQueue.enqueue(accountID: account.id, deviceID: device, observedAt: .now,
+            timezoneID: "Asia/Seoul", utcOffsetMinutes: 540) { metadata in
+                .observation(ActivityObservation(metadata: metadata, context: .opaque))
+            }
+        let retryWaits = RetryWaitRecorder()
+        let firstClient = QueueTestClient(firstError: .networkUnavailable)
+        let firstCoordinator = OfflineActivityCoordinator(queue: originalQueue, client: firstClient,
+            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            sleepBeforeRetry: { seconds in
+                await retryWaits.append(seconds)
+                try? await Task.sleep(for: .seconds(seconds))
+            }, retryJitter: { 0.5 }, onStatus: { _, _ in })
+
+        await firstCoordinator.activate(account)
+        for _ in 0..<100 {
+            if !(await retryWaits.delays()).isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await firstCoordinator.activate(nil)
+
+        let firstAttempt = await firstClient.records()
+        let reopenedQueue = try EncryptedActivityQueue(databaseURL: databaseURL, keyStore: keyStore)
+        let replayClient = QueueTestClient()
+        let restartedCoordinator = OfflineActivityCoordinator(queue: reopenedQueue, client: replayClient,
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+        await restartedCoordinator.activate(account)
+        for _ in 0..<100 {
+            if try await reopenedQueue.count(accountID: account.id) == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let replay = await replayClient.records()
+        let pending = try await reopenedQueue.count(accountID: account.id)
+        XCTAssertEqual(firstAttempt, [original.record])
+        XCTAssertEqual(replay, [original.record])
+        XCTAssertEqual(pending, 0)
     }
 
     func testEmptyQueueDoesNotStartARequestOrRetryTimer() async throws {

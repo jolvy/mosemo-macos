@@ -12,6 +12,7 @@ final class OfflineActivityCoordinator {
     private var generation = 0
     private var isSending = false
     private var blockedGeneration: Int?
+    private var blockedStatus: String?
     private var sendTask: Task<Void, Never>?
     private var retryAttempt = 0
     private let onStatus: @MainActor (Int, String) -> Void
@@ -39,6 +40,8 @@ final class OfflineActivityCoordinator {
         isSending = false
         generation += 1
         blockedGeneration = nil
+        blockedStatus = nil
+        retryAttempt = 0
         let currentGeneration = generation
         self.account = account
         deviceID = nil
@@ -69,19 +72,25 @@ final class OfflineActivityCoordinator {
     }
 
     func record(_ event: SafeActivityEvent, browserContext: TransientBrowserContext?) {
+        let embeddedContentURL = browserContext?.url.map(ActivityPrivacyFilter.isEmbeddedContentURL) ?? false
         guard let account, let deviceID, event.eventType == .activity,
-              event.observationState != .unavailable else { return }
+              event.observationState != .unavailable || embeddedContentURL else { return }
         let activityContext: ActivityContext
         if event.protectedContext {
             activityContext = .opaque
         } else {
-            let appID: ActivityObservedString = event.appBundleID.map(ActivityObservedString.captured) ?? .absent
+            let contextUnavailable = event.observationState == .unavailable
+            let appID: ActivityObservedString = contextUnavailable
+                ? .absent
+                : (event.appBundleID.map(ActivityObservedString.captured) ?? .absent)
             let browser: ActivityWebContext
             if event.appBundleID == ChromeAppleEventClient.bundleID || event.appBundleID == SystemEventsClient.firefoxBundleID {
-                let title = browserContext?.title.map(ActivityPrivacyFilter.title)
+                let title = contextUnavailable ? nil : browserContext?.title.map(ActivityPrivacyFilter.title)
                 let web = browserContext?.url.map(ActivityPrivacyFilter.url) ?? .unavailable(reason: "browser_context_unavailable")
                 browser = .browser(ActivityBrowserContext(
-                    tabTitle: title.map { .captured($0) } ?? .unavailable(reason: "browser_context_unavailable"),
+                    tabTitle: title.map { .captured($0) } ?? .unavailable(
+                        reason: contextUnavailable ? "observation_unavailable" : "browser_context_unavailable"
+                    ),
                     url: web
                 ))
             } else {
@@ -93,6 +102,7 @@ final class OfflineActivityCoordinator {
                 web: browser
             ))
         }
+        let recordGeneration = generation
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -102,16 +112,19 @@ final class OfflineActivityCoordinator {
                     utcOffsetMinutes: timezone.secondsFromGMT(for: event.occurredAt) / 60) { metadata in
                     .observation(ActivityObservation(metadata: metadata, context: activityContext))
                 }
-                await updateCount(status: "동기화 대기")
-                sendNext(generation: generation)
+                await updateCount(status: "동기화 대기", expectedGeneration: recordGeneration)
+                guard generation == recordGeneration else { return }
+                sendNext(generation: recordGeneration)
             } catch {
-                publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "기록 저장 실패 · 확인 필요")
+                await publishQueueStatus(accountID: account.id, status: "기록 저장 실패 · 확인 필요",
+                                         expectedGeneration: recordGeneration)
             }
         }
     }
 
     func recordCollectionState(_ state: CollectionStateChange.State, reason: String) {
         guard let account, let deviceID else { return }
+        let recordGeneration = generation
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -122,10 +135,12 @@ final class OfflineActivityCoordinator {
                     utcOffsetMinutes: timezone.secondsFromGMT(for: observedAt) / 60) { metadata in
                     .collectionStateChanged(CollectionStateChange(metadata: metadata, state: state, reason: reason))
                 }
-                await updateCount(status: "동기화 대기")
-                sendNext(generation: generation)
+                await updateCount(status: "동기화 대기", expectedGeneration: recordGeneration)
+                guard generation == recordGeneration else { return }
+                sendNext(generation: recordGeneration)
             } catch {
-                publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "기록 저장 실패 · 확인 필요")
+                await publishQueueStatus(accountID: account.id, status: "기록 저장 실패 · 확인 필요",
+                                         expectedGeneration: recordGeneration)
             }
         }
     }
@@ -144,25 +159,32 @@ final class OfflineActivityCoordinator {
                     guard generation == expectedGeneration else { return }
                     isSending = false
                     blockedGeneration = expectedGeneration
-                    publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "복구 필요 · 기록 보존 중")
+                    blockedStatus = "복구 필요 · 기록 보존 중"
+                    await publishQueueStatus(accountID: account.id, status: "복구 필요 · 기록 보존 중",
+                                             expectedGeneration: expectedGeneration)
                     return
                 }
                 guard generation == expectedGeneration, !Task.isCancelled else { return }
                 guard let item else {
                     isSending = false
                     let count = (try? await queue.count(accountID: account.id)) ?? 0
+                    guard generation == expectedGeneration else { return }
                     publish(count: count, status: count == 0 ? "동기화 완료" : "동기화 대기")
                     if count > 0 { sendNext(generation: expectedGeneration) }
                     return
                 }
-                publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "활동 전송 중")
+                let pendingCount = (try? await queue.count(accountID: account.id)) ?? 0
+                guard generation == expectedGeneration, !Task.isCancelled else { return }
+                publish(count: pendingCount, status: "활동 전송 중")
                 do {
                     let result = try await client.createActivity(item.record)
                     guard generation == expectedGeneration else { return }
                     guard result.eventID == item.eventID else {
                         isSending = false
                         blockedGeneration = expectedGeneration
-                        publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "수락 확인 필요")
+                        blockedStatus = "수락 확인 필요"
+                        await publishQueueStatus(accountID: account.id, status: "수락 확인 필요",
+                                                 expectedGeneration: expectedGeneration)
                         return
                     }
                     try await queue.acknowledge(accountID: account.id, deviceID: deviceID,
@@ -183,19 +205,24 @@ final class OfflineActivityCoordinator {
                         }
                         let jitter = min(1.0, max(0.5, retryJitter()))
                         let delay = max(retryAfter, base * jitter)
-                        publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "자동 재시도 대기")
+                        await publishQueueStatus(accountID: account.id, status: "자동 재시도 대기",
+                                                 expectedGeneration: expectedGeneration)
                         await sleepBeforeRetry(delay)
                         continue
                     }
                     isSending = false
                     blockedGeneration = expectedGeneration
-                    publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "조치 필요 · 기록 보존 중")
+                    blockedStatus = "조치 필요 · 기록 보존 중"
+                    await publishQueueStatus(accountID: account.id, status: "조치 필요 · 기록 보존 중",
+                                             expectedGeneration: expectedGeneration)
                     return
                 } catch {
                     guard generation == expectedGeneration else { return }
                     isSending = false
                     blockedGeneration = expectedGeneration
-                    publish(count: (try? await queue.count(accountID: account.id)) ?? 0, status: "조치 필요 · 기록 보존 중")
+                    blockedStatus = "조치 필요 · 기록 보존 중"
+                    await publishQueueStatus(accountID: account.id, status: "조치 필요 · 기록 보존 중",
+                                             expectedGeneration: expectedGeneration)
                     return
                 }
             }
@@ -217,7 +244,14 @@ final class OfflineActivityCoordinator {
         let accountID = account?.id
         let count = (try? await queue.count(accountID: accountID)) ?? 0
         if let expectedGeneration, generation != expectedGeneration { return }
-        publish(count: count, status: count == 0 ? "동기화 완료" : status)
+        let resolvedStatus = expectedGeneration == blockedGeneration ? (blockedStatus ?? status) : status
+        publish(count: count, status: count == 0 ? "동기화 완료" : resolvedStatus)
+    }
+
+    private func publishQueueStatus(accountID: UUID, status: String, expectedGeneration: Int) async {
+        let count = (try? await queue.count(accountID: accountID)) ?? 0
+        guard generation == expectedGeneration else { return }
+        publish(count: count, status: status)
     }
 
     private func publish(count: Int, status: String) { onStatus(count, status) }
