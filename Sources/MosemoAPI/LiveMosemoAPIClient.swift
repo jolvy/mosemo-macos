@@ -499,7 +499,7 @@ extension LiveMosemoAPIClient: LabelReviewReading {
                             startedAt: segment.startedAt,
                             endedAt: segment.endedAt,
                             appName: Self.appName(from: segment.context),
-                            title: Self.title(from: segment.context)
+                            context: Self.reviewContext(from: segment.context)
                         )
                     }
                 }
@@ -687,15 +687,13 @@ extension LiveMosemoAPIClient: LabelReviewReading {
         return "알 수 없는 앱"
     }
 
-    private static func title(from context: Components.Schemas.DetailedActivityContext) -> String {
-        if case .captured(let window) = context.window, !window.title.value.isEmpty {
-            return window.title.value
+    private static func reviewContext(from context: Components.Schemas.DetailedActivityContext) -> LabelReviewActivityContext {
+        if case .browser(let web) = context.web {
+            let title: String? = if case .captured(let value) = web.tabTitle { value.value } else { nil }
+            let url: String? = if case .captured(let value) = web.url { value.value } else { nil }
+            return .web(title: title, url: url)
         }
-        if case .browser(let web) = context.web,
-           case .captured(let title) = web.tabTitle,
-           !title.value.isEmpty {
-            return title.value
-        }
-        return "제목 없음"
+        let title: String? = if case .captured(let window) = context.window { window.title.value } else { nil }
+        return .app(title: title)
     }
 }

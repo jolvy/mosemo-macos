@@ -16,10 +16,30 @@ extension LabelReviewSelection {
 extension LabelReviewProposal {
     func title(in labels: [LabelReviewLabel]) -> String {
         switch self {
-        case .ready(let selection): "AI 제안 · \(selection.title(in: labels))"
-        case .waiting: "제안 대기 중"
-        case .processing: "제안 처리 중"
+        case .ready(let selection): selection.title(in: labels)
+        case .waiting: "진행 중"
+        case .processing: "진행 중"
         case .failed: "제안 실패"
+        }
+    }
+}
+
+enum LabelReviewCheckState: Equatable {
+    case none, partial, all
+
+    var symbol: String {
+        switch self {
+        case .none: "square"
+        case .partial: "minus.square.fill"
+        case .all: "checkmark.square.fill"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .none: "미선택"
+        case .partial: "부분 선택"
+        case .all: "전체 선택"
         }
     }
 }
@@ -145,6 +165,33 @@ final class LabelReviewViewModel: ObservableObject {
         selectDate(selectedDate.adding(days: days, timeZone: timeZone))
     }
 
+    var allSelectionState: LabelReviewCheckState {
+        checkState(for: review?.pendingSegments ?? [])
+    }
+
+    func selectionState(for group: LabelReviewGroup) -> LabelReviewCheckState {
+        checkState(for: group.segments)
+    }
+
+    private func checkState(for segments: [LabelReviewSegment]) -> LabelReviewCheckState {
+        let count = segments.filter { selectedSegmentIDs.contains($0.id) }.count
+        if count == 0 { return .none }
+        return count == segments.count ? .all : .partial
+    }
+
+    func toggleSelection(for segment: LabelReviewSegment) {
+        guard !isSubmitting else { return }
+        if selectedSegmentIDs.contains(segment.id) {
+            selectedSegmentIDs.remove(segment.id)
+        } else {
+            selectedSegmentIDs.insert(segment.id)
+        }
+    }
+
+    func unclassifiedCount(in group: LabelReviewGroup) -> Int {
+        group.segments.filter { selection(for: $0) == .unclassified }.count
+    }
+
     func toggleAllGroups() {
         guard !isSubmitting else { return }
         if allGroupsSelected {
@@ -165,6 +212,7 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     func toggleExpansion(for group: LabelReviewGroup) {
+        guard !isSubmitting else { return }
         if expandedGroupIDs.contains(group.id) {
             expandedGroupIDs.remove(group.id)
         } else {
@@ -289,7 +337,9 @@ final class LabelReviewViewModel: ObservableObject {
                 )
             }
             let confirmedReview = originalReview.applying(localDecisions)
+            let expandedSegments = Set(groups.filter { expandedGroupIDs.contains($0.id) }.flatMap { $0.segments.map(\.id) })
             self.review = confirmedReview
+            expandedGroupIDs = Set(groups.filter { $0.segments.contains { expandedSegments.contains($0.id) } }.map(\.id))
             retryDecisions = nil
             retryAvailableAt = nil
             retryConflictReview = nil

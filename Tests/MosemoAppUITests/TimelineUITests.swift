@@ -108,6 +108,47 @@ final class TimelineUITests: XCTestCase {
 }
 
 final class LabelReviewUITests: XCTestCase {
+    func testTreeSelectionAndContextKeepControlsIndependent() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--label-review-ui-preview"]
+        app.launch()
+        let groupID = "00000000-0000-0000-0000-000000000001"
+        let secondID = "00000000-0000-0000-0000-000000000002"
+        let thirdID = "00000000-0000-0000-0000-000000000003"
+        let row = app.buttons["review-expand-" + groupID]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("+"))
+        row.click()
+        XCTAssertTrue(row.label.contains("−"))
+        app.buttons["review-group-check-" + groupID].click()
+        XCTAssertTrue(row.label.contains("−"))
+        app.buttons["review-group-check-" + groupID].click()
+        row.click()
+        XCTAssertTrue(row.label.contains("+"))
+        XCTAssertFalse(app.buttons["review-check-" + groupID].exists)
+        row.click()
+        let firstCheck = app.buttons["review-check-" + groupID]
+        XCTAssertTrue(firstCheck.waitForExistence(timeout: 3))
+        firstCheck.click()
+        XCTAssertTrue(app.buttons["review-group-check-" + groupID].label.contains("부분 선택"))
+        XCTAssertTrue(app.buttons["review-all-check"].label.contains("부분 선택"))
+        XCTAssertTrue((app.staticTexts["review-title-" + thirdID].value as? String ?? "").contains("수집 불가"))
+        XCTAssertTrue((app.staticTexts["review-url-" + thirdID].value as? String ?? "").contains("https://example.com/swift"))
+        XCTAssertTrue((app.staticTexts["review-title-" + secondID].value as? String ?? "").contains("AuthCoordinator.swift"))
+        XCTAssertFalse(app.staticTexts["review-url-" + secondID].exists)
+        XCTAssertTrue((app.staticTexts["review-duration-" + secondID].value as? String ?? "").contains("480초"))
+        let menu = app.popUpButtons["review-choice-" + groupID]
+        XCTAssertTrue(menu.exists)
+        menu.click()
+        app.menuItems["미분류"].click()
+        XCTAssertTrue(row.label.contains("−"))
+        XCTAssertTrue(row.label.contains("미분류 1건"))
+        app.buttons["review-confirm-" + groupID].click()
+        XCTAssertTrue(app.buttons["review-expand-" + secondID].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["review-check-" + secondID].exists)
+        XCTAssertFalse(firstCheck.exists)
+    }
+
     func testGroupSubmissionUpdatesPendingCount() {
         let app = XCUIApplication()
         app.launchArguments = ["--label-review-ui-preview"]

@@ -1,5 +1,6 @@
 import SwiftUI
 import MosemoAPI
+import MosemoAPI
 
 struct LabelReviewView: View {
     @ObservedObject var viewModel: LabelReviewViewModel
@@ -83,7 +84,6 @@ struct LabelReviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     LabelReviewSelectionSummary(
-                        selectedGroupCount: viewModel.selectedGroups.count,
                         selectedSegmentCount: viewModel.selectedSegmentCount,
                         missingChoiceCount: viewModel.missingChoiceCount,
                         isSubmitting: viewModel.isSubmitting,
@@ -124,7 +124,6 @@ private struct LabelReviewHeader: View {
 }
 
 private struct LabelReviewSelectionSummary: View {
-    let selectedGroupCount: Int
     let selectedSegmentCount: Int
     let missingChoiceCount: Int
     let isSubmitting: Bool
@@ -133,7 +132,7 @@ private struct LabelReviewSelectionSummary: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(selectedGroupCount)개 묶음 선택 · \(selectedSegmentCount)개 기록")
+                Text("\(selectedSegmentCount)개 구간 선택")
                     .font(.subheadline.weight(.semibold))
                 Text(missingChoiceCount == 0
                      ? "각 기록의 현재 선택을 한 요청으로 확정합니다."
@@ -142,9 +141,9 @@ private struct LabelReviewSelectionSummary: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(isSubmitting ? "제출 중…" : "선택한 묶음 확정", action: onConfirm)
+            Button(isSubmitting ? "제출 중…" : "선택한 \(selectedSegmentCount)개 구간 확정", action: onConfirm)
                 .buttonStyle(.borderedProminent)
-                .disabled(selectedGroupCount == 0 || missingChoiceCount > 0 || isSubmitting)
+                .disabled(selectedSegmentCount == 0 || missingChoiceCount > 0 || isSubmitting)
         }
         .padding(14)
         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -164,7 +163,9 @@ private struct LabelReviewTable: View {
                             group: group,
                             timeZone: viewModel.timeZone,
                             labels: viewModel.labels,
-                            isSelected: group.segments.allSatisfy { viewModel.selectedSegmentIDs.contains($0.id) },
+                            checkState: viewModel.selectionState(for: group),
+                            isSubmitting: viewModel.isSubmitting,
+                            unclassifiedCount: viewModel.unclassifiedCount(in: group),
                             isExpanded: viewModel.expandedGroupIDs.contains(group.id),
                             selectionSummary: viewModel.selectionSummary(for: group.segments),
                             actionTitle: viewModel.groupActionTitle(group),
@@ -179,6 +180,8 @@ private struct LabelReviewTable: View {
                                     segment: segment,
                                     timeZone: viewModel.timeZone,
                                     labels: viewModel.labels,
+                                    isSelected: viewModel.selectedSegmentIDs.contains(segment.id),
+                                    onToggleSelection: { viewModel.toggleSelection(for: segment) },
                                     selectionTitle: viewModel.title(for: viewModel.selection(for: segment)),
                                     isSubmitting: viewModel.isSubmitting,
                                     canConfirm: viewModel.canConfirm([segment]),
@@ -199,20 +202,19 @@ private struct LabelReviewTable: View {
     private var header: some View {
         HStack(spacing: 0) {
             Button(action: viewModel.toggleAllGroups) {
-                Image(systemName: viewModel.allGroupsSelected
-                      ? "checkmark.square.fill"
-                      : viewModel.selectedGroups.isEmpty ? "square" : "minus.square.fill")
+                Image(systemName: viewModel.allSelectionState.symbol)
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .accessibilityLabel(viewModel.allGroupsSelected ? "전체 선택 해제" : "모든 묶음 선택")
+            .accessibilityLabel("전체 구간: \(viewModel.allSelectionState.title)")
+            .accessibilityIdentifier("review-all-check")
             .disabled(viewModel.isSubmitting)
             .frame(width: 36)
-            columnHeader("시간", width: 110)
-            columnHeader("묶음 / 기록", width: 215)
+            columnHeader("시간 · 길이", width: 160)
+            columnHeader("활동 · 상세 정보", width: 330)
             columnHeader("AI 제안", width: 150)
-            columnHeader("현재 선택", width: 160)
-            columnHeader("작업", width: 225)
+            columnHeader("상태", width: 160)
+            columnHeader("확정", width: 150)
         }
         .padding(.vertical, 12)
         .background(Color(nsColor: .underPageBackgroundColor))
@@ -230,7 +232,9 @@ private struct LabelReviewGroupRow: View {
     let group: LabelReviewGroup
     let timeZone: TimeZone
     let labels: [LabelReviewLabel]
-    let isSelected: Bool
+    let checkState: LabelReviewCheckState
+    let isSubmitting: Bool
+    let unclassifiedCount: Int
     let isExpanded: Bool
     let selectionSummary: String
     let actionTitle: String
@@ -242,45 +246,51 @@ private struct LabelReviewGroupRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onToggleSelection) {
-                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                Image(systemName: checkState.symbol)
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .accessibilityLabel("\(timeRange) 묶음 선택")
+            .accessibilityLabel("\(timeRange) 묶음: \(checkState.title)")
+            .accessibilityIdentifier("review-group-check-\(group.id.uuidString)")
+            .disabled(isSubmitting)
             .frame(width: 36)
 
-            Text(timeRange)
-                .font(.subheadline.monospacedDigit())
-                .frame(width: 110, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(group.proposal.selection?.title(in: labels) ?? "라벨 선택 필요")
-                    .font(.subheadline.weight(.semibold))
-                Text("\(group.segments.count)개 기록 · \(group.durationMinutes)분")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Button(action: onToggleExpansion) {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(timeRange).font(.subheadline.monospacedDigit())
+                        Text("\(group.durationMinutes)분").font(.caption)
+                    }.frame(width: 160, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text("\(isExpanded ? "−" : "+") \(group.proposal.selection?.title(in: labels) ?? "라벨 선택 필요")")
+                                .font(.subheadline.weight(.semibold))
+                            if unclassifiedCount > 0 {
+                                Text("미분류 \(unclassifiedCount)건")
+                                    .font(.caption).foregroundStyle(.orange)
+                                    .accessibilityIdentifier("review-unclassified-\(group.id.uuidString)")
+                            }
+                        }
+                        Text("\(group.segments.count)개 구간").font(.caption).foregroundStyle(.secondary)
+                    }.frame(width: 330, alignment: .leading)
+                    LabelReviewProposalBadge(proposal: group.proposal, labels: labels)
+                        .frame(width: 150, alignment: .leading)
+                    Text(selectionSummary).font(.caption).frame(width: 160, alignment: .leading)
+                }
+                .contentShape(Rectangle())
             }
-            .frame(width: 215, alignment: .leading)
-
-            LabelReviewProposalBadge(proposal: group.proposal, labels: labels)
-                .frame(width: 150, alignment: .leading)
-
-            Text(selectionSummary)
-                .font(.caption)
-                .frame(width: 160, alignment: .leading)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("review-expand-\(group.id.uuidString)")
+            .disabled(isSubmitting)
 
             HStack(spacing: 7) {
                 Button(actionTitle, action: onConfirm)
                     .buttonStyle(.borderedProminent)
                     .disabled(!canConfirm)
-                Button(action: onToggleExpansion) {
-                    Label("펼치기", systemImage: isExpanded ? "chevron.up" : "chevron.down")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel("\(group.segments.count)개 기록 \(isExpanded ? "접기" : "펼치기")")
+
             }
             .controlSize(.small)
-            .frame(width: 225, alignment: .leading)
+            .frame(width: 150, alignment: .leading)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
@@ -296,6 +306,8 @@ private struct LabelReviewSegmentRow: View {
     let segment: LabelReviewSegment
     let timeZone: TimeZone
     let labels: [LabelReviewLabel]
+    let isSelected: Bool
+    let onToggleSelection: () -> Void
     let selectionTitle: String
     let isSubmitting: Bool
     let canConfirm: Bool
@@ -304,19 +316,35 @@ private struct LabelReviewSegmentRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Color.clear.frame(width: 36)
-            Text("\(segment.startedAt.reviewTime(in: timeZone))–\(segment.endedAt.reviewTime(in: timeZone))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(segment.title).font(.subheadline.weight(.medium))
-                Text("\(segment.appName) · \(segment.durationMinutes)분")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Button(action: onToggleSelection) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
             }
-            .frame(width: 215, alignment: .leading)
+            .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+            .accessibilityLabel("구간: \(isSelected ? "전체 선택" : "미선택")")
+            .accessibilityIdentifier("review-check-\(segment.id.uuidString)")
+            .disabled(isSubmitting).frame(width: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(segment.startedAt.reviewTime(in: timeZone))–\(segment.endedAt.reviewTime(in: timeZone))")
+                    .font(.caption.monospacedDigit())
+                Text("\(segment.durationSeconds)초").font(.caption)
+                    .accessibilityIdentifier("review-duration-\(segment.id.uuidString)")
+            }.frame(width: 160, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(kindTitle) · \(segment.appName)").font(.caption).foregroundStyle(.secondary)
+                Text("제목: \(segment.context.title ?? "수집 불가")")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityValue("제목: \(segment.context.title ?? "수집 불가")")
+                    .font(.subheadline).textSelection(.enabled)
+                    .accessibilityIdentifier("review-title-\(segment.id.uuidString)")
+                if case .web(_, let url) = segment.context {
+                    Text("URL: \(url ?? "수집 불가")").font(.caption).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityValue("URL: \(url ?? "수집 불가")")
+                        .accessibilityIdentifier("review-url-\(segment.id.uuidString)")
+                }
+            }
+            .padding(.leading, 20)
+            .frame(width: 330, alignment: .leading)
 
             LabelReviewProposalBadge(proposal: segment.proposal, labels: labels)
                 .frame(width: 150, alignment: .leading)
@@ -328,18 +356,27 @@ private struct LabelReviewSegmentRow: View {
                 onSelect: onSelect
             )
             .frame(width: 160, alignment: .leading)
+            .accessibilityIdentifier("review-choice-\(segment.id.uuidString)")
 
-            Button("이 기록 확정", action: onConfirm)
+            Button("이 구간 확정", action: onConfirm)
+                .accessibilityIdentifier("review-confirm-\(segment.id.uuidString)")
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(!canConfirm)
-                .frame(width: 225, alignment: .leading)
+                .frame(width: 150, alignment: .leading)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) { Divider() }
     }
+    private var kindTitle: String {
+        switch segment.context {
+        case .app: "앱"
+        case .web: "웹"
+        }
+    }
+
 }
 
 private struct LabelReviewChoiceMenu: View {
@@ -395,7 +432,7 @@ private extension Date {
     func reviewTime(in timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.timeZone = timeZone
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = "HH:mm:ss"
         return formatter.string(from: self)
     }
 }

@@ -46,6 +46,17 @@ public struct LabelCatalogEntry: Equatable, Sendable {
     }
 }
 
+public enum LabelReviewActivityContext: Equatable, Sendable {
+    case app(title: String?)
+    case web(title: String?, url: String?)
+
+    public var title: String? {
+        switch self {
+        case .app(let title), .web(let title, _): title
+        }
+    }
+}
+
 public struct PendingLabelTimelineSegment: Equatable, Sendable {
     public let id: UUID
     public let version: String
@@ -53,11 +64,12 @@ public struct PendingLabelTimelineSegment: Equatable, Sendable {
     public let startedAt: Date
     public let endedAt: Date
     public let appName: String
-    public let title: String
+    public let context: LabelReviewActivityContext
+    public var title: String { context.title ?? "수집 불가" }
 
     public init(
         id: UUID, version: String, sourceGroupVersion: String,
-        startedAt: Date, endedAt: Date, appName: String, title: String
+        startedAt: Date, endedAt: Date, appName: String, context: LabelReviewActivityContext
     ) {
         self.id = id
         self.version = version
@@ -65,7 +77,7 @@ public struct PendingLabelTimelineSegment: Equatable, Sendable {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.appName = appName
-        self.title = title
+        self.context = context
     }
 }
 

@@ -31,7 +31,8 @@ struct LabelReviewSegmentDTO: Equatable, Sendable {
     let startedAt: Date
     let endedAt: Date
     let appName: String
-    let title: String
+    let context: LabelReviewActivityContext
+    var title: String { context.title ?? "수집 불가" }
     let proposal: LabelReviewProposalDTO
     let sourceGroupVersion: String?
 
@@ -41,7 +42,7 @@ struct LabelReviewSegmentDTO: Equatable, Sendable {
         startedAt: Date,
         endedAt: Date,
         appName: String,
-        title: String,
+        context: LabelReviewActivityContext,
         proposal: LabelReviewProposalDTO,
         sourceGroupVersion: String? = nil
     ) {
@@ -50,7 +51,7 @@ struct LabelReviewSegmentDTO: Equatable, Sendable {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.appName = appName
-        self.title = title
+        self.context = context
         self.proposal = proposal
         self.sourceGroupVersion = sourceGroupVersion
     }
@@ -160,7 +161,7 @@ struct LiveLabelReviewFetcher: LabelReviewFetching {
                 startedAt: segment.startedAt,
                 endedAt: segment.endedAt,
                 appName: segment.appName,
-                title: segment.title,
+                context: segment.context,
                 proposal: proposal,
                 sourceGroupVersion: segment.sourceGroupVersion
             ))
@@ -206,11 +207,20 @@ struct MockLabelReviewFetcher: LabelReviewFetching {
                 startedAt: at(start),
                 endedAt: at(end),
                 appName: app,
-                title: title,
+                context: contexts[id] ?? .app(title: title),
                 proposal: proposal
             )
         }
 
+        let contexts: [Int: LabelReviewActivityContext] = [
+            1: .web(title: "Mosemo API 설계 문서", url: "https://example.com/design?q=api#overview"),
+            2: .app(title: "AuthCoordinator.swift"),
+            3: .web(title: nil, url: "https://example.com/swift"),
+            6: .web(title: "자료 검색", url: nil),
+            7: .web(title: nil, url: nil),
+            8: .app(title: nil),
+            9: .web(title: "Mosemo API 설계 문서", url: "https://example.com/design"),
+        ]
         return Self(response: LabelReviewResponseDTO(
             labels: [
                 LabelReviewLabelDTO(id: coding, displayName: "코딩"),
