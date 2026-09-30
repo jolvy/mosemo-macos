@@ -64,6 +64,75 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(model.presentations.first?.confirmedLabelText, "미분류")
     }
 
+    func testAdjacentShortSegmentsHaveSeparateHitAreasAndRemainSelectable() async {
+        let start = instant(9, 0)
+        let bounds = [(0.0, 5.0), (5.0, 55.0), (55.0, 70.0)]
+        let records: [TimelineSegment] = bounds.enumerated().map { index, bounds in
+            .activity(.init(id: uuid(UInt8(index + 1)),
+                            startedAt: start.addingTimeInterval(bounds.0),
+                            endedAt: start.addingTimeInterval(bounds.1),
+                            lastObservedAt: start.addingTimeInterval(bounds.1), context: .opaque))
+        }
+        let model = TimelineViewModel(fetcher: ImmediateFetcher(result: .success(.init(
+            date: date(), timeZoneID: zone.identifier, segments: records))), timeZone: zone, now: start)
+        await waitUntil { model.loadState == .loaded }
+        let segments = model.axis.segments
+        XCTAssertEqual(segments.map(\.lane), [0, 1, 2])
+        XCTAssertEqual(segments.map(\.hitHeight), [20, 20, 20])
+        XCTAssertEqual(segments.map(\.visualHeight), [6, 6, 6])
+        XCTAssertEqual(segments[0].top, 675)
+        XCTAssertEqual(segments[1].top, 675 + 5.0 / 48, accuracy: 0.0001)
+        XCTAssertEqual(segments[2].top, 675 + 55.0 / 48, accuracy: 0.0001)
+        for segment in segments {
+            model.selectSegment(segment.id)
+            XCTAssertEqual(model.selectedSegmentID, segment.id)
+            XCTAssertEqual(model.presentations.first { $0.id == model.selectedSegmentID }?.start, segment.entry.start)
+        }
+    }
+
+    func testDenseClusterAndFollowingLongSegmentUseFirstFreeLaneWithoutHidingEntries() {
+        let start = instant(9, 0)
+        var entries: [TimelinePresentation] = (0..<7).map { (index: Int) in
+            TimelinePresentation(id: uuid(UInt8(index + 1)), kind: .detail,
+                                 start: start.addingTimeInterval(Double(index * 30)),
+                                 end: start.addingTimeInterval(Double(index * 30 + 5)),
+                                 observedThrough: nil, title: "Short", context: "")
+        }
+        entries.append(TimelinePresentation(id: uuid(8), kind: .detail,
+            start: start.addingTimeInterval(210), end: start.addingTimeInterval(3600),
+            observedThrough: nil, title: "Long", context: ""))
+        entries.append(TimelinePresentation(id: uuid(9), kind: .detail,
+            start: start.addingTimeInterval(1200), end: start.addingTimeInterval(1205),
+            observedThrough: nil, title: "Later", context: ""))
+        let axis = TimelineAxis(date: date(), timeZone: zone, entries: Array(entries.reversed()))
+        let chronological = axis.segments.sorted { $0.top < $1.top }
+        XCTAssertEqual(chronological.map(\.lane), [0, 1, 2, 3, 4, 5, 6, 7, 0])
+        XCTAssertEqual(axis.laneCount, 8)
+        XCTAssertEqual(Set(axis.segments.map(\.id)), Set(entries.map(\.id)))
+        for (index, first) in axis.segments.enumerated() {
+            for second in axis.segments.dropFirst(index + 1) where first.lane == second.lane {
+                XCTAssertTrue(first.top + first.hitHeight <= second.top || second.top + second.hitHeight <= first.top)
+            }
+        }
+    }
+
+    func testRealOverlapsAndMidnightShortMarkersRetainIndependentLanes() {
+        let start = instant(23, 59)
+        let entries = [
+            TimelinePresentation(id: uuid(1), kind: .gap, start: start,
+                end: instant(24, 0), observedThrough: nil, title: "Gap", context: ""),
+            TimelinePresentation(id: uuid(2), kind: .opaque, start: start.addingTimeInterval(30),
+                end: start.addingTimeInterval(35), observedThrough: nil, title: "Short", context: ""),
+            TimelinePresentation(id: uuid(3), kind: .detail, start: start.addingTimeInterval(59),
+                end: nil, observedThrough: nil, title: "Open", context: "")
+        ]
+        let axis = TimelineAxis(date: date(), timeZone: zone, entries: entries)
+        XCTAssertEqual(axis.segments.map(\.lane), [0, 1, 2])
+        XCTAssertEqual(axis.segments.map(\.hitHeight), [20, 20, 20])
+        XCTAssertEqual(axis.segments.last!.top, 1800 - 1.0 / 48, accuracy: 0.0001)
+        XCTAssertNil(axis.segments.last!.entry.end)
+    }
+
     func testEmptyAxisUsesAccountZoneAndDSTDayLength() async {
         let ny = TimeZone(identifier: "America/New_York")!
         for (date, height, count) in [

@@ -185,7 +185,8 @@ private struct TimelineTimeAxis: View {
         HStack(alignment: .top, spacing: 20) {
             GeometryReader { viewport in
                 ScrollViewReader { proxy in
-                    ScrollView {
+                    ScrollView([.vertical, .horizontal]) {
+                        let contentWidth = max(viewport.size.width, 54 + Double(axis.laneCount) * 186)
                         ZStack(alignment: .topLeading) {
                             VStack(spacing: 0) {
                                 ForEach(0...Int(axis.height / TimelineAxis.pointsPerMinute), id: \.self) { minute in
@@ -211,38 +212,44 @@ private struct TimelineTimeAxis: View {
                                         }
                                         ForEach(axis.segments) { segment in
                                             let entry = segment.entry
-                                            let top = segment.top
-                                            if entry.isZeroLength || entry.displayEnd == nil {
-                                                Button { onSelect(entry.id) } label: {
-                                                    Label(entry.axisTitle + (entry.isZeroLength ? " · 0초 관찰" : " · 종료 시각 없음"), systemImage: entry.kind.symbol)
-                                                        .font(.caption2).lineLimit(1).padding(.horizontal, 6).padding(.vertical, 3)
-                                                        .background(color(for: entry.kind).opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                                                }
-                                                .buttonStyle(.plain).offset(x: max(0, geometry.size.width - 205), y: max(0, min(height - 24, top - 12))).zIndex(2)
-                                            } else {
-                                                let blockHeight = segment.height
-                                                Button { onSelect(entry.id) } label: {
-                                                    VStack(alignment: .leading, spacing: 1) {
-                                                        Text("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle)").font(.caption.bold()).lineLimit(1)
-                                                        if blockHeight > 42 && !entry.context.isEmpty { Text(entry.context).font(.caption2).lineLimit(1) }
+                                            let laneWidth = geometry.size.width / Double(axis.laneCount)
+                                            Button { onSelect(entry.id) } label: {
+                                                Group {
+                                                    if segment.isShort {
+                                                        RoundedRectangle(cornerRadius: 3)
+                                                            .fill(color(for: entry.kind))
+                                                            .frame(width: 29, height: segment.visualHeight)
+                                                    } else {
+                                                        VStack(alignment: .leading, spacing: 1) {
+                                                            Text("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle)")
+                                                                .font(.caption.bold()).lineLimit(1)
+                                                            if segment.height > 42 && !entry.context.isEmpty {
+                                                                Text(entry.context).font(.caption2).lineLimit(1)
+                                                            }
+                                                        }
+                                                        .padding(.horizontal, 7).padding(.vertical, 3)
+                                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                                        .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
                                                     }
-                                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                                    .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
-                                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(color(for: entry.kind).opacity(0.35)))
                                                 }
-                                                .buttonStyle(.plain)
-                                                .accessibilityLabel("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label)")
-                                                .frame(width: geometry.size.width - 12, height: blockHeight)
-                                                .offset(x: 6, y: top)
+                                                .frame(width: segment.isShort ? 29 : laneWidth - 12,
+                                                       height: segment.hitHeight, alignment: .topLeading)
+                                                .contentShape(Rectangle())
+                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(
+                                                    color(for: entry.kind).opacity(model.selectedSegmentID == entry.id ? 1 : (segment.isShort ? 0 : 0.35))))
                                             }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label) · \(entry.durationText)")
+                                            .accessibilityIdentifier("timeline-segment-\(entry.id)")
+                                            .help("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label) · \(entry.durationText)")
+                                            .offset(x: 6 + Double(segment.lane) * laneWidth, y: segment.top)
                                         }
                                     }
                                 }
                                 .frame(height: height)
                             }
                         }
-                        .frame(height: height + 24)
+                        .frame(width: contentWidth, height: height + 24)
                         .background(TimelineScrollObserver { offset in
                             if let target = restorationOffset, offset > 0 || target == 0 {
                                 didRestore = true

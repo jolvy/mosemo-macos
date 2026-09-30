@@ -99,6 +99,10 @@ struct TimelineAxis {
         var id: UUID { entry.id }
         let top: Double
         let height: Double
+        var lane = 0
+        var isShort: Bool { height < 20 }
+        var visualHeight: Double { isShort ? 6 : height }
+        var hitHeight: Double { max(20, height) }
     }
 
     let start: Date
@@ -127,7 +131,7 @@ struct TimelineAxis {
         ticks = result
         let lower = start
         let upper = end
-        segments = entries.compactMap { entry in
+        var placed: [Segment] = entries.compactMap { entry in
             let marker = entry.isZeroLength || entry.end == nil
             guard marker ? (entry.start >= lower && entry.start < upper)
                 : (entry.start < upper && entry.end! > lower) else { return nil }
@@ -136,7 +140,23 @@ struct TimelineAxis {
             return Segment(entry: entry, top: top,
                            height: marker ? 0 : min(max(5, bottom - top), upper.timeIntervalSince(lower) / 60 * Self.pointsPerMinute - top))
         }
+        // Assign in time order, retaining the presentation order for callers.
+        var occupiedUntil: [Double] = []
+        let ordered = placed.indices.sorted {
+            if placed[$0].top == placed[$1].top { return $0 < $1 }
+            return placed[$0].top < placed[$1].top
+        }
+        for index in ordered {
+            let segment = placed[index]
+            let lane = occupiedUntil.firstIndex { $0 <= segment.top } ?? occupiedUntil.count
+            if lane == occupiedUntil.count { occupiedUntil.append(0) }
+            occupiedUntil[lane] = segment.top + max(segment.height, segment.hitHeight)
+            placed[index].lane = lane
+        }
+        segments = placed
     }
+
+    var laneCount: Int { (segments.map(\.lane).max() ?? 0) + 1 }
 
     func position(of date: Date) -> Double {
         max(0, min(height, date.timeIntervalSince(start) / 60 * Self.pointsPerMinute))
