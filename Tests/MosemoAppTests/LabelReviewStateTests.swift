@@ -85,6 +85,124 @@ final class LabelReviewStateTests: XCTestCase {
 
 @MainActor
 final class LabelReviewViewModelTests: XCTestCase {
+    func testAutomaticRefreshWaitsTwoSecondsAndStopsWhenProposalsComplete() async {
+        let first = MockLabelReviewFetcher.demo.response
+        let finished = LabelReviewResponseDTO(labels: first.labels, segments: first.segments.map {
+            LabelReviewSegmentDTO(
+                id: $0.id, version: $0.version, startedAt: $0.startedAt, endedAt: $0.endedAt,
+                appName: $0.appName, context: $0.context,
+                proposal: .ready(.unclassified), sourceGroupVersion: $0.sourceGroupVersion
+            )
+        })
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [first, finished], confirmedByID: [:])
+        var delays: [UInt64] = []
+        let model = LabelReviewViewModel(
+            fetcher: fetcher, writer: RecordingLabelConfirmationWriter(),
+            pollingSleep: { delays.append($0) }
+        )
+        await model.load()
+        await model.pollProposals()
+        XCTAssertEqual(delays, [2_000_000_000])
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertTrue(model.groups.flatMap(\.segments).allSatisfy { $0.proposal == .ready(.unclassified) })
+        XCTAssertEqual(model.loadState, .loaded)
+    }
+
+    func testAutomaticRefreshDoesNotWaitOrFetchForReadyOrFailedProposals() async {
+        let response = MockLabelReviewFetcher.demo.response
+        let terminal = LabelReviewResponseDTO(labels: response.labels, segments: response.segments.filter {
+            switch $0.proposal {
+            case .ready, .failed: true
+            case .waiting, .processing: false
+            }
+        })
+        let model = LabelReviewViewModel(
+            fetcher: SnapshotSequenceLabelReviewFetcher(responses: [terminal], confirmedByID: [:]),
+            writer: RecordingLabelConfirmationWriter(),
+            pollingSleep: { _ in XCTFail("Completed proposals must not schedule polling") }
+        )
+        await model.load()
+        await model.pollProposals()
+        XCTAssertEqual(model.segmentCount, 8)
+    }
+
+    func testCancelledAutomaticFetchCannotReplaceVisibleReview() async {
+        let fetcher = SuspendedPollingFetcher()
+        let model = LabelReviewViewModel(
+            fetcher: fetcher, writer: RecordingLabelConfirmationWriter(), pollingSleep: { _ in }
+        )
+        await model.load()
+        let polling = Task { await model.pollProposals() }
+        await fetcher.waitForPollingRequest()
+        polling.cancel()
+        await fetcher.finishPolling()
+        await polling.value
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertEqual(model.loadState, .loaded)
+    }
+
+    func testManualRefreshSupersedesOlderAutomaticResponseAndKeepsDrafts() async {
+        let fetcher = SuspendedPollingFetcher()
+        let model = LabelReviewViewModel(
+            fetcher: fetcher, writer: RecordingLabelConfirmationWriter(), pollingSleep: { _ in }
+        )
+        await model.load()
+        let segment = model.groups[0].first
+        model.toggleSelection(for: segment)
+        model.setSelection(.unclassified, for: segment)
+        let polling = Task { await model.pollProposals() }
+        await fetcher.waitForPollingRequest()
+        await model.load()
+        await fetcher.finishPolling()
+        await polling.value
+        XCTAssertEqual(model.segmentCount, 8)
+        XCTAssertEqual(model.selectedSegmentIDs, [segment.id])
+        XCTAssertEqual(model.selection(for: model.groups[0].first), .unclassified)
+    }
+
+    func testConfirmationSupersedesInFlightAutomaticResponse() async {
+        let fetcher = SuspendedPollingFetcher()
+        let model = LabelReviewViewModel(
+            fetcher: fetcher, writer: RecordingLabelConfirmationWriter(), pollingSleep: { _ in }
+        )
+        await model.load()
+        let polling = Task { await model.pollProposals() }
+        await fetcher.waitForPollingRequest()
+        await model.confirm(model.groups[0])
+        await fetcher.finishPolling()
+        await polling.value
+        XCTAssertEqual(model.segmentCount, 5)
+        XCTAssertFalse(model.isSubmitting)
+    }
+
+    func testAutomaticRefreshRetriesFailureWithoutHidingReviewOrClearingDraft() async {
+        let response = MockLabelReviewFetcher.demo.response
+        let terminal = LabelReviewResponseDTO(labels: response.labels, segments: response.segments.filter {
+            switch $0.proposal {
+            case .ready, .failed: true
+            case .waiting, .processing: false
+            }
+        })
+        let fetcher = SequenceLabelReviewFetcher(results: [
+            .success(LabelReviewSnapshot(response: response)), .failure(.offline),
+            .success(LabelReviewSnapshot(response: terminal)),
+        ])
+        var waits = 0
+        let model = LabelReviewViewModel(
+            fetcher: fetcher, writer: RecordingLabelConfirmationWriter(),
+            pollingSleep: { _ in waits += 1 }
+        )
+        await model.load()
+        let segment = model.groups[0].first
+        model.toggleSelection(for: segment)
+        model.setSelection(.unclassified, for: segment)
+        await model.pollProposals()
+        XCTAssertEqual(waits, 2)
+        XCTAssertEqual(model.loadState, .loaded)
+        XCTAssertEqual(model.selectedSegmentIDs, [segment.id])
+        XCTAssertEqual(model.selection(for: model.groups[0].first), .unclassified)
+    }
+
     func testIndividualSelectionCountsCollapsedSegmentsAndSubmitsOnlyCheckedDraft() async {
         let writer = RecordingLabelConfirmationWriter()
         let model = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo, writer: writer)
@@ -744,5 +862,43 @@ private actor DisappearingLabelReviewReader: LabelReviewReading {
 
     func labelState(segmentID: UUID) async throws -> RemoteSegmentLabelState {
         throw MosemoAPIError.unexpectedResponse(statusCode: 404)
+    }
+}
+
+// The second response deliberately ignores cancellation to simulate an already received response.
+private actor SuspendedPollingFetcher: LabelReviewFetching {
+    private var count = 0
+    private var continuation: CheckedContinuation<LabelReviewSnapshot, Never>?
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func confirmedSelection(segmentID: UUID) async throws -> LabelReviewSelection? { nil }
+
+    func fetchLabelReview(day: TimelineDate) async throws -> LabelReviewSnapshot {
+        count += 1
+        let response = MockLabelReviewFetcher.demo.response
+        if count == 2 {
+            return await withCheckedContinuation {
+                continuation = $0
+                waiter?.resume()
+                waiter = nil
+            }
+        }
+        let segments = count == 1 ? response.segments : response.segments.filter {
+            switch $0.proposal {
+            case .ready, .failed: true
+            case .waiting, .processing: false
+            }
+        }
+        return LabelReviewSnapshot(response: LabelReviewResponseDTO(labels: response.labels, segments: segments))
+    }
+
+    func waitForPollingRequest() async {
+        if continuation != nil { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func finishPolling() {
+        continuation?.resume(returning: LabelReviewSnapshot(response: LabelReviewResponseDTO(labels: [], segments: [])))
+        continuation = nil
     }
 }
