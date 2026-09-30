@@ -47,6 +47,7 @@ struct TimelinePresentation: Identifiable {
     let title: String
     let context: String
     var confirmedLabel: TimelineConfirmedLabel? = nil
+    var details: TimelineActivity.Details? = nil
 
     var confirmedLabelText: String? { confirmedLabel?.displayName }
     var labelStateText: String? {
@@ -71,6 +72,37 @@ struct TimelinePresentation: Identifiable {
         if seconds == 0 { return "0초" }
         if seconds < 60 { return "\(seconds)초" }
         return "\(seconds / 60)분"
+    }
+
+    var preciseDurationText: String {
+        guard let end else { return "종료 시각 미상" }
+        let seconds = max(0, Int(end.timeIntervalSince(start)))
+        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+    }
+
+    func detailTimeText(_ date: Date, timeZone: TimeZone, includesDate: Bool = false) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = includesDate ? "yyyy-MM-dd HH:mm:ss" : "HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    func detailRangeText(timeZone: TimeZone) -> String {
+        let startText = detailTimeText(start, timeZone: timeZone, includesDate: true)
+        guard let end else { return startText + " – 종료 시각 미상" }
+        let differentDay = TimelineDate(start, timeZone: timeZone) != TimelineDate(end, timeZone: timeZone)
+        return startText + " – " + detailTimeText(end, timeZone: timeZone, includesDate: differentDay)
+    }
+
+    var detailTitle: String {
+        let value = details?.isWeb == true ? details?.tabTitle : details?.windowTitle
+        return value.flatMap { $0.isEmpty ? nil : $0 } ?? "수집 불가"
+    }
+
+    var detailURL: String? {
+        guard details?.isWeb == true else { return nil }
+        return details?.webURL.flatMap { $0.isEmpty ? nil : $0 } ?? "수집 불가"
     }
 
     var isOpen: Bool { end == nil }
@@ -236,7 +268,7 @@ final class TimelineViewModel: ObservableObject {
                     return TimelinePresentation(id: activity.id, kind: .detail, start: activity.startedAt,
                                                 end: activity.endedAt, observedThrough: activity.lastObservedAt,
                                                 title: title, context: values.filter { $0 != title }.joined(separator: " · "),
-                                                confirmedLabel: activity.confirmedLabel)
+                                                confirmedLabel: activity.confirmedLabel, details: detail)
                 }
             case .captureGap(let gap):
                 return TimelinePresentation(id: gap.id, kind: .gap, start: gap.startedAt, end: gap.endedAt,

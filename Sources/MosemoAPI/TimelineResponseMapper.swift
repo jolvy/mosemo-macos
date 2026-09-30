@@ -74,7 +74,9 @@ enum TimelineResponseMapper {
         }
         var tabTitle: String?
         var webURL: String?
+        var isWeb = false
         if case .browser(let web) = detail.web {
+            isWeb = true
             if case .captured(let title) = web.tabTitle { tabTitle = title.value }
             if case .captured(let url) = web.url { webURL = url.value }
         }
@@ -83,7 +85,8 @@ enum TimelineResponseMapper {
             bundleID: bundleID,
             windowTitle: windowTitle,
             tabTitle: tabTitle,
-            webURL: webURL
+            webURL: webURL,
+            isWeb: isWeb
         )
     }
 }

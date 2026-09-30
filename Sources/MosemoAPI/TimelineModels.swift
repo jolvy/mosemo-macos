@@ -106,19 +106,22 @@ public struct TimelineActivity: Equatable, Sendable {
         public let windowTitle: String?
         public let tabTitle: String?
         public let webURL: String?
+        public let isWeb: Bool
 
         public init(
             appName: String? = nil,
             bundleID: String? = nil,
             windowTitle: String? = nil,
             tabTitle: String? = nil,
-            webURL: String? = nil
+            webURL: String? = nil,
+            isWeb: Bool = false
         ) {
             self.appName = appName
             self.bundleID = bundleID
             self.windowTitle = windowTitle
             self.tabTitle = tabTitle
             self.webURL = webURL
+            self.isWeb = isWeb || tabTitle != nil || webURL != nil
         }
     }
 
