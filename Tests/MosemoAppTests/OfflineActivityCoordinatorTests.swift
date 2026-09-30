@@ -331,7 +331,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let device = UUID()
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: QueueTestKeyStore())
-        let coordinator = OfflineActivityCoordinator(queue: queue, client: QueueTestClient(),
+        let coordinator = OfflineActivityCoordinator(queue: queue, client: QueueTestClient(firstError: .validationFailed),
             deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
         await coordinator.activate(account)
 
