@@ -77,6 +77,7 @@ final class CollectorViewModel: ObservableObject {
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
     private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-system-events")
     private lazy var anchorStore = ReturnAnchorStore(chrome: chrome)
+    let acceptedActivityUploads = PassthroughSubject<UUID, Never>()
     private var synchronization: OfflineActivityCoordinator?
 
     private var eventBuffer = RingBuffer<DiagnosticActivityEvent>(capacity: 600)
@@ -175,6 +176,8 @@ final class CollectorViewModel: ObservableObject {
             deviceStateStore: deviceStateStore,
             onStorageFailure: { [weak self] in
                 self?.handleActivityStorageFailure()
+            }, onActivityAccepted: { [weak self] accountID in
+                self?.acceptedActivityUploads.send(accountID)
             }) { [weak self] count, status in
                 self?.pendingActivityCount = count
                 if self?.activityStorageUnavailable == false {

@@ -85,6 +85,78 @@ final class LabelReviewStateTests: XCTestCase {
 
 @MainActor
 final class LabelReviewViewModelTests: XCTestCase {
+    func testUploadDuringSubmissionRefreshesAfterConfirmationFinishes() async {
+        let fetcher = RecordingLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
+        let writer = SuspendedLabelConfirmationWriter()
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: writer)
+        await model.load()
+        let submission = Task { await model.confirm(model.groups[0].segments[0]) }
+        await waitUntil { model.isSubmitting }
+        while !(await writer.isPending()) { await Task.yield() }
+        await model.activityUploaded()
+        let before = await fetcher.dates()
+        XCTAssertEqual(before.count, 1)
+        await writer.succeed()
+        await submission.value
+        for _ in 0..<100 {
+            if await fetcher.dates().count == 3 { break }
+            await Task.yield()
+        }
+        let after = await fetcher.dates()
+        XCTAssertEqual(after.count, 3)
+        XCTAssertFalse(model.isSubmitting)
+        XCTAssertEqual(model.segmentCount, 9)
+    }
+
+    func testProposalPollingDoesNotRaceWithAnUploadRefresh() async {
+        let fetcher = SuspendedPollingFetcher()
+        var waits = 0
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter(),
+            pollingSleep: { _ in
+                waits += 1
+                if waits > 1 { throw CancellationError() }
+            })
+        await model.load()
+        let refresh = Task { await model.activityUploaded() }
+        await fetcher.waitForPollingRequest()
+        await model.pollProposals()
+        let requests = await fetcher.requestCount()
+        XCTAssertEqual(requests, 2)
+        await fetcher.finishPolling()
+        await refresh.value
+        XCTAssertTrue(model.groups.isEmpty)
+    }
+
+    func testUploadsDuringRefreshAreCombinedIntoAFollowupQuery() async {
+        let fetcher = SuspendedPollingFetcher()
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let refresh = Task { await model.activityUploaded() }
+        await fetcher.waitForPollingRequest()
+        await model.activityUploaded()
+        await model.activityUploaded()
+        await fetcher.finishPolling()
+        await refresh.value
+        XCTAssertFalse(model.groups.isEmpty)
+        XCTAssertFalse(model.hasOutstandingProposals)
+    }
+
+    func testUploadRefreshDiscoversNewSegmentsAndPreservesDraftSelection() async {
+        let response = MockLabelReviewFetcher.demo.response
+        let initial = LabelReviewResponseDTO(labels: response.labels, segments: [response.segments[0]])
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [initial, response], confirmedByID: [:])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let segment = model.groups[0].segments[0]
+        model.toggleSelection(for: segment)
+        model.setSelection(.unclassified, for: segment)
+        await model.activityUploaded()
+        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertEqual(model.selectedSegmentIDs, [segment.id])
+        XCTAssertEqual(model.selection(for: segment), .unclassified)
+        XCTAssertEqual(model.loadState, .loaded)
+    }
+
     func testAutomaticRefreshWaitsTwoSecondsAndStopsWhenProposalsComplete() async {
         let first = MockLabelReviewFetcher.demo.response
         let finished = LabelReviewResponseDTO(labels: first.labels, segments: first.segments.map {
@@ -891,6 +963,8 @@ private actor SuspendedPollingFetcher: LabelReviewFetching {
         }
         return LabelReviewSnapshot(response: LabelReviewResponseDTO(labels: response.labels, segments: segments))
     }
+
+    func requestCount() -> Int { count }
 
     func waitForPollingRequest() async {
         if continuation != nil { return }

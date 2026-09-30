@@ -6,6 +6,36 @@ import XCTest
 
 @MainActor
 final class OfflineActivityCoordinatorTests: XCTestCase {
+    func testOnlyMatchingAcceptedUploadPublishesAccountAfterRetry() async throws {
+        for mismatch in [false, true] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let account = Account(id: UUID(), provider: .kakao, createdAt: .now,
+                                  lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
+            let device = UUID()
+            let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
+                                                   keyStore: QueueTestKeyStore())
+            _ = try await queue.enqueue(accountID: account.id, deviceID: device, observedAt: .now,
+                                        timezoneID: "Asia/Seoul", utcOffsetMinutes: 540) { metadata in
+                .observation(ActivityObservation(metadata: metadata, context: .opaque))
+            }
+            var acceptedAccounts: [UUID] = []
+            var statuses: [String] = []
+            let coordinator = OfflineActivityCoordinator(queue: queue,
+                client: QueueTestClient(firstError: .networkUnavailable, mismatchedAcknowledgement: mismatch),
+                deviceStateStore: QueueTestDeviceStore(deviceID: device), sleepBeforeRetry: { _ in },
+                onActivityAccepted: { acceptedAccounts.append($0) },
+                onStatus: { _, status in statuses.append(status) })
+            await coordinator.activate(account)
+            XCTAssertTrue(acceptedAccounts.isEmpty)
+            for _ in 0..<100 {
+                if statuses.contains(mismatch ? "수락 확인 필요" : "동기화 완료") { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(acceptedAccounts, mismatch ? [] : [account.id])
+        }
+    }
+
     func testCoordinatorPersistsRapidInterleavedInputsInCallOrderWhileFirstWriteIsDelayed() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -47,6 +47,7 @@ final class OfflineActivityCoordinator {
     private var storageFailureLatched = false
     private var retryAttempt = 0
     private let onStorageFailure: @MainActor () -> Void
+    private let onActivityAccepted: @MainActor (UUID) -> Void
     private let onStatus: @MainActor (Int, String) -> Void
     private let sleepBeforeRetry: @Sendable (TimeInterval) async -> Void
     private let retryJitter: @Sendable () -> Double
@@ -58,6 +59,7 @@ final class OfflineActivityCoordinator {
          },
          retryJitter: @escaping @Sendable () -> Double = { Double.random(in: 0.5...1.0) },
          onStorageFailure: @escaping @MainActor () -> Void = {},
+         onActivityAccepted: @escaping @MainActor (UUID) -> Void = { _ in },
          onStatus: @escaping @MainActor (Int, String) -> Void) {
         self.queue = queue
         self.client = client
@@ -65,6 +67,7 @@ final class OfflineActivityCoordinator {
         self.sleepBeforeRetry = sleepBeforeRetry
         self.retryJitter = retryJitter
         self.onStorageFailure = onStorageFailure
+        self.onActivityAccepted = onActivityAccepted
         self.onStatus = onStatus
     }
 
@@ -263,6 +266,7 @@ final class OfflineActivityCoordinator {
                                                  expectedGeneration: expectedGeneration)
                         return
                     }
+                    onActivityAccepted(account.id)
                     try await queue.acknowledge(accountID: account.id, deviceID: deviceID,
                                                 sequence: item.sequence, eventID: item.eventID)
                     guard generation == expectedGeneration else { return }

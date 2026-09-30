@@ -223,6 +223,8 @@ final class TimelineViewModel: ObservableObject {
     private let fetcher: any TimelineFetching
     private var accountID: UUID
     private var requestID = UUID()
+    private var uploadRefreshPending = false
+    private var isRefreshingUploads = false
     private var requestTask: Task<Void, Never>?
     private var accountTimeZone: TimeZone
     private let authenticationFailed: @MainActor () -> Void
@@ -295,6 +297,18 @@ final class TimelineViewModel: ObservableObject {
     }
 
     func refresh() { load(selectedDate, refreshing: true) }
+
+    func activityUploaded() async {
+        uploadRefreshPending = true
+        guard !isRefreshingUploads else { return }
+        isRefreshingUploads = true
+        defer { isRefreshingUploads = false }
+        while uploadRefreshPending {
+            uploadRefreshPending = false
+            refresh()
+            await requestTask?.value
+        }
+    }
 
     func switchAccount(to accountID: UUID, timeZone: TimeZone? = nil) {
         guard self.accountID != accountID || (timeZone != nil && accountTimeZone != timeZone) else { return }
