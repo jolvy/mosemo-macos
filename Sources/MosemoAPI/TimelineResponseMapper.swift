@@ -1,41 +1,57 @@
 import Foundation
 
 enum TimelineResponseMapper {
-    typealias ResponseSegment = Operations.ActivitiesGetTimeline.Output.Ok.Body.JsonPayloadPayload
+    typealias ResponseSegment = Operations.ActivitiesGetLabelTimeline.Output.Ok.Body.JsonPayloadPayload
 
     static func segments(from response: [ResponseSegment]) throws -> [TimelineSegment] {
-        try response.map { segment in
-            switch segment {
-            case .activity(let activity):
-                guard let id = UUID(uuidString: activity.segmentId) else {
-                    throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+        try response.flatMap { item -> [TimelineSegment] in
+            switch item {
+            case .activityGroup(let group):
+                let confirmedLabel: TimelineConfirmedLabel?
+                if group.state == .confirmed {
+                    switch group.selection {
+                    case .label(let label):
+                        confirmedLabel = .label(id: try identifier(label.labelId), displayName: label.displayName)
+                    case .unclassified:
+                        confirmedLabel = .unclassified
+                    case nil:
+                        throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+                    }
+                } else {
+                    confirmedLabel = nil
                 }
-                let context: TimelineActivity.Context
-                switch activity.context {
-                case .opaque:
-                    context = .opaque
-                case .detailed(let detail):
-                    context = .detailed(details(from: detail))
+                return try group.segments.map { segment in
+                    .activity(.init(
+                        id: try identifier(segment.segmentId), startedAt: segment.startedAt,
+                        endedAt: segment.endedAt, lastObservedAt: segment.lastObservedAt,
+                        context: .detailed(details(from: segment.context)), confirmedLabel: confirmedLabel
+                    ))
                 }
-                return .activity(.init(
-                    id: id,
-                    startedAt: activity.startedAt,
-                    endedAt: activity.endedAt,
-                    lastObservedAt: activity.lastObservedAt,
-                    context: context
-                ))
+            case .inProgressActivity(let activity):
+                return [.activity(.init(
+                    id: try identifier(activity.segmentId), startedAt: activity.startedAt,
+                    endedAt: nil, lastObservedAt: activity.lastObservedAt,
+                    context: .detailed(details(from: activity.context))
+                ))]
+            case .opaqueActivity(let activity):
+                return [.activity(.init(
+                    id: try identifier(activity.segmentId), startedAt: activity.startedAt,
+                    endedAt: activity.endedAt, lastObservedAt: activity.lastObservedAt, context: .opaque
+                ))]
             case .captureGap(let gap):
-                guard let id = UUID(uuidString: gap.segmentId) else {
-                    throw MosemoAPIError.unexpectedResponse(statusCode: 200)
-                }
-                return .captureGap(.init(
-                    id: id,
-                    startedAt: gap.startedAt,
-                    endedAt: gap.endedAt,
-                    reason: gap.reason
-                ))
+                return [.captureGap(.init(
+                    id: try identifier(gap.segmentId), startedAt: gap.startedAt,
+                    endedAt: gap.endedAt, reason: gap.reason
+                ))]
             }
         }
+    }
+
+    private static func identifier(_ value: String) throws -> UUID {
+        guard let id = UUID(uuidString: value) else {
+            throw MosemoAPIError.unexpectedResponse(statusCode: 200)
+        }
+        return id
     }
 
     private static func details(
