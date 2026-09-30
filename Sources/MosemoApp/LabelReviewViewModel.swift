@@ -74,6 +74,7 @@ final class LabelReviewViewModel: ObservableObject {
     private let fetcher: any LabelReviewFetching
     private let writer: any LabelConfirmationWriting
     let timeZone: TimeZone
+    private let pollingSleep: @MainActor (UInt64) async throws -> Void
     private var requestID = UUID()
     private var retryDecisions: [LabelConfirmationDecision]?
     private var retryAvailableAt: Date?
@@ -83,11 +84,13 @@ final class LabelReviewViewModel: ObservableObject {
         fetcher: any LabelReviewFetching,
         writer: any LabelConfirmationWriting,
         timeZone: TimeZone = .current,
-        now: Date = .now
+        now: Date = .now,
+        pollingSleep: @escaping @MainActor (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     ) {
         self.fetcher = fetcher
         self.writer = writer
         self.timeZone = timeZone
+        self.pollingSleep = pollingSleep
         selectedDate = TimelineDate(now, timeZone: timeZone)
     }
 
@@ -120,6 +123,35 @@ final class LabelReviewViewModel: ObservableObject {
             guard let selection = selection(for: segment) else { return true }
             return review?.canSelect(selection) != true
         }.count
+    }
+
+    var hasOutstandingProposals: Bool {
+        review?.pendingSegments.contains {
+            switch $0.proposal {
+            case .waiting, .processing: true
+            case .ready, .failed: false
+            }
+        } ?? false
+    }
+
+    // The view owns this task, so leaving the screen cancels both the wait and fetch.
+    func pollProposals() async {
+        let day = selectedDate
+        while !Task.isCancelled, selectedDate == day, hasOutstandingProposals {
+            do { try await pollingSleep(2_000_000_000) }
+            catch { return }
+            guard !Task.isCancelled, selectedDate == day, hasOutstandingProposals else { return }
+            guard loadState == .loaded, !isSubmitting, retryConflictReview == nil else { continue }
+            let id = requestID
+            do {
+                let snapshot = try await fetcher.fetchLabelReview(day: day)
+                guard !Task.isCancelled, requestID == id else { continue }
+                review = review?.replacing(with: snapshot)
+                reconcileInteractionState()
+            } catch {
+                // Keep the visible result and retry on the next interval.
+            }
+        }
     }
 
     func load() async {
@@ -301,6 +333,7 @@ final class LabelReviewViewModel: ObservableObject {
     func retrySubmission() async {
         guard let retryDecisions, let review, canRetrySubmission, !isSubmitting else { return }
         isSubmitting = true
+        requestID = UUID()
         let id = requestID
         if let conflictReview = retryConflictReview {
             canRetrySubmission = false
@@ -322,6 +355,7 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     private func submit(_ decisions: [LabelConfirmationDecision], to originalReview: LabelReviewState) async {
+        requestID = UUID()
         let id = requestID
         isSubmitting = true
         submissionMessage = nil

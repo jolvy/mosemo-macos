@@ -98,6 +98,9 @@ struct LabelReviewView: View {
         .task {
             if viewModel.review == nil { await viewModel.load() }
         }
+        .task(id: "\(viewModel.selectedDate):\(viewModel.hasOutstandingProposals)") {
+            await viewModel.pollProposals()
+        }
     }
 }
 
