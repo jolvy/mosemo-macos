@@ -39,6 +39,18 @@ struct DiagnosticActivityEvent: Equatable {
 }
 
 @MainActor
+struct CollectorObservationEnvironment {
+    var now: () -> Date = { Date() }
+    var uptime: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    var frontmostBundleID: () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    var readChrome: (() async -> Result<ChromeReadResult, ChromeReadFailure>)? = nil
+    var readFirefox: (() async -> Result<FirefoxObservation, SystemEventsReadFailure>)? = nil
+    var captureReturnAnchor: (() -> ReturnAnchorDescriptor?)? = nil
+    var initialTrackingEnabled: Bool? = nil
+    var persistTrackingPreference = true
+}
+
+@MainActor
 final class CollectorViewModel: ObservableObject {
     @Published private(set) var isActivityTrackingEnabled: Bool
     @Published private(set) var events: [DiagnosticActivityEvent] = []
@@ -59,7 +71,8 @@ final class CollectorViewModel: ObservableObject {
 
     private let chrome = ChromeAppleEventClient()
     private let systemEvents = SystemEventsClient()
-    private let workspaceObserver = WorkspaceObserver()
+    private let workspaceObserver: WorkspaceObserver
+    private let environment: CollectorObservationEnvironment
     private let performanceSampler = PerformanceSampler()
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
     private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-system-events")
@@ -82,16 +95,27 @@ final class CollectorViewModel: ObservableObject {
     private var cpuSampleCount = 0
     private var automaticPauseReasons: Set<String> = []
     private var activityStorageUnavailable = false
+    private var activeBundleID: String?
+    private var lastFullObservationUptime: TimeInterval?
+    private var browserApplicationTransition: ActivityTransitionType?
+    private var observationGeneration = 0
 
     private static let activityTrackingPreferenceKey = "io.mosemo.activityTrackingEnabled"
     private static let activityStoragePauseReason = "저장소 복구 필요"
 
-    init() {
+    init(environment: CollectorObservationEnvironment? = nil,
+         workspaceObserver: WorkspaceObserver = WorkspaceObserver(),
+         startAutomatically: Bool = true) {
+        let environment = environment ?? CollectorObservationEnvironment()
+        self.environment = environment
+        self.workspaceObserver = workspaceObserver
         let savedTrackingPreference = UserDefaults.standard.object(forKey: Self.activityTrackingPreferenceKey) as? Bool
-        isActivityTrackingEnabled = savedTrackingPreference ?? true
+        isActivityTrackingEnabled = environment.initialTrackingEnabled ?? savedTrackingPreference ?? true
         configureCallbacks()
-        workspaceObserver.start()
-        startTimers()
+        if startAutomatically {
+            workspaceObserver.start()
+            startTimers()
+        }
         if isActivityTrackingEnabled {
             statusMessage = savedTrackingPreference == nil
                 ? "앱 시작과 함께 활동 추적을 시작했습니다."
@@ -117,7 +141,9 @@ final class CollectorViewModel: ObservableObject {
     func setActivityTrackingEnabled(_ enabled: Bool) {
         guard isActivityTrackingEnabled != enabled else { return }
         isActivityTrackingEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: Self.activityTrackingPreferenceKey)
+        if environment.persistTrackingPreference {
+            UserDefaults.standard.set(enabled, forKey: Self.activityTrackingPreferenceKey)
+        }
         guard !activityStorageUnavailable else {
             stopActiveCollection()
             publishActivityStorageFailureStatus()
@@ -342,6 +368,8 @@ final class CollectorViewModel: ObservableObject {
         }
         workspaceObserver.onChromeLifecycleChange = { [weak self] in
             guard let self, self.collectionAllowed else { return }
+            self.observationGeneration += 1
+            self.lastFullObservationUptime = nil
             self.chromeRestartPending = true
             self.chromeObservation = nil
             self.lastChromePollCompletedAt = nil
@@ -409,10 +437,7 @@ final class CollectorViewModel: ObservableObject {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                if self.collectionAllowed {
-                    self.pollChromeIfNeeded()
-                    self.pollFirefoxIfNeeded()
-                }
+                self.pollCurrentActivity()
             }
         }
         performanceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -422,51 +447,82 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func observeCurrentApplication(initial: Bool) {
-        guard collectionAllowed, let application = NSWorkspace.shared.frontmostApplication else { return }
-        handleActivatedApplication(application, initial: initial)
+        guard collectionAllowed, let bundleID = environment.frontmostBundleID() else { return }
+        handleActivatedApplication(bundleID: bundleID, initial: initial)
     }
 
     private func handleActivatedApplication(_ application: NSRunningApplication, initial: Bool = false) {
         guard collectionAllowed, let bundleID = application.bundleIdentifier else { return }
+        handleActivatedApplication(bundleID: bundleID, initial: initial)
+    }
+
+    private func handleActivatedApplication(bundleID: String, initial: Bool) {
+        observationGeneration += 1
+        lastFullObservationUptime = nil
+        lastObservationFailure = nil
+        activeBundleID = bundleID
         chromeObservation = nil
         firefoxObservation = nil
         lastChromePollCompletedAt = nil
         lastFirefoxPollCompletedAt = nil
 
+        let transition: ActivityTransitionType = initial ? .initialContext : .appSwitch
+        if bundleID == ChromeAppleEventClient.bundleID {
+            browserApplicationTransition = transition
+            pollChromeIfNeeded()
+        } else if bundleID == SystemEventsClient.firefoxBundleID {
+            browserApplicationTransition = transition
+            pollFirefoxIfNeeded()
+        } else {
+            browserApplicationTransition = nil
+            emitApplicationObservation(bundleID: bundleID, transition: transition)
+        }
+    }
+
+    private func emitApplicationObservation(bundleID: String, transition: ActivityTransitionType) {
         emitTransition(SafeActivityEvent(
             eventType: .activity,
             appBundleID: bundleID,
             registeredDomain: nil,
             surfaceType: .application,
-            transitionType: initial ? .initialContext : .appSwitch,
+            transitionType: transition,
             observationState: .observed,
             inputOccurred: nil,
-            occurredAt: Date(),
+            occurredAt: environment.now(),
             detectionLatencyMilliseconds: 0,
             protectedContext: false
-        ), countsAsDetection: !initial)
-
-        if bundleID == ChromeAppleEventClient.bundleID {
-            pollChromeIfNeeded()
-        } else if bundleID == SystemEventsClient.firefoxBundleID {
-            pollFirefoxIfNeeded()
-        }
+        ), countsAsDetection: transition == .appSwitch)
     }
 
     private func pollChromeIfNeeded() {
         guard
             collectionAllowed,
-            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == ChromeAppleEventClient.bundleID,
+            environment.frontmostBundleID() == ChromeAppleEventClient.bundleID,
             !chromePollInFlight
         else { return }
 
         chromePollInFlight = true
-        let chrome = chrome
-        chromeQueue.async { [weak self, chrome] in
+        let generation = observationGeneration
+        Task { [weak self] in
             guard let self else { return }
-            let result = chrome.readFrontmostContext()
-            DispatchQueue.main.async {
-                Task { @MainActor in self.handleChromeResult(result, completedAt: Date()) }
+            let result = await self.readChromeContext()
+            self.chromePollInFlight = false
+            guard self.collectionAllowed,
+                  self.observationGeneration == generation,
+                  self.environment.frontmostBundleID() == ChromeAppleEventClient.bundleID else {
+                self.pollCurrentActivity()
+                return
+            }
+            self.handleChromeResult(result, completedAt: self.environment.now())
+        }
+    }
+
+    private func readChromeContext() async -> Result<ChromeReadResult, ChromeReadFailure> {
+        if let readChrome = environment.readChrome { return await readChrome() }
+        let chrome = chrome
+        return await withCheckedContinuation { continuation in
+            chromeQueue.async {
+                continuation.resume(returning: chrome.readFrontmostContext())
             }
         }
     }
@@ -475,7 +531,6 @@ final class CollectorViewModel: ObservableObject {
         _ result: Result<ChromeReadResult, ChromeReadFailure>,
         completedAt date: Date
     ) {
-        chromePollInFlight = false
         guard collectionAllowed else { return }
 
         switch result {
@@ -483,7 +538,7 @@ final class CollectorViewModel: ObservableObject {
             chromeAutomationPermission = .granted
             lastObservationFailure = nil
             let identity = observation.identity
-            var transition = ChromeTransitionDetector.transition(from: chromeObservation, to: identity)
+            var transition = browserApplicationTransition ?? ChromeTransitionDetector.transition(from: chromeObservation, to: identity)
             if chromeRestartPending {
                 transition = .chromeRestart
                 chromeRestartPending = false
@@ -491,7 +546,9 @@ final class CollectorViewModel: ObservableObject {
             let upperBoundLatency = lastChromePollCompletedAt.map { milliseconds(from: $0, to: date) } ?? 0
             lastChromePollCompletedAt = date
             chromeObservation = identity
+            if transition == nil, periodicObservationDue { transition = .periodicObservation }
             guard let transition else { return }
+            browserApplicationTransition = nil
 
             let classification = identity.classification
             emitTransition(SafeActivityEvent(
@@ -505,7 +562,8 @@ final class CollectorViewModel: ObservableObject {
                 occurredAt: date,
                 detectionLatencyMilliseconds: upperBoundLatency,
                 protectedContext: classification.protectedContext
-            ), browserContext: observation.diagnosticContext, countsAsDetection: transition != .initialContext)
+            ), browserContext: observation.diagnosticContext,
+               countsAsDetection: transition != .initialContext && transition != .periodicObservation)
         case .success(.notRunning):
             chromeAutomationPermission = .unavailable
             emitObservationUnavailable(reason: "chrome_not_running")
@@ -522,18 +580,32 @@ final class CollectorViewModel: ObservableObject {
     private func pollFirefoxIfNeeded() {
         guard
             collectionAllowed,
-            let application = NSWorkspace.shared.frontmostApplication,
-            application.bundleIdentifier == SystemEventsClient.firefoxBundleID,
+            environment.frontmostBundleID() == SystemEventsClient.firefoxBundleID,
             !firefoxPollInFlight
         else { return }
 
         firefoxPollInFlight = true
-        let systemEvents = systemEvents
-        firefoxQueue.async { [weak self, systemEvents] in
+        let generation = observationGeneration
+        Task { [weak self] in
             guard let self else { return }
-            let result = systemEvents.readFirefoxFrontmostContext()
-            DispatchQueue.main.async {
-                Task { @MainActor in self.handleFirefoxResult(result, completedAt: Date()) }
+            let result = await self.readFirefoxContext()
+            self.firefoxPollInFlight = false
+            guard self.collectionAllowed,
+                  self.observationGeneration == generation,
+                  self.environment.frontmostBundleID() == SystemEventsClient.firefoxBundleID else {
+                self.pollCurrentActivity()
+                return
+            }
+            self.handleFirefoxResult(result, completedAt: self.environment.now())
+        }
+    }
+
+    private func readFirefoxContext() async -> Result<FirefoxObservation, SystemEventsReadFailure> {
+        if let readFirefox = environment.readFirefox { return await readFirefox() }
+        let systemEvents = systemEvents
+        return await withCheckedContinuation { continuation in
+            firefoxQueue.async {
+                continuation.resume(returning: systemEvents.readFirefoxFrontmostContext())
             }
         }
     }
@@ -542,13 +614,12 @@ final class CollectorViewModel: ObservableObject {
         _ result: Result<FirefoxObservation, SystemEventsReadFailure>,
         completedAt date: Date
     ) {
-        firefoxPollInFlight = false
         guard collectionAllowed else { return }
 
         switch result {
         case let .success(observation):
             lastObservationFailure = nil
-            let transition = FirefoxTransitionDetector.transition(
+            var transition = browserApplicationTransition ?? FirefoxTransitionDetector.transition(
                 from: firefoxObservation,
                 to: observation.identity
             )
@@ -557,7 +628,9 @@ final class CollectorViewModel: ObservableObject {
             } ?? 0
             lastFirefoxPollCompletedAt = date
             firefoxObservation = observation.identity
+            if transition == nil, periodicObservationDue { transition = .periodicObservation }
             guard let transition else { return }
+            browserApplicationTransition = nil
 
             let classification = observation.classification
             emitTransition(SafeActivityEvent(
@@ -571,7 +644,8 @@ final class CollectorViewModel: ObservableObject {
                 occurredAt: date,
                 detectionLatencyMilliseconds: upperBoundLatency,
                 protectedContext: classification.protectedContext
-            ), browserContext: observation.diagnosticContext, countsAsDetection: transition != .initialContext)
+            ), browserContext: observation.diagnosticContext,
+               countsAsDetection: transition != .initialContext && transition != .periodicObservation)
         case let .failure(error):
             let reason: String
             switch error {
@@ -589,7 +663,13 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func emitObservationUnavailable(reason: String) {
-        guard collectionAllowed, lastObservationFailure != reason else { return }
+        guard collectionAllowed else { return }
+        chromeObservation = nil
+        firefoxObservation = nil
+        lastChromePollCompletedAt = nil
+        lastFirefoxPollCompletedAt = nil
+        lastFullObservationUptime = nil
+        guard lastObservationFailure != reason else { return }
         lastObservationFailure = reason
         statistics.recordObservationFailure()
         append(SafeActivityEvent(
@@ -600,7 +680,7 @@ final class CollectorViewModel: ObservableObject {
             transitionType: .observationUnavailable,
             observationState: .unavailable,
             inputOccurred: nil,
-            occurredAt: Date(),
+            occurredAt: environment.now(),
             detectionLatencyMilliseconds: 0,
             protectedContext: false
         ))
@@ -613,6 +693,7 @@ final class CollectorViewModel: ObservableObject {
         countsAsDetection: Bool
     ) {
         guard collectionAllowed else { return }
+        lastFullObservationUptime = environment.uptime()
         guard countsAsDetection else {
             append(event, browserContext: browserContext)
             return
@@ -699,6 +780,12 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func stopActiveCollection() {
+        observationGeneration += 1
+        browserApplicationTransition = nil
+        chromeRestartPending = false
+        lastObservationFailure = nil
+        activeBundleID = nil
+        lastFullObservationUptime = nil
         chromeObservation = nil
         firefoxObservation = nil
         lastChromePollCompletedAt = nil
@@ -731,8 +818,37 @@ final class CollectorViewModel: ObservableObject {
     }
 
     private func resumeActiveCollection() {
-        currentAnchor = anchorStore.captureCurrent()
+        if let captureReturnAnchor = environment.captureReturnAnchor {
+            currentAnchor = captureReturnAnchor()
+        } else {
+            currentAnchor = anchorStore.captureCurrent()
+        }
         observeCurrentApplication(initial: true)
+    }
+
+    func pollCurrentActivity() {
+        guard collectionAllowed else { return }
+        guard let bundleID = environment.frontmostBundleID() else {
+            if activeBundleID != nil { observationGeneration += 1 }
+            activeBundleID = nil
+            browserApplicationTransition = nil
+            emitObservationUnavailable(reason: "frontmost_application_unavailable")
+            return
+        }
+        if bundleID != activeBundleID {
+            handleActivatedApplication(bundleID: bundleID, initial: activeBundleID == nil)
+        } else if bundleID == ChromeAppleEventClient.bundleID {
+            pollChromeIfNeeded()
+        } else if bundleID == SystemEventsClient.firefoxBundleID {
+            pollFirefoxIfNeeded()
+        } else if periodicObservationDue {
+            emitApplicationObservation(bundleID: bundleID, transition: .periodicObservation)
+        }
+    }
+
+    private var periodicObservationDue: Bool {
+        guard let lastFullObservationUptime else { return true }
+        return environment.uptime() - lastFullObservationUptime >= 5
     }
 
     private func samplePerformance() {
