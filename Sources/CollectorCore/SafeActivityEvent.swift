@@ -20,6 +20,7 @@ public enum ActivitySurfaceType: String, Codable, CaseIterable, Sendable {
 
 public enum ActivityTransitionType: String, Codable, CaseIterable, Sendable {
     case initialContext
+    case periodicObservation
     case appSwitch
     case chromeWindowSwitch
     case chromeTabSwitch
