@@ -76,11 +76,12 @@ struct MosemoApp: App {
                 if CommandLine.arguments.contains("--timeline-ui-preview") {
                     MainWorkspaceView(
                         account: Self.previewAccount,
-                        timelineFetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000),
+                        timelineFetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000, now: Self.timelinePreviewNow ?? .now),
                         reviewFetcher: MockLabelReviewFetcher.demo,
                         reviewWriter: MockLabelConfirmationWriter(),
                         signOut: nil,
-                        showsPreviewNotice: true
+                        showsPreviewNotice: true,
+                        timelineNow: Self.timelinePreviewNow
                     )
                 } else if CommandLine.arguments.contains("--label-review-ui-preview") {
                     LabelReviewDemoView()
@@ -118,6 +119,12 @@ struct MosemoApp: App {
         }
         .defaultSize(width: 900, height: 700)
 
+    }
+
+    private static var timelinePreviewNow: Date? {
+        guard let index = CommandLine.arguments.firstIndex(of: "--timeline-preview-now"),
+              CommandLine.arguments.indices.contains(index + 1) else { return nil }
+        return ISO8601DateFormatter().date(from: CommandLine.arguments[index + 1])
     }
 
     private static let previewAccount = Account(

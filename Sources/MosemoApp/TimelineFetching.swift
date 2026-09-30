@@ -3,13 +3,17 @@ import MosemoAPI
 
 struct TimelinePreviewFetcher: TimelineFetching {
     let delayNanoseconds: UInt64
+    let now: Date
 
-    init(delayNanoseconds: UInt64 = 100_000_000) { self.delayNanoseconds = delayNanoseconds }
+    init(delayNanoseconds: UInt64 = 100_000_000, now: Date = .now) {
+        self.delayNanoseconds = delayNanoseconds
+        self.now = now
+    }
 
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         try await Task.sleep(nanoseconds: delayNanoseconds)
         let zone = TimeZone(identifier: "Asia/Seoul")!
-        let today = TimelineDate(.now, timeZone: zone)
+        let today = TimelineDate(now, timeZone: zone)
         let segments = day == today ? Self.examples(for: day, timeZone: zone) : []
         return TimelineDay(date: day, timeZoneID: zone.identifier, segments: segments)
     }

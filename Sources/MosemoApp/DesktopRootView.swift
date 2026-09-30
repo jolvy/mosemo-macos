@@ -25,7 +25,7 @@ struct DesktopRootView: View {
                     signOut: auth.signOut,
                     authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) }
                 )
-                .id(account.id)
+                .id("\(account.id):\(account.timeZoneID)")
             } else {
                 OnboardingView(model: model, auth: auth) {
                     onboardingCompleted = true
@@ -75,7 +75,8 @@ struct MainWorkspaceView: View {
         reviewWriter: any LabelConfirmationWriting,
         signOut: (() -> Void)?,
         authenticationFailed: @escaping @MainActor () -> Void = {},
-        showsPreviewNotice: Bool = false
+        showsPreviewNotice: Bool = false,
+        timelineNow: Date? = nil
     ) {
         self.signOut = signOut
         self.showsPreviewNotice = showsPreviewNotice
@@ -84,6 +85,8 @@ struct MainWorkspaceView: View {
             fetcher: timelineFetcher,
             accountID: account.id,
             timeZone: timeZone,
+            now: timelineNow ?? .now,
+            clock: { timelineNow ?? .now },
             authenticationFailed: authenticationFailed
         ))
         _reviewModel = StateObject(wrappedValue: LabelReviewViewModel(

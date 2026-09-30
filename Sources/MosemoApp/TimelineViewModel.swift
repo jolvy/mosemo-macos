@@ -76,6 +76,62 @@ struct TimelinePresentation: Identifiable {
     }
 }
 
+struct TimelineAxis {
+    static let pointsPerMinute = 1.25
+    struct Tick: Identifiable {
+        let id: Int
+        let label: String
+        let position: Double
+    }
+    struct Segment: Identifiable {
+        let entry: TimelinePresentation
+        var id: UUID { entry.id }
+        let top: Double
+        let height: Double
+    }
+
+    let start: Date
+    let end: Date
+    let ticks: [Tick]
+    let segments: [Segment]
+    var height: Double { end.timeIntervalSince(start) / 60 * Self.pointsPerMinute }
+
+    init(date: TimelineDate, timeZone: TimeZone, entries: [TimelinePresentation]) {
+        start = date.startOfDay(timeZone: timeZone)
+        end = date.adding(days: 1, timeZone: timeZone).startOfDay(timeZone: timeZone)
+        let formatter = DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var tickDate = start
+        var result: [Tick] = []
+        while tickDate < end {
+            result.append(Tick(id: result.count, label: formatter.string(from: tickDate),
+                               position: tickDate.timeIntervalSince(start) / 60 * Self.pointsPerMinute))
+            tickDate = calendar.date(byAdding: .hour, value: 1, to: tickDate)!
+        }
+        result.append(Tick(id: result.count, label: formatter.string(from: end),
+                           position: end.timeIntervalSince(start) / 60 * Self.pointsPerMinute))
+        ticks = result
+        let lower = start
+        let upper = end
+        segments = entries.compactMap { entry in
+            let marker = entry.isZeroLength || entry.end == nil
+            guard marker ? (entry.start >= lower && entry.start < upper)
+                : (entry.start < upper && entry.end! > lower) else { return nil }
+            let top = max(lower, entry.start).timeIntervalSince(lower) / 60 * Self.pointsPerMinute
+            let bottom = min(upper, entry.end ?? entry.start).timeIntervalSince(lower) / 60 * Self.pointsPerMinute
+            return Segment(entry: entry, top: top,
+                           height: marker ? 0 : min(max(5, bottom - top), upper.timeIntervalSince(lower) / 60 * Self.pointsPerMinute - top))
+        }
+    }
+
+    func position(of date: Date) -> Double {
+        max(0, min(height, date.timeIntervalSince(start) / 60 * Self.pointsPerMinute))
+    }
+}
+
 @MainActor
 final class TimelineViewModel: ObservableObject {
     @Published private(set) var selectedDate: TimelineDate
@@ -84,6 +140,22 @@ final class TimelineViewModel: ObservableObject {
     @Published private(set) var loadState: TimelineLoadState = .loading
     @Published private(set) var isRefreshing = false
     @Published private(set) var day: TimelineDay?
+
+    private var axisOffsets: [String: Double] = [:]
+    private let clock: () -> Date
+    var axisKey: String { selectedDate.description + "/" + timeZone.identifier }
+    var axis: TimelineAxis { TimelineAxis(date: selectedDate, timeZone: timeZone, entries: presentations) }
+    var currentDate: Date { clock() }
+
+    func initialAxisOffset(viewportHeight: Double) -> Double {
+        if let saved = axisOffsets[axisKey] { return saved }
+        let offset = TimelineDate(clock(), timeZone: timeZone) == selectedDate
+            ? max(0, min(axis.height - viewportHeight, axis.position(of: clock()) - viewportHeight / 2)) : 0
+        axisOffsets[axisKey] = offset
+        return offset
+    }
+
+    func saveAxisOffset(_ offset: Double) { axisOffsets[axisKey] = max(0, offset) }
 
     private let fetcher: any TimelineFetching
     private var accountID: UUID
@@ -97,9 +169,11 @@ final class TimelineViewModel: ObservableObject {
         accountID: UUID = UUID(),
         timeZone: TimeZone = TimeZone(identifier: "Asia/Seoul") ?? .current,
         now: Date = .now,
+        clock: @escaping () -> Date = { .now },
         authenticationFailed: @escaping @MainActor () -> Void = {}
     ) {
         self.fetcher = fetcher
+        self.clock = clock
         self.accountID = accountID
         accountTimeZone = timeZone
         self.authenticationFailed = authenticationFailed
@@ -163,11 +237,12 @@ final class TimelineViewModel: ObservableObject {
         requestTask?.cancel()
         requestID = UUID()
         self.accountID = accountID
+        axisOffsets.removeAll()
         day = nil
         selectedSegmentID = nil
         if let timeZone {
             accountTimeZone = timeZone
-            selectedDate = TimelineDate(.now, timeZone: timeZone)
+            selectedDate = TimelineDate(clock(), timeZone: timeZone)
         }
         load(selectedDate)
     }
