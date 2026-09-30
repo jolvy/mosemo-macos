@@ -1,6 +1,30 @@
 import XCTest
 
 final class TimelineUITests: XCTestCase {
+    func testCommonDetailSurvivesModeSwitchAndExplainsMissingItems() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]
+        app.launch()
+        let first = app.buttons["timeline-segment-00000000-0000-0000-0000-000000000001"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        app.activate()
+        first.click()
+        let duration = app.staticTexts["timeline-detail-duration"]
+        XCTAssertTrue(duration.waitForExistence(timeout: 3))
+        XCTAssertEqual(text(duration), "00:42:00")
+        XCTAssertTrue(text(app.staticTexts["timeline-detail-title"]).contains("MosemoApp.swift"))
+        XCTAssertFalse(app.staticTexts["timeline-detail-url"].exists)
+        app.radioButtons["시간축"].click()
+        XCTAssertEqual(text(duration), "00:42:00")
+        app.radioButtons["목록"].click()
+        XCTAssertEqual(text(duration), "00:42:00")
+        app.buttons["timeline-segment-00000000-0000-0000-0000-000000000003"].click()
+        XCTAssertTrue(text(app.staticTexts["timeline-detail-empty-reason"]).contains("개인정보 보호"))
+        XCTAssertFalse(app.staticTexts["timeline-detail-title"].exists)
+        app.buttons["timeline-segment-00000000-0000-0000-0000-000000000004"].click()
+        XCTAssertTrue(text(app.staticTexts["timeline-detail-empty-reason"]).contains("수집 공백"))
+    }
+
     func testAxisStartsAtCurrentTimeAndRestoresAcrossTransitions() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]

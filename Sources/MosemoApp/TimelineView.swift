@@ -78,19 +78,17 @@ struct TimelineView: View {
                     Text("\(model.presentations.count)개 표시 구간")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Group {
+                HStack(alignment: .top, spacing: 20) {
                     switch model.style {
                     case .list:
-                        HStack(alignment: .top, spacing: 20) {
-                            TimelineList(model: model)
-                            if let entry = model.presentations.first(where: { $0.id == model.selectedSegmentID }) {
-                                TimelineDetail(entry: entry, timeZone: model.timeZone)
-                            }
-                        }
+                        TimelineList(model: model)
                     case .timeAxis:
-                        TimelineTimeAxis(model: model)
-                            .id(model.axisKey)
-
+                        TimelineTimeAxis(model: model).id(model.axisKey)
+                    }
+                    if let entry = model.presentations.first(where: { $0.id == model.selectedSegmentID }) {
+                        TimelineDetail(entry: entry, timeZone: model.timeZone)
+                    } else if model.presentations.isEmpty {
+                        Text("이 날짜에 기록이 없습니다").foregroundStyle(.secondary).frame(width: 220)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -132,7 +130,9 @@ private struct TimelineList: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(12)
-                        .background(entry.kind == .gap ? Color(nsColor: .controlBackgroundColor) : .clear)
+                        .contentShape(Rectangle())
+                        .background(model.selectedSegmentID == entry.id ? Color.accentColor.opacity(0.12) :
+                                    entry.kind == .gap ? Color(nsColor: .controlBackgroundColor) : .clear)
                         .overlay(alignment: .bottom) { Divider() }
                     }
                     .buttonStyle(.plain)
@@ -173,12 +173,8 @@ private struct TimelineTimeAxis: View {
     @State private var didRestore = false
     @State private var restorationOffset: Double?
     private var axis: TimelineAxis { model.axis }
-    private var entries: [TimelinePresentation] { model.presentations }
     private var timeZone: TimeZone { model.timeZone }
     private var height: CGFloat { axis.height }
-    private var selectedEntry: TimelinePresentation? {
-        entries.first { $0.id == model.selectedSegmentID } ?? entries.first
-    }
     private func onSelect(_ id: UUID?) { model.selectSegment(id) }
 
     var body: some View {
@@ -268,11 +264,7 @@ private struct TimelineTimeAxis: View {
                 }
             }
 
-            if entries.isEmpty {
-                Text("이 날짜에 기록이 없습니다").foregroundStyle(.secondary).frame(width: 220)
-            } else if let selectedEntry {
-                TimelineDetail(entry: selectedEntry, timeZone: timeZone)
-            }
+
         }
     }
 
@@ -283,21 +275,73 @@ private struct TimelineDetail: View {
     let timeZone: TimeZone
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(entry.title).font(.headline)
-            TimelineBadge(entry: entry)
-            if let label = entry.labelStateText {
-                LabeledContent("확정 라벨", value: label)
-                    .accessibilityIdentifier("timeline-detail-confirmed-label")
+        ScrollView([.vertical, .horizontal]) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("총 시간").font(.caption).foregroundStyle(.secondary)
+                        Text(entry.preciseDurationText).font(.title2.monospacedDigit().bold())
+                            .accessibilityIdentifier("timeline-detail-duration")
+                        Text(entry.detailRangeText(timeZone: timeZone))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("timeline-detail-range")
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Text(entry.kind == .detail ? "확정 라벨" : "구간 종류")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(entry.labelStateText ?? (entry.kind == .detail ? "미확정" : entry.kind.label))
+                            .font(.callout.bold())
+                            .accessibilityIdentifier("timeline-detail-confirmed-label")
+                    }
+                }
+                Divider()
+                Text("타임라인").font(.headline)
+                if let details = entry.details {
+                    Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 12) {
+                        GridRow {
+                            Text("총")
+                            Text("시작시간")
+                            Text("종료시간")
+                            Text("종류")
+                            Text("상세정보")
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
+                        Divider().gridCellColumns(5)
+                        GridRow {
+                            Text(entry.preciseDurationText)
+                            Text(entry.detailTimeText(entry.start, timeZone: timeZone))
+                            Text(entry.end.map { entry.detailTimeText($0, timeZone: timeZone) } ?? "종료 시각 미상")
+                            Text(details.isWeb ? "웹" : "앱")
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(details.appName.flatMap { $0.isEmpty ? nil : $0 } ?? "앱 이름 수집 불가")
+                                    .foregroundStyle(.secondary)
+                                Text("제목 · " + entry.detailTitle)
+                                    .accessibilityIdentifier("timeline-detail-title")
+                                if let url = entry.detailURL {
+                                    Text("URL · " + url).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("timeline-detail-url")
+                                }
+                            }
+                            .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(.caption.monospacedDigit())
+                    }
+                    .textSelection(.enabled)
+                } else {
+                    Text(entry.kind == .opaque
+                         ? "개인정보 보호로 앱·제목·URL을 표시하지 않습니다."
+                         : "이 구간에는 관찰된 항목이 없습니다. 수집 공백: " + entry.context)
+                        .font(.callout).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("timeline-detail-empty-reason")
+                }
             }
-            if !entry.context.isEmpty { Text(entry.context).font(.callout).foregroundStyle(.secondary) }
-            Divider()
-            LabeledContent("시각", value: entry.timeText(timeZone: timeZone))
-            LabeledContent("길이", value: entry.durationText)
-            Spacer()
+            .padding(16)
+            .frame(minWidth: 520, maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(16).frame(width: 220).frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 360, idealWidth: 560, maxWidth: 600, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("timeline-detail")
     }
 }
 

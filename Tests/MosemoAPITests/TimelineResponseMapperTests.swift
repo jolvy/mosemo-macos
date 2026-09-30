@@ -3,6 +3,22 @@ import XCTest
 @testable import MosemoAPI
 
 final class TimelineResponseMapperTests: XCTestCase {
+    func testBrowserRemainsWebWhenTitleAndURLAreUnavailable() throws {
+        let body = Data(#"""
+        [{"itemType":"in_progress_activity","segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"v1","startedAt":"2026-09-26T00:00:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Safari"}},"window":{"status":"absent"},"web":{"kind":"browser","tabTitle":{"status":"unavailable","reason":"permission_denied"},"url":{"status":"absent"}}}}]
+        """#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode([TimelineResponseMapper.ResponseSegment].self, from: body)
+        let segments = try TimelineResponseMapper.segments(from: response)
+        guard case .activity(let activity) = segments[0], case .detailed(let details) = activity.context else {
+            return XCTFail("Expected detailed browser activity")
+        }
+        XCTAssertTrue(details.isWeb)
+        XCTAssertNil(details.tabTitle)
+        XCTAssertNil(details.webURL)
+    }
+
     func testGroupsExpandOriginalSegmentsAndOnlyConfirmedSelectionsBecomeLabels() throws {
         let body = Data(#"""
         [

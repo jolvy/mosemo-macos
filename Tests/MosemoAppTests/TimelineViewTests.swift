@@ -16,6 +16,39 @@ final class TimelineViewTests: XCTestCase {
         return day.startOfDay(timeZone: zone).addingTimeInterval(Double(hour * 60 + minute) * 60)
     }
 
+    func testDetailUsesCapturedTitleForEachKindAndDoesNotInventMissingValues() {
+        func entry(_ details: TimelineActivity.Details) -> TimelinePresentation {
+            TimelinePresentation(id: uuid(1), kind: .detail, start: instant(9, 0),
+                                 end: instant(10, 2).addingTimeInterval(3), observedThrough: nil,
+                                 title: "Safari", context: "", details: details)
+        }
+        let app = entry(.init(appName: "Xcode", windowTitle: "Main.swift"))
+        XCTAssertEqual(app.detailTitle, "Main.swift")
+        XCTAssertNil(app.detailURL)
+        XCTAssertEqual(app.preciseDurationText, "01:02:03")
+        let web = entry(.init(windowTitle: "Window title", tabTitle: "Tab title", webURL: "https://example.com", isWeb: true))
+        XCTAssertEqual(web.detailTitle, "Tab title")
+        XCTAssertEqual(web.detailURL, "https://example.com")
+        let unavailable = entry(.init(windowTitle: "Must not substitute", isWeb: true))
+        XCTAssertEqual(unavailable.detailTitle, "수집 불가")
+        XCTAssertEqual(unavailable.detailURL, "수집 불가")
+        XCTAssertEqual(entry(.init(windowTitle: "")).detailTitle, "수집 불가")
+    }
+
+    func testDetailRangeIncludesSecondsAndOnlyRepeatsDateAcrossMidnight() {
+        var entry = TimelinePresentation(id: uuid(1), kind: .detail, start: instant(23, 59).addingTimeInterval(1),
+                                         end: instant(23, 59).addingTimeInterval(59), observedThrough: nil,
+                                         title: "", context: "")
+        XCTAssertEqual(entry.detailRangeText(timeZone: zone), "2026-09-23 23:59:01 – 23:59:59")
+        entry = TimelinePresentation(id: uuid(1), kind: .detail, start: instant(23, 59),
+                                     end: instant(24, 1), observedThrough: nil, title: "", context: "")
+        XCTAssertEqual(entry.detailRangeText(timeZone: zone), "2026-09-23 23:59:00 – 2026-09-24 00:01:00")
+        let open = TimelinePresentation(id: uuid(1), kind: .detail, start: instant(9, 0),
+                                        end: nil, observedThrough: instant(9, 5), title: "", context: "")
+        XCTAssertEqual(open.preciseDurationText, "종료 시각 미상")
+        XCTAssertEqual(open.detailRangeText(timeZone: zone), "2026-09-23 09:00:00 – 종료 시각 미상")
+    }
+
     func testFullDayAxisPlacesAfternoonRecordWithoutTrimmingMorning() async {
         let model = TimelineViewModel(fetcher: ImmediateFetcher(result: .success(.init(
             date: date(), timeZoneID: zone.identifier, segments: [
@@ -245,9 +278,11 @@ final class TimelineViewTests: XCTestCase {
         let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: requested.startOfDay(timeZone: zone))
         await waitUntil { model.loadState == .loaded }
         let before = await fetcher.count
+        model.selectSegment(uuid(10))
         model.selectStyle(.timeAxis)
         model.selectStyle(.list)
         XCTAssertEqual(model.presentations.count, 1)
+        XCTAssertEqual(model.selectedSegmentID, uuid(10))
         let after = await fetcher.currentCount()
         XCTAssertEqual(after, before)
     }
