@@ -1,4 +1,5 @@
 import Foundation
+import MosemoAPI
 
 enum LabelReviewSelection: Equatable, Hashable, Sendable {
     case label(id: UUID)
@@ -29,10 +30,12 @@ struct LabelReviewSegment: Identifiable, Equatable, Sendable {
     let startedAt: Date
     let endedAt: Date
     let appName: String
-    let title: String
+    let context: LabelReviewActivityContext
+    var title: String { context.title ?? "수집 불가" }
     let proposal: LabelReviewProposal
     let sourceGroupVersion: String?
 
+    var durationSeconds: Int { Int(endedAt.timeIntervalSince(startedAt)) }
     var durationMinutes: Int { Int(endedAt.timeIntervalSince(startedAt) / 60) }
 }
 
@@ -67,7 +70,7 @@ struct LabelReviewSnapshot: Equatable, Sendable {
                 startedAt: segment.startedAt,
                 endedAt: segment.endedAt,
                 appName: segment.appName,
-                title: segment.title,
+                context: segment.context,
                 proposal: Self.proposal(from: segment.proposal),
                 sourceGroupVersion: segment.sourceGroupVersion
             )

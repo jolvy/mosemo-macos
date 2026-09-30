@@ -1454,6 +1454,39 @@ final class MosemoAPITests: XCTestCase {
         XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer review-token")
     }
 
+    func testReviewPreservesWebContextWithoutWindowFallback() async throws {
+        let tokenStore = MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60)))
+        let webValues = [
+            #"{"kind":"browser","tabTitle":{"status":"captured","value":"Tab title"},"url":{"status":"captured","value":"https://Example.com/path?q=a%20b#anchor"}}"#,
+            #"{"kind":"browser","tabTitle":{"status":"unavailable","reason":"not_supported"},"url":{"status":"captured","value":"https://example.com/only-url"}}"#,
+            #"{"kind":"browser","tabTitle":{"status":"captured","value":"Only title"},"url":{"status":"unavailable","reason":"not_supported"}}"#,
+            #"{"kind":"not_applicable"}"#,
+        ]
+        let segments = webValues.enumerated().map { index, web in
+            """
+            {"segmentId":"00000000-0000-0000-0000-00000000000\(index + 1)","segmentVersion":"\(String(repeating: "b", count: 64))","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Chrome"}},"window":{"status":"captured","title":{"status":"captured","value":"Window title"}},"web":\(web)}}
+            """
+        }.joined(separator: ",")
+        let body = Data("""
+        [{"itemType":"activity_group","groupVersion":"\(String(repeating: "a", count: 64))","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"pending","selection":null,"segments":[\(segments)]}]
+        """.utf8)
+        let recorder = RequestRecorder()
+        let transport = RecordingClientTransport { request, requestBody, baseURL, operationID in
+            await recorder.record(request: request, hasBody: requestBody != nil, baseURL: baseURL, operationID: operationID)
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+        }
+        let result = try await makeTransportClient(tokenStore: tokenStore, transport: transport)
+            .pendingLabelSegments(day: TimelineDate(year: 2026, month: 9, day: 26))
+        XCTAssertEqual(result.map(\.context), [
+            .web(title: "Tab title", url: "https://Example.com/path?q=a%20b#anchor"),
+            .web(title: nil, url: "https://example.com/only-url"),
+            .web(title: "Only title", url: nil),
+            .app(title: "Window title"),
+        ])
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests.first?.request.headerFields[.authorization], "Bearer review-token")
+    }
+
     func testLabelStateMapsReadyAndUnclassifiedProposals() async throws {
         let segmentID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
         let labelID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!

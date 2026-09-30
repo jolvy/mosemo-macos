@@ -40,7 +40,7 @@ final class LabelReviewStateTests: XCTestCase {
             startedAt: changed.startedAt,
             endedAt: changed.endedAt,
             appName: changed.appName,
-            title: changed.title,
+            context: changed.context,
             proposal: changed.proposal
         )
         let changedResponse = LabelReviewResponseDTO(labels: response.labels, segments: changedSegments)
@@ -63,7 +63,7 @@ final class LabelReviewStateTests: XCTestCase {
                 startedAt: segment.startedAt,
                 endedAt: segment.endedAt,
                 appName: segment.appName,
-                title: segment.title,
+                context: segment.context,
                 proposal: segment.proposal,
                 sourceGroupVersion: group
             )
@@ -85,6 +85,47 @@ final class LabelReviewStateTests: XCTestCase {
 
 @MainActor
 final class LabelReviewViewModelTests: XCTestCase {
+    func testIndividualSelectionCountsCollapsedSegmentsAndSubmitsOnlyCheckedDraft() async {
+        let writer = RecordingLabelConfirmationWriter()
+        let model = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo, writer: writer)
+        await model.load()
+        let group = model.groups[0]
+        let segment = group.segments[1]
+        XCTAssertEqual(model.selectionState(for: group), .none)
+        model.toggleSelection(for: segment)
+        XCTAssertEqual(model.selectionState(for: group), .partial)
+        XCTAssertEqual(model.allSelectionState, .partial)
+        XCTAssertEqual(model.selectedSegmentCount, 1)
+        XCTAssertTrue(model.expandedGroupIDs.isEmpty)
+        model.setSelection(.unclassified, for: segment)
+        XCTAssertEqual(model.unclassifiedCount(in: group), 1)
+        XCTAssertEqual(model.selectedSegmentCount, 1)
+        await model.confirmSelectedGroups()
+        let requests = await writer.recordedRequests()
+        XCTAssertEqual(requests, [[LabelConfirmationDecision(segmentID: segment.id, segmentVersion: segment.version, selection: .unclassified)]])
+        XCTAssertEqual(model.segmentCount, 9)
+    }
+
+    func testPartialSelectionTogglesToAllAndDraftDoesNotCheckSegment() async {
+        let model = LabelReviewViewModel(fetcher: MockLabelReviewFetcher.demo, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let group = model.groups[0]
+        model.setSelection(.unclassified, for: group.first)
+        XCTAssertEqual(model.allSelectionState, .none)
+        model.toggleSelection(for: group.first)
+        model.toggleSelection(for: group)
+        XCTAssertEqual(model.selectionState(for: group), .all)
+        XCTAssertEqual(model.selectedSegmentCount, 3)
+        model.toggleAllGroups()
+        XCTAssertEqual(model.allSelectionState, .all)
+        XCTAssertEqual(model.selectedSegmentCount, 10)
+        model.toggleAllGroups()
+        XCTAssertEqual(model.allSelectionState, .none)
+        model.toggleSelection(for: group)
+        model.toggleSelection(for: group)
+        XCTAssertEqual(model.selectionState(for: group), .none)
+    }
+
     func testDateChangeFetchesSelectedDayAndRefreshRestoresServerState() async {
         let fetcher = RecordingLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
         let zone = TimeZone(identifier: "Asia/Seoul")!
@@ -181,7 +222,7 @@ final class LabelReviewViewModelTests: XCTestCase {
             startedAt: Date(timeIntervalSince1970: 1_800_000_000),
             endedAt: Date(timeIntervalSince1970: 1_800_000_300),
             appName: "Xcode",
-            title: "Editor.swift",
+            context: .app(title: "Editor.swift"),
             proposal: .ready(.label(id: archivedLabelID))
         )
         let response = LabelReviewResponseDTO(
@@ -316,7 +357,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         latestSegments[0] = LabelReviewSegmentDTO(
             id: changed.id, version: String(repeating: "f", count: 64),
             startedAt: changed.startedAt, endedAt: changed.endedAt,
-            appName: changed.appName, title: changed.title, proposal: changed.proposal
+            appName: changed.appName, context: changed.context, proposal: changed.proposal
         )
         let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [
             first, LabelReviewResponseDTO(labels: first.labels, segments: latestSegments)
@@ -426,7 +467,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         refreshedSegments[0] = LabelReviewSegmentDTO(
             id: changed.id, version: String(repeating: "e", count: 64),
             startedAt: changed.startedAt, endedAt: changed.endedAt,
-            appName: changed.appName, title: changed.title, proposal: changed.proposal
+            appName: changed.appName, context: changed.context, proposal: changed.proposal
         )
         let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [
             first, LabelReviewResponseDTO(labels: first.labels, segments: refreshedSegments)
@@ -578,6 +619,14 @@ private struct DelayedLabelReviewFetcher: LabelReviewFetching {
 }
 
 final class LiveLabelReviewFetcherTests: XCTestCase {
+    func testRawWebContextSurvivesReviewFetching() async throws {
+        let id = UUID()
+        let segment = PendingLabelTimelineSegment(id: id, version: "v1", sourceGroupVersion: "g1", startedAt: .now, endedAt: .now, appName: "Browser", context: .web(title: nil, url: "https://Example.com/path?q=1"))
+        let reader = FixedLabelReviewReader(labels: [], segments: [segment], states: [id: .pending(id: id, version: "v1", proposal: .readyUnclassified)])
+        let snapshot = try await LiveLabelReviewFetcher(reader: reader).fetchLabelReview(day: TimelineDate(year: 2026, month: 9, day: 26))
+        XCTAssertEqual(snapshot.segments.first?.context, .web(title: nil, url: "https://Example.com/path?q=1"))
+    }
+
     func testMapsCatalogAndEveryPendingProposalState() async throws {
         let labelID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let archivedAt = Date(timeIntervalSince1970: 1_800_000_000)
@@ -590,7 +639,7 @@ final class LiveLabelReviewFetcherTests: XCTestCase {
                 startedAt: Date(timeIntervalSince1970: Double(index * 600)),
                 endedAt: Date(timeIntervalSince1970: Double(index * 600 + 300)),
                 appName: "App \(index)",
-                title: "Title \(index)"
+                context: .app(title: "Title \(index)")
             )
         }
         let proposals: [RemoteLabelProposal] = [
@@ -667,7 +716,7 @@ private actor ChangingLabelReviewReader: LabelReviewReading {
             startedAt: Date(timeIntervalSince1970: 0),
             endedAt: Date(timeIntervalSince1970: 60),
             appName: "Xcode",
-            title: "Editor"
+            context: .app(title: "Editor")
         )]
     }
 
@@ -689,7 +738,7 @@ private actor DisappearingLabelReviewReader: LabelReviewReading {
         return [PendingLabelTimelineSegment(
             id: id, version: String(repeating: "a", count: 64), sourceGroupVersion: "group",
             startedAt: Date(timeIntervalSince1970: 0), endedAt: Date(timeIntervalSince1970: 60),
-            appName: "Xcode", title: "Editor"
+            appName: "Xcode", context: .app(title: "Editor")
         )]
     }
 
