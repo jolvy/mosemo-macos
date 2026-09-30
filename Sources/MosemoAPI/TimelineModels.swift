@@ -86,6 +86,19 @@ public enum TimelineSegment: Equatable, Sendable, Identifiable {
     }
 }
 
+/// A server-confirmed choice; absence means no confirmed label.
+public enum TimelineConfirmedLabel: Equatable, Sendable {
+    case label(id: UUID, displayName: String)
+    case unclassified
+
+    public var displayName: String {
+        switch self {
+        case .label(_, let displayName): displayName
+        case .unclassified: "미분류"
+        }
+    }
+}
+
 public struct TimelineActivity: Equatable, Sendable {
     public struct Details: Equatable, Sendable {
         public let appName: String?
@@ -131,19 +144,26 @@ public struct TimelineActivity: Equatable, Sendable {
     public let endedAt: Date?
     public let lastObservedAt: Date
     public let context: Context
+    public let confirmedLabel: TimelineConfirmedLabel?
 
     public init(
         id: UUID,
         startedAt: Date,
         endedAt: Date?,
         lastObservedAt: Date,
-        context: Context
+        context: Context,
+        confirmedLabel: TimelineConfirmedLabel? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.lastObservedAt = lastObservedAt
         self.context = context
+        if endedAt != nil, case .detailed = context {
+            self.confirmedLabel = confirmedLabel
+        } else {
+            self.confirmedLabel = nil
+        }
     }
 }
 

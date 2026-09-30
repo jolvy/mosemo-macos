@@ -156,10 +156,102 @@ final class MosemoAPITests: XCTestCase {
         let recorder = RequestRecorder()
         let response = Data(#"""
         [
-          {"segmentId":"00000000-0000-0000-0000-000000000001","segmentType":"activity","startedAt":"2026-09-14T00:00:00.123456Z","endedAt":"2026-09-14T00:00:00.123456Z","lastObservedAt":"2026-09-14T00:00:00.123456Z","context":{"kind":"detailed","app":{"bundleId":{"status":"captured","value":"com.apple.Safari"},"name":{"status":"captured","value":"Safari"}},"window":{"status":"captured","title":{"status":"captured","value":"Window","truncated":false}},"web":{"kind":"browser","tabTitle":{"status":"captured","value":"Tab","truncated":false},"url":{"status":"captured","value":"https://example.com/path"}}}},
-          {"segmentId":"00000000-0000-0000-0000-000000000002","segmentType":"activity","startedAt":"2026-09-14T00:00:00Z","endedAt":null,"lastObservedAt":"2026-09-14T00:00:01Z","context":{"kind":"opaque"}},
-          {"segmentId":"00000000-0000-0000-0000-000000000003","segmentType":"capture_gap","startedAt":"2026-09-14T00:00:01Z","endedAt":null,"reason":"screen_locked"},
-          {"segmentId":"00000000-0000-0000-0000-000000000004","segmentType":"activity","startedAt":"2026-09-14T00:00:02Z","endedAt":null,"lastObservedAt":"2026-09-14T00:00:02Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"unavailable","reason":"permission"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}}
+          {
+            "itemType": "activity_group",
+            "groupVersion": "g1",
+            "startedAt": "2026-09-14T00:00:00.123456Z",
+            "endedAt": "2026-09-14T00:00:00.123456Z",
+            "state": "confirmed",
+            "selection": {
+              "kind": "label",
+              "labelId": "22222222-2222-2222-2222-222222222222",
+              "displayName": "코딩"
+            },
+            "segments": [
+              {
+                "segmentId": "00000000-0000-0000-0000-000000000001",
+                "startedAt": "2026-09-14T00:00:00.123456Z",
+                "endedAt": "2026-09-14T00:00:00.123456Z",
+                "lastObservedAt": "2026-09-14T00:00:00.123456Z",
+                "context": {
+                  "kind": "detailed",
+                  "app": {
+                    "bundleId": {
+                      "status": "captured",
+                      "value": "com.apple.Safari"
+                    },
+                    "name": {
+                      "status": "captured",
+                      "value": "Safari"
+                    }
+                  },
+                  "window": {
+                    "status": "captured",
+                    "title": {
+                      "status": "captured",
+                      "value": "Window",
+                      "truncated": false
+                    }
+                  },
+                  "web": {
+                    "kind": "browser",
+                    "tabTitle": {
+                      "status": "captured",
+                      "value": "Tab",
+                      "truncated": false
+                    },
+                    "url": {
+                      "status": "captured",
+                      "value": "https://example.com/path"
+                    }
+                  }
+                },
+                "segmentVersion": "v1"
+              }
+            ]
+          },
+          {
+            "segmentId": "00000000-0000-0000-0000-000000000002",
+            "startedAt": "2026-09-14T00:00:00Z",
+            "endedAt": null,
+            "lastObservedAt": "2026-09-14T00:00:01Z",
+            "context": {
+              "kind": "opaque"
+            },
+            "itemType": "opaque_activity"
+          },
+          {
+            "segmentId": "00000000-0000-0000-0000-000000000003",
+            "startedAt": "2026-09-14T00:00:01Z",
+            "endedAt": null,
+            "reason": "screen_locked",
+            "itemType": "capture_gap"
+          },
+          {
+            "segmentId": "00000000-0000-0000-0000-000000000004",
+            "startedAt": "2026-09-14T00:00:02Z",
+            "endedAt": null,
+            "lastObservedAt": "2026-09-14T00:00:02Z",
+            "context": {
+              "kind": "detailed",
+              "app": {
+                "bundleId": {
+                  "status": "absent"
+                },
+                "name": {
+                  "status": "unavailable",
+                  "reason": "permission"
+                }
+              },
+              "window": {
+                "status": "absent"
+              },
+              "web": {
+                "kind": "not_applicable"
+              }
+            },
+            "itemType": "in_progress_activity"
+          }
         ]
         """#.utf8)
         let transport = RecordingClientTransport { request, body, baseURL, operationID in
@@ -177,6 +269,7 @@ final class MosemoAPITests: XCTestCase {
         guard case .activity(let detailed) = day.segments[0],
               case .detailed(let context) = detailed.context else { return XCTFail("Expected detailed activity") }
         XCTAssertEqual(detailed.startedAt, detailed.endedAt)
+        XCTAssertEqual(detailed.confirmedLabel, .label(id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!, displayName: "코딩"))
         XCTAssertEqual(context.appName, "Safari")
         XCTAssertEqual(context.windowTitle, "Window")
         XCTAssertEqual(context.tabTitle, "Tab")
@@ -195,10 +288,10 @@ final class MosemoAPITests: XCTestCase {
         let requests = await recorder.requests()
         XCTAssertEqual(requests.count, 1)
         XCTAssertEqual(requests[0].request.method, .get)
-        XCTAssertEqual(requests[0].request.path, "/api/v1/activities/timeline?date=2026-09-14")
+        XCTAssertEqual(requests[0].request.path, "/api/v1/activities/label-timeline?date=2026-09-14")
         XCTAssertEqual(requests[0].request.headerFields[.authorization], "Bearer timeline-token")
         XCTAssertFalse(requests[0].hasBody)
-        XCTAssertEqual(requests[0].operationID, "activitiesGetTimeline")
+        XCTAssertEqual(requests[0].operationID, "activitiesGetLabelTimeline")
     }
 
     func testTimelineEmptyResponseIsAnEmptyServerDay() async throws {
@@ -291,7 +384,7 @@ final class MosemoAPITests: XCTestCase {
             let generated = Client(serverURL: baseURL, configuration: .init(dateTranscoder: MosemoDateTranscoder()), transport: transport, middlewares: [
                 BearerAuthenticationMiddleware(tokenStore: tokenStore, now: { Date() })
             ])
-            let output = try await generated.activitiesGetTimeline(query: .init(date: requested.description))
+            let output = try await generated.activitiesGetLabelTimeline(query: .init(date: requested.description))
             _ = try output.ok.body.json
         } catch {
             XCTFail("Generated timeline decoding failed: \(error)")

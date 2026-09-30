@@ -22,8 +22,8 @@ struct TimelinePreviewFetcher: TimelineFetching {
         let start = day.startOfDay(timeZone: timeZone)
         func at(_ hour: Int, _ minute: Int) -> Date { start.addingTimeInterval(Double(hour * 60 + minute) * 60) }
         return [
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, startedAt: at(9, 0), endedAt: at(9, 42), lastObservedAt: at(9, 42), context: .detailed(appName: "Xcode", windowTitle: "MosemoApp.swift · 코드 편집", webURL: nil))),
-            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, startedAt: at(9, 42), endedAt: at(10, 10), lastObservedAt: at(10, 10), context: .detailed(appName: "Firefox", windowTitle: "이슈 확인", webURL: URL(string: "https://github.com")))),
+            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, startedAt: at(9, 0), endedAt: at(9, 42), lastObservedAt: at(9, 42), context: .detailed(appName: "Xcode", windowTitle: "MosemoApp.swift · 코드 편집", webURL: nil), confirmedLabel: .label(id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!, displayName: "코딩"))),
+            .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, startedAt: at(9, 42), endedAt: at(10, 10), lastObservedAt: at(10, 10), context: .detailed(appName: "Firefox", windowTitle: "이슈 확인", webURL: URL(string: "https://github.com")), confirmedLabel: .unclassified)),
             .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, startedAt: at(10, 10), endedAt: at(10, 24), lastObservedAt: at(10, 24), context: .opaque)),
             .captureGap(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!, startedAt: at(10, 24), endedAt: at(10, 48), reason: "이 시간에는 활동을 관찰하지 못했습니다")),
             .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!, startedAt: at(10, 48), endedAt: at(11, 31), lastObservedAt: at(11, 31), context: .detailed(appName: "Notes", windowTitle: "작업 메모", webURL: nil))),

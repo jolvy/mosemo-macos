@@ -81,7 +81,12 @@ struct TimelineView: View {
                 Group {
                     switch model.style {
                     case .list:
-                        TimelineList(entries: model.presentations, timeZone: model.timeZone)
+                        HStack(alignment: .top, spacing: 20) {
+                            TimelineList(model: model)
+                            if let entry = model.presentations.first(where: { $0.id == model.selectedSegmentID }) {
+                                TimelineDetail(entry: entry, timeZone: model.timeZone)
+                            }
+                        }
                     case .timeAxis:
                         TimelineTimeAxis(model: model)
                             .id(model.axisKey)
@@ -102,32 +107,37 @@ struct TimelineView: View {
 }
 
 private struct TimelineList: View {
-    let entries: [TimelinePresentation]
-    let timeZone: TimeZone
+    @ObservedObject var model: TimelineViewModel
+    private var entries: [TimelinePresentation] { model.presentations }
+    private var timeZone: TimeZone { model.timeZone }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(entries) { entry in
-                    HStack(alignment: .top, spacing: 14) {
-                        Text(entry.timeText(timeZone: timeZone))
-                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 115, alignment: .leading)
-                        Image(systemName: entry.kind.symbol).foregroundStyle(color(for: entry.kind)).frame(width: 22)
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(spacing: 8) {
-                                Text(entry.title).font(.headline)
-                                TimelineBadge(entry: entry)
-                                Spacer()
-                                Text(entry.durationText).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Button { model.selectSegment(entry.id) } label: {
+                        HStack(alignment: .top, spacing: 14) {
+                            Text(entry.timeText(timeZone: timeZone))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 115, alignment: .leading)
+                            Image(systemName: entry.kind.symbol).foregroundStyle(color(for: entry.kind)).frame(width: 22)
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 8) {
+                                    Text(entry.title).font(.headline)
+                                    TimelineBadge(entry: entry)
+                                    Spacer()
+                                    Text(entry.durationText).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                }
+                                if !entry.context.isEmpty { Text(entry.context).font(.caption).foregroundStyle(.secondary) }
                             }
-                            if !entry.context.isEmpty { Text(entry.context).font(.caption).foregroundStyle(.secondary) }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(entry.kind == .gap ? Color(nsColor: .controlBackgroundColor) : .clear)
+                        .overlay(alignment: .bottom) { Divider() }
                     }
-                    .padding(12)
-                    .background(entry.kind == .gap ? Color(nsColor: .controlBackgroundColor) : .clear)
-                    .overlay(alignment: .bottom) { Divider() }
+                    .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("timeline-segment-\(entry.id)")
                 }
             }
         }
@@ -140,7 +150,15 @@ private struct TimelineBadge: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(entry.kind.label)
+            if let label = entry.labelStateText {
+                if entry.confirmedLabelText != nil {
+                    Label(label, systemImage: "checkmark.circle.fill")
+                } else {
+                    Text(label)
+                }
+            } else {
+                Text(entry.kind.label)
+            }
             if entry.isZeroLength { Text("0초") }
             if entry.isOpen { Text("열린 구간") }
         }
@@ -196,7 +214,7 @@ private struct TimelineTimeAxis: View {
                                             let top = segment.top
                                             if entry.isZeroLength || entry.displayEnd == nil {
                                                 Button { onSelect(entry.id) } label: {
-                                                    Label(entry.title + (entry.isZeroLength ? " · 0초 관찰" : " · 종료 시각 없음"), systemImage: entry.kind.symbol)
+                                                    Label(entry.axisTitle + (entry.isZeroLength ? " · 0초 관찰" : " · 종료 시각 없음"), systemImage: entry.kind.symbol)
                                                         .font(.caption2).lineLimit(1).padding(.horizontal, 6).padding(.vertical, 3)
                                                         .background(color(for: entry.kind).opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
                                                 }
@@ -205,7 +223,7 @@ private struct TimelineTimeAxis: View {
                                                 let blockHeight = segment.height
                                                 Button { onSelect(entry.id) } label: {
                                                     VStack(alignment: .leading, spacing: 1) {
-                                                        Text("\(entry.timeText(timeZone: timeZone)) · \(entry.title)").font(.caption.bold()).lineLimit(1)
+                                                        Text("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle)").font(.caption.bold()).lineLimit(1)
                                                         if blockHeight > 42 && !entry.context.isEmpty { Text(entry.context).font(.caption2).lineLimit(1) }
                                                     }
                                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -213,7 +231,9 @@ private struct TimelineTimeAxis: View {
                                                     .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
                                                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(color(for: entry.kind).opacity(0.35)))
                                                 }
-                                                .buttonStyle(.plain).frame(width: geometry.size.width - 12, height: blockHeight)
+                                                .buttonStyle(.plain)
+                                                .accessibilityLabel("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label)")
+                                                .frame(width: geometry.size.width - 12, height: blockHeight)
                                                 .offset(x: 6, y: top)
                                             }
                                         }
@@ -244,21 +264,34 @@ private struct TimelineTimeAxis: View {
             if entries.isEmpty {
                 Text("이 날짜에 기록이 없습니다").foregroundStyle(.secondary).frame(width: 220)
             } else if let selectedEntry {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(selectedEntry.title).font(.headline)
-                    TimelineBadge(entry: selectedEntry)
-                    if !selectedEntry.context.isEmpty { Text(selectedEntry.context).font(.callout).foregroundStyle(.secondary) }
-                    Divider()
-                    LabeledContent("시각", value: selectedEntry.timeText(timeZone: timeZone))
-                    LabeledContent("길이", value: selectedEntry.durationText)
-                    Spacer()
-                }
-                .padding(16).frame(width: 220).frame(maxHeight: .infinity, alignment: .topLeading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                TimelineDetail(entry: selectedEntry, timeZone: timeZone)
             }
         }
     }
 
+}
+
+private struct TimelineDetail: View {
+    let entry: TimelinePresentation
+    let timeZone: TimeZone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(entry.title).font(.headline)
+            TimelineBadge(entry: entry)
+            if let label = entry.labelStateText {
+                LabeledContent("확정 라벨", value: label)
+                    .accessibilityIdentifier("timeline-detail-confirmed-label")
+            }
+            if !entry.context.isEmpty { Text(entry.context).font(.callout).foregroundStyle(.secondary) }
+            Divider()
+            LabeledContent("시각", value: entry.timeText(timeZone: timeZone))
+            LabeledContent("길이", value: entry.durationText)
+            Spacer()
+        }
+        .padding(16).frame(width: 220).frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+    }
 }
 
 /// AppKit bounds observation supports the macOS 14 deployment target; initial

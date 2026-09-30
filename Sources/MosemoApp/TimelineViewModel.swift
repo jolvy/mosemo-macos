@@ -46,6 +46,17 @@ struct TimelinePresentation: Identifiable {
     let observedThrough: Date?
     let title: String
     let context: String
+    var confirmedLabel: TimelineConfirmedLabel? = nil
+
+    var confirmedLabelText: String? { confirmedLabel?.displayName }
+    var labelStateText: String? {
+        guard kind == .detail, !isOpen else { return nil }
+        return confirmedLabelText ?? "미확정"
+    }
+    var axisTitle: String {
+        guard let confirmedLabelText else { return title }
+        return confirmedLabelText + " · " + title
+    }
 
     var displayEnd: Date? {
         end
@@ -204,7 +215,8 @@ final class TimelineViewModel: ObservableObject {
                     let title = values.first ?? "상세 활동"
                     return TimelinePresentation(id: activity.id, kind: .detail, start: activity.startedAt,
                                                 end: activity.endedAt, observedThrough: activity.lastObservedAt,
-                                                title: title, context: values.filter { $0 != title }.joined(separator: " · "))
+                                                title: title, context: values.filter { $0 != title }.joined(separator: " · "),
+                                                confirmedLabel: activity.confirmedLabel)
                 }
             case .captureGap(let gap):
                 return TimelinePresentation(id: gap.id, kind: .gap, start: gap.startedAt, end: gap.endedAt,

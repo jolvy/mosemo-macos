@@ -260,7 +260,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
 
     public func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         do {
-            let response = try await authenticatedClient.activitiesGetTimeline(
+            let response = try await authenticatedClient.activitiesGetLabelTimeline(
                 query: .init(date: day.description)
             )
             switch response {

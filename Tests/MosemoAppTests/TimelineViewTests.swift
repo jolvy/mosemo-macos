@@ -30,6 +30,40 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(model.axis.segments.first?.height, 75)
     }
 
+    func testConfirmedLabelsRemainDistinctAndRefreshUpdatesSelectedSegment() async {
+        let start = instant(9, 0)
+        let end = instant(10, 0)
+        let labelID = uuid(80)
+        func activity(_ id: UInt8, _ label: TimelineConfirmedLabel?, open: Bool = false,
+                      opaque: Bool = false) -> TimelineSegment {
+            .activity(.init(id: uuid(id), startedAt: start, endedAt: open ? nil : end,
+                            lastObservedAt: end, context: opaque ? .opaque : .detailed(.init(appName: "Xcode")),
+                            confirmedLabel: label))
+        }
+        let fetcher = ChangingTimelineFetcher(segments: [
+            activity(1, .label(id: labelID, displayName: "개발")),
+            activity(2, .unclassified), activity(3, nil),
+            activity(4, .unclassified, open: true), activity(5, .unclassified, opaque: true),
+            .captureGap(.init(id: uuid(6), startedAt: start, endedAt: end, reason: "잠금"))
+        ])
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: start)
+        await waitUntil { model.loadState == .loaded }
+        XCTAssertEqual(model.presentations.map(\.confirmedLabelText), ["개발", "미분류", nil, nil, nil, nil])
+        XCTAssertEqual(model.presentations[2].labelStateText, "미확정")
+        XCTAssertNil(model.presentations[3].labelStateText)
+        model.selectSegment(uuid(1))
+        await fetcher.replace(with: [activity(1, .label(id: labelID, displayName: "코딩"))])
+        model.refresh()
+        await waitUntil { model.loadState == .loaded }
+        XCTAssertEqual(model.selectedSegmentID, uuid(1))
+        XCTAssertEqual(model.presentations.first?.confirmedLabelText, "코딩")
+        XCTAssertEqual(model.axis.segments.first?.entry.confirmedLabelText, "코딩")
+        await fetcher.replace(with: [activity(1, .unclassified)])
+        model.refresh()
+        await waitUntil { model.loadState == .loaded }
+        XCTAssertEqual(model.presentations.first?.confirmedLabelText, "미분류")
+    }
+
     func testEmptyAxisUsesAccountZoneAndDSTDayLength() async {
         let ny = TimeZone(identifier: "America/New_York")!
         for (date, height, count) in [
@@ -367,5 +401,14 @@ private actor ZoneRecordingFetcher: TimelineFetching {
 private struct AuthenticationFailureFetcher: TimelineFetching {
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         throw MosemoAPIError.authenticationRequired
+    }
+}
+
+private actor ChangingTimelineFetcher: TimelineFetching {
+    private var segments: [TimelineSegment]
+    init(segments: [TimelineSegment]) { self.segments = segments }
+    func replace(with segments: [TimelineSegment]) { self.segments = segments }
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        .init(date: day, timeZoneID: timeZoneID, segments: segments)
     }
 }
