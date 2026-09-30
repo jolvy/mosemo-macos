@@ -16,6 +16,89 @@ final class TimelineViewTests: XCTestCase {
         return day.startOfDay(timeZone: zone).addingTimeInterval(Double(hour * 60 + minute) * 60)
     }
 
+    func testFullDayAxisPlacesAfternoonRecordWithoutTrimmingMorning() async {
+        let model = TimelineViewModel(fetcher: ImmediateFetcher(result: .success(.init(
+            date: date(), timeZoneID: zone.identifier, segments: [
+                .activity(.init(id: uuid(1), startedAt: instant(15, 0), endedAt: instant(16, 0),
+                                lastObservedAt: instant(16, 0), context: .opaque))
+            ]))), timeZone: zone, now: instant(16, 0))
+        await waitUntil { model.loadState == .loaded }
+        XCTAssertEqual(model.axis.height, 1800)
+        XCTAssertEqual(model.axis.ticks.first?.label, "00:00")
+        XCTAssertEqual(model.axis.ticks.last?.label, "00:00")
+        XCTAssertEqual(model.axis.segments.first?.top, 1125)
+        XCTAssertEqual(model.axis.segments.first?.height, 75)
+    }
+
+    func testEmptyAxisUsesAccountZoneAndDSTDayLength() async {
+        let ny = TimeZone(identifier: "America/New_York")!
+        for (date, height, count) in [
+            (TimelineDate(year: 2026, month: 3, day: 8), 1725.0, 24),
+            (TimelineDate(year: 2026, month: 11, day: 1), 1875.0, 26)
+        ] {
+            let model = TimelineViewModel(fetcher: ZoneRecordingFetcher(), timeZone: ny,
+                                          now: date.startOfDay(timeZone: ny))
+            await waitUntil { model.loadState == .empty }
+            XCTAssertEqual(model.axis.height, height)
+            XCTAssertEqual(model.axis.ticks.count, count)
+            XCTAssertEqual(model.axis.start, date.startOfDay(timeZone: ny))
+            XCTAssertTrue(model.axis.segments.isEmpty)
+        }
+    }
+
+    func testAxisClipsDisplayOnlyAndPreservesOpenAndZeroMarkers() async {
+        let start = instant(0, 0)
+        let end = instant(24, 0)
+        let segments: [TimelineSegment] = [
+            .captureGap(.init(id: uuid(1), startedAt: start.addingTimeInterval(-3600),
+                             endedAt: start.addingTimeInterval(3600), reason: "boundary")),
+            .captureGap(.init(id: uuid(2), startedAt: end.addingTimeInterval(-3600),
+                             endedAt: end.addingTimeInterval(3600), reason: "boundary")),
+            .activity(.init(id: uuid(3), startedAt: instant(13, 0), endedAt: nil,
+                            lastObservedAt: instant(13, 5), context: .opaque)),
+            .activity(.init(id: uuid(4), startedAt: instant(14, 0), endedAt: instant(14, 0),
+                            lastObservedAt: instant(14, 0), context: .opaque))
+        ]
+        let model = TimelineViewModel(fetcher: ImmediateFetcher(result: .success(
+            .init(date: date(), timeZoneID: zone.identifier, segments: segments))),
+            timeZone: zone, now: start)
+        await waitUntil { model.loadState == .loaded }
+        XCTAssertEqual(model.axis.segments.map(\.top), [0, 1725, 975, 1050])
+        XCTAssertEqual(model.axis.segments.map(\.height), [75, 75, 0, 0])
+        XCTAssertEqual(model.axis.segments[0].entry.start, start.addingTimeInterval(-3600))
+        XCTAssertEqual(model.axis.segments[1].entry.end, end.addingTimeInterval(3600))
+        XCTAssertTrue(model.axis.segments[2].entry.isOpen)
+        XCTAssertTrue(model.axis.segments[3].entry.isZeroLength)
+    }
+
+    func testAxisEntryPositionIsRememberedPerDateAndClearedForAccountChanges() async {
+        let account = uuid(90)
+        let model = TimelineViewModel(fetcher: ZoneRecordingFetcher(), accountID: account,
+                                      timeZone: zone, now: instant(16, 0), clock: { self.instant(16, 0) })
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 1000)
+        model.saveAxisOffset(600)
+        model.selectStyle(.timeAxis)
+        model.selectStyle(.list)
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 600)
+        model.moveDate(by: -1)
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 0)
+        model.moveDate(by: 1)
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 600)
+        model.refresh()
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 600)
+        model.switchAccount(to: uuid(91))
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 1000)
+        model.saveAxisOffset(300)
+        model.switchAccount(to: uuid(91), timeZone: TimeZone(identifier: "UTC")!)
+        await waitUntil { model.loadState == .empty }
+        XCTAssertEqual(model.initialAxisOffset(viewportHeight: 400), 325)
+    }
+
     func testPresentationHandlesZeroOpenOpaqueGapAndUndisplayableContext() async {
         let selectedDay = date()
         let expected: [TimelineSegment] = [

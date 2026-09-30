@@ -39,7 +39,7 @@ struct TimelineView: View {
                     .environment(\.timeZone, model.timeZone)
                 Button { model.moveDate(by: 1) } label: { Image(systemName: "chevron.right") }
                     .accessibilityLabel("다음 날짜")
-                Button("오늘") { model.selectDate(TimelineDate(.now, timeZone: model.timeZone)) }
+                Button("오늘") { model.selectDate(TimelineDate(model.currentDate, timeZone: model.timeZone)) }
                 Button("새로고침") { model.refresh() }
                     .disabled(model.loadState == .loading)
                     .accessibilityIdentifier("timeline-refresh")
@@ -65,13 +65,13 @@ struct TimelineView: View {
                     Button("다시 시도") { model.refresh() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            case .empty:
+            case .empty where model.style == .list:
                 VStack(alignment: .leading, spacing: 12) {
                     selectedDateHeading
                     ContentUnavailableView("이 날짜에 기록이 없습니다", systemImage: "calendar.badge.exclamationmark", description: Text("다른 날짜를 선택해 보세요."))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            case .loaded:
+            case .empty, .loaded:
                 HStack {
                     Text(model.selectedDate.description).font(.title3.bold()).accessibilityIdentifier("timeline-selected-date")
                     Spacer()
@@ -83,12 +83,9 @@ struct TimelineView: View {
                     case .list:
                         TimelineList(entries: model.presentations, timeZone: model.timeZone)
                     case .timeAxis:
-                        TimelineTimeAxis(
-                            entries: model.presentations,
-                            day: model.day!,
-                            selectedSegmentID: model.selectedSegmentID,
-                            onSelect: model.selectSegment
-                        )
+                        TimelineTimeAxis(model: model)
+                            .id(model.axisKey)
+
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -154,88 +151,99 @@ private struct TimelineBadge: View {
 }
 
 private struct TimelineTimeAxis: View {
-    let entries: [TimelinePresentation]
-    let day: TimelineDay
-    let selectedSegmentID: UUID?
-    let onSelect: (UUID?) -> Void
-
-    private let pointsPerMinute: CGFloat = 1.25
-    private var timeZone: TimeZone { TimeZone(identifier: day.timeZoneID) ?? .current }
-    private var dayStart: Date { day.date.startOfDay(timeZone: timeZone) }
-    private var dayEnd: Date { day.date.adding(days: 1, timeZone: timeZone).startOfDay(timeZone: timeZone) }
-    private var visibleStart: Date {
-        guard let earliest = entries.map(\.start).min() else { return dayStart }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        return max(dayStart, calendar.dateInterval(of: .hour, for: earliest)?.start ?? earliest)
+    @ObservedObject var model: TimelineViewModel
+    @State private var didRestore = false
+    @State private var restorationOffset: Double?
+    private var axis: TimelineAxis { model.axis }
+    private var entries: [TimelinePresentation] { model.presentations }
+    private var timeZone: TimeZone { model.timeZone }
+    private var height: CGFloat { axis.height }
+    private var selectedEntry: TimelinePresentation? {
+        entries.first { $0.id == model.selectedSegmentID } ?? entries.first
     }
-    private var visibleEnd: Date {
-        let latest = entries.map { $0.displayEnd ?? $0.start }.max() ?? dayStart
-        let isToday = TimelineDate(.now, timeZone: timeZone) == day.date
-        let current = isToday ? min(.now, dayEnd) : dayEnd
-        let extent = max(latest, current)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let roundedEnd = calendar.dateInterval(of: .hour, for: extent)?.end ?? extent
-        return min(dayEnd, max(visibleStart.addingTimeInterval(3600), roundedEnd))
-    }
-    private var totalMinutes: Int { max(60, Int(visibleEnd.timeIntervalSince(visibleStart) / 60)) }
-    private var height: CGFloat { CGFloat(totalMinutes) * pointsPerMinute }
-    private var selectedEntry: TimelinePresentation? { entries.first { $0.id == selectedSegmentID } ?? entries.first }
-    private var hourTicks: [Int] { Array(stride(from: 0, through: totalMinutes / 60, by: 1)) }
+    private func onSelect(_ id: UUID?) { model.selectSegment(id) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
-            ScrollView {
-                HStack(alignment: .top, spacing: 10) {
-                    ZStack(alignment: .topTrailing) {
-                        ForEach(hourTicks, id: \.self) { hour in
-                            Text(hourLabel(hour))
-                                .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                                .offset(y: max(0, CGFloat(hour * 60) * pointsPerMinute - 6))
-                        }
-                    }
-                    .frame(width: 44, height: height, alignment: .top)
-
-                    GeometryReader { geometry in
+            GeometryReader { viewport in
+                ScrollViewReader { proxy in
+                    ScrollView {
                         ZStack(alignment: .topLeading) {
-                            ForEach(hourTicks, id: \.self) { hour in
-                                Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
-                                    .offset(y: CGFloat(hour * 60) * pointsPerMinute)
-                            }
-                            ForEach(entries) { entry in
-                                let top = position(of: entry.start)
-                                if entry.isZeroLength || entry.displayEnd == nil {
-                                    Button { onSelect(entry.id) } label: {
-                                        Label(entry.title + (entry.isZeroLength ? " · 0초 관찰" : " · 종료 시각 없음"), systemImage: entry.kind.symbol)
-                                            .font(.caption2).lineLimit(1).padding(.horizontal, 6).padding(.vertical, 3)
-                                            .background(color(for: entry.kind).opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                                    }
-                                    .buttonStyle(.plain).offset(x: max(0, geometry.size.width - 205), y: top - 12).zIndex(2)
-                                } else {
-                                    let blockHeight = max(5, position(of: entry.displayEnd!) - top)
-                                    Button { onSelect(entry.id) } label: {
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text("\(entry.timeText(timeZone: timeZone)) · \(entry.title)").font(.caption.bold()).lineLimit(1)
-                                            if blockHeight > 42 && !entry.context.isEmpty { Text(entry.context).font(.caption2).lineLimit(1) }
-                                        }
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                        .padding(.horizontal, 7).padding(.vertical, 3)
-                                        .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
-                                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(color(for: entry.kind).opacity(0.35)))
-                                    }
-                                    .buttonStyle(.plain).frame(width: geometry.size.width - 12, height: blockHeight)
-                                    .offset(x: 6, y: top)
+                            VStack(spacing: 0) {
+                                ForEach(0...Int(axis.height / TimelineAxis.pointsPerMinute), id: \.self) { minute in
+                                    Color.clear.frame(width: 1, height: TimelineAxis.pointsPerMinute).id(minute)
                                 }
                             }
+                            .accessibilityHidden(true)
+                            HStack(alignment: .top, spacing: 10) {
+                                ZStack(alignment: .topTrailing) {
+                                    ForEach(axis.ticks) { tick in
+                                        Text(tick.label).accessibilityIdentifier("timeline-tick-\(tick.id)")
+                                            .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                            .offset(y: max(0, tick.position - 6))
+                                    }
+                                }
+                                .frame(width: 44, height: height, alignment: .top)
+
+                                GeometryReader { geometry in
+                                    ZStack(alignment: .topLeading) {
+                                        ForEach(axis.ticks) { tick in
+                                            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+                                                .offset(y: tick.position)
+                                        }
+                                        ForEach(axis.segments) { segment in
+                                            let entry = segment.entry
+                                            let top = segment.top
+                                            if entry.isZeroLength || entry.displayEnd == nil {
+                                                Button { onSelect(entry.id) } label: {
+                                                    Label(entry.title + (entry.isZeroLength ? " · 0초 관찰" : " · 종료 시각 없음"), systemImage: entry.kind.symbol)
+                                                        .font(.caption2).lineLimit(1).padding(.horizontal, 6).padding(.vertical, 3)
+                                                        .background(color(for: entry.kind).opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                                                }
+                                                .buttonStyle(.plain).offset(x: max(0, geometry.size.width - 205), y: max(0, min(height - 24, top - 12))).zIndex(2)
+                                            } else {
+                                                let blockHeight = segment.height
+                                                Button { onSelect(entry.id) } label: {
+                                                    VStack(alignment: .leading, spacing: 1) {
+                                                        Text("\(entry.timeText(timeZone: timeZone)) · \(entry.title)").font(.caption.bold()).lineLimit(1)
+                                                        if blockHeight > 42 && !entry.context.isEmpty { Text(entry.context).font(.caption2).lineLimit(1) }
+                                                    }
+                                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                                    .padding(.horizontal, 7).padding(.vertical, 3)
+                                                    .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
+                                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(color(for: entry.kind).opacity(0.35)))
+                                                }
+                                                .buttonStyle(.plain).frame(width: geometry.size.width - 12, height: blockHeight)
+                                                .offset(x: 6, y: top)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(height: height)
+                            }
                         }
+                        .frame(height: height + 24)
+                        .background(TimelineScrollObserver { offset in
+                            if let target = restorationOffset, offset > 0 || target == 0 {
+                                didRestore = true
+                            }
+                            if didRestore { model.saveAxisOffset(offset) }
+                        })
                     }
-                    .frame(height: height)
+                    .accessibilityIdentifier("timeline-time-axis")
+                    .task {
+                        let offset = model.initialAxisOffset(viewportHeight: viewport.size.height)
+                        restorationOffset = offset
+                        await Task.yield()
+                        proxy.scrollTo(Int((offset / TimelineAxis.pointsPerMinute).rounded()), anchor: .top)
+                        if offset == 0 { didRestore = true }
+                    }
                 }
             }
-            .accessibilityIdentifier("timeline-time-axis")
 
-            if let selectedEntry {
+            if entries.isEmpty {
+                Text("이 날짜에 기록이 없습니다").foregroundStyle(.secondary).frame(width: 220)
+            } else if let selectedEntry {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(selectedEntry.title).font(.headline)
                     TimelineBadge(entry: selectedEntry)
@@ -251,18 +259,45 @@ private struct TimelineTimeAxis: View {
         }
     }
 
-    private func position(of date: Date) -> CGFloat {
-        CGFloat(max(0, min(visibleEnd.timeIntervalSince(visibleStart), date.timeIntervalSince(visibleStart))) / 60) * pointsPerMinute
-    }
+}
 
-    private func hourLabel(_ offset: Int) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let date = calendar.date(byAdding: .hour, value: offset, to: visibleStart) ?? visibleStart
-        let formatter = DateFormatter()
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
+/// AppKit bounds observation supports the macOS 14 deployment target; initial
+/// positioning still uses SwiftUI's ScrollViewReader.
+private struct TimelineScrollObserver: NSViewRepresentable {
+    let onScroll: (Double) -> Void
+
+    func makeNSView(context: Context) -> ObserverView { ObserverView(onScroll: onScroll) }
+    func updateNSView(_ view: ObserverView, context: Context) { view.onScroll = onScroll }
+    static func dismantleNSView(_ view: ObserverView, coordinator: ()) { view.stopObserving() }
+
+    final class ObserverView: NSView {
+        var onScroll: (Double) -> Void
+        private var observation: NSObjectProtocol?
+
+        init(onScroll: @escaping (Double) -> Void) {
+            self.onScroll = onScroll
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stopObserving()
+            guard window != nil, let clipView = enclosingScrollView?.contentView else { return }
+            clipView.postsBoundsChangedNotifications = true
+            observation = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: clipView, queue: .main
+            ) { [weak self, weak clipView] _ in
+                guard let clipView else { return }
+                self?.onScroll(clipView.bounds.origin.y)
+            }
+        }
+
+        func stopObserving() {
+            if let observation { NotificationCenter.default.removeObserver(observation) }
+            observation = nil
+        }
     }
 }
 
