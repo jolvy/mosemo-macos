@@ -16,6 +16,19 @@ final class TimelineViewTests: XCTestCase {
         return day.startOfDay(timeZone: zone).addingTimeInterval(Double(hour * 60 + minute) * 60)
     }
 
+    func testAcceptedUploadRefreshesTheSelectedHistoricalDate() async {
+        let fetcher = RecordingFetcher()
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: instant(16, 0))
+        await waitUntil { model.loadState == .empty }
+        let historical = date(2026, 9, 20)
+        model.selectDate(historical)
+        await waitUntil { model.day?.date == historical }
+        await model.activityUploaded()
+        let requests = await fetcher.requests()
+        XCTAssertEqual(requests, [date(), historical, historical])
+        XCTAssertEqual(model.day?.date, historical)
+    }
+
     func testDetailUsesCapturedTitleForEachKindAndDoesNotInventMissingValues() {
         func entry(_ details: TimelineActivity.Details) -> TimelinePresentation {
             TimelinePresentation(id: uuid(1), kind: .detail, start: instant(9, 0),

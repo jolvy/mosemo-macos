@@ -75,6 +75,8 @@ final class LabelReviewViewModel: ObservableObject {
     private let writer: any LabelConfirmationWriting
     let timeZone: TimeZone
     private let pollingSleep: @MainActor (UInt64) async throws -> Void
+    private var uploadRefreshPending = false
+    private var isRefreshingUploads = false
     private var requestID = UUID()
     private var retryDecisions: [LabelConfirmationDecision]?
     private var retryAvailableAt: Date?
@@ -141,7 +143,8 @@ final class LabelReviewViewModel: ObservableObject {
             do { try await pollingSleep(2_000_000_000) }
             catch { return }
             guard !Task.isCancelled, selectedDate == day, hasOutstandingProposals else { return }
-            guard loadState == .loaded, !isSubmitting, retryConflictReview == nil else { continue }
+            guard loadState == .loaded, !isSubmitting, !isRefreshingUploads,
+                  retryConflictReview == nil else { continue }
             let id = requestID
             do {
                 let snapshot = try await fetcher.fetchLabelReview(day: day)
@@ -152,6 +155,36 @@ final class LabelReviewViewModel: ObservableObject {
                 // Keep the visible result and retry on the next interval.
             }
         }
+    }
+
+    func activityUploaded() async {
+        uploadRefreshPending = true
+        guard !isSubmitting, !isRefreshingUploads, retryConflictReview == nil else { return }
+        isRefreshingUploads = true
+        defer { isRefreshingUploads = false }
+        while uploadRefreshPending, !isSubmitting, retryConflictReview == nil {
+            uploadRefreshPending = false
+            let id = UUID()
+            requestID = id
+            let date = selectedDate
+            do {
+                let snapshot = try await fetcher.fetchLabelReview(day: date)
+                guard requestID == id, selectedDate == date else { continue }
+                review = review?.replacing(with: snapshot) ?? LabelReviewState(snapshot: snapshot)
+                loadState = .loaded
+                reconcileInteractionState()
+            } catch {
+                guard requestID == id else { continue }
+                if review == nil {
+                    loadState = .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요.")
+                }
+            }
+        }
+    }
+
+    private func resumeUploadRefresh() {
+        guard uploadRefreshPending else { return }
+        Task { await activityUploaded() }
     }
 
     func load() async {
@@ -331,6 +364,7 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     func retrySubmission() async {
+        defer { resumeUploadRefresh() }
         guard let retryDecisions, let review, canRetrySubmission, !isSubmitting else { return }
         isSubmitting = true
         requestID = UUID()
@@ -355,6 +389,7 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     private func submit(_ decisions: [LabelConfirmationDecision], to originalReview: LabelReviewState) async {
+        defer { resumeUploadRefresh() }
         requestID = UUID()
         let id = requestID
         isSubmitting = true

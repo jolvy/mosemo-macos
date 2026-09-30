@@ -1,5 +1,6 @@
 import AppKit
 import CollectorCore
+import Combine
 import MosemoAPI
 import SwiftUI
 
@@ -23,6 +24,7 @@ struct DesktopRootView: View {
                     reviewFetcher: LiveLabelReviewFetcher(reader: reviewReader),
                     reviewWriter: timelineClient,
                     signOut: auth.signOut,
+                    acceptedActivityUploads: model.acceptedActivityUploads.eraseToAnyPublisher(),
                     authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) }
                 )
                 .id("\(account.id):\(account.timeZoneID)")
@@ -65,6 +67,8 @@ struct MainWorkspaceView: View {
     @StateObject private var timelineModel: TimelineViewModel
     @StateObject private var reviewModel: LabelReviewViewModel
 
+    private let accountID: UUID
+    private let acceptedActivityUploads: AnyPublisher<UUID, Never>
     let signOut: (() -> Void)?
     let showsPreviewNotice: Bool
 
@@ -74,10 +78,13 @@ struct MainWorkspaceView: View {
         reviewFetcher: any LabelReviewFetching,
         reviewWriter: any LabelConfirmationWriting,
         signOut: (() -> Void)?,
+        acceptedActivityUploads: AnyPublisher<UUID, Never> = Empty().eraseToAnyPublisher(),
         authenticationFailed: @escaping @MainActor () -> Void = {},
         showsPreviewNotice: Bool = false,
         timelineNow: Date? = nil
     ) {
+        self.accountID = account.id
+        self.acceptedActivityUploads = acceptedActivityUploads
         self.signOut = signOut
         self.showsPreviewNotice = showsPreviewNotice
         let timeZone = TimeZone(identifier: account.timeZoneID) ?? .current
@@ -112,6 +119,11 @@ struct MainWorkspaceView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: 720, minHeight: 520)
+        .onReceive(acceptedActivityUploads) { uploadedAccountID in
+            guard uploadedAccountID == accountID else { return }
+            Task { await timelineModel.activityUploaded() }
+            Task { await reviewModel.activityUploaded() }
+        }
     }
 
     private var sidebar: some View {
