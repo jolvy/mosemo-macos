@@ -203,6 +203,8 @@ final class TimelineViewModel: ObservableObject {
     @Published private(set) var loadState: TimelineLoadState = .loading
     @Published private(set) var isRefreshing = false
     @Published private(set) var day: TimelineDay?
+    @Published private(set) var refreshError: String?
+    @Published private(set) var removedSelectionNotice = false
 
     private var axisOffsets: [String: Double] = [:]
     private let clock: () -> Date
@@ -281,12 +283,17 @@ final class TimelineViewModel: ObservableObject {
 
     func selectStyle(_ style: TimelineStyle) { self.style = style }
 
-    func selectSegment(_ id: UUID?) { selectedSegmentID = id }
+    func selectSegment(_ id: UUID?) {
+        selectedSegmentID = id
+        if id != nil { removedSelectionNotice = false }
+    }
 
     func selectDate(_ date: TimelineDate) {
         guard selectedDate != date || day == nil else { return }
         selectedDate = date
         selectedSegmentID = nil
+        removedSelectionNotice = false
+        refreshError = nil
         load(date)
     }
 
@@ -317,6 +324,8 @@ final class TimelineViewModel: ObservableObject {
         self.accountID = accountID
         axisOffsets.removeAll()
         day = nil
+        refreshError = nil
+        removedSelectionNotice = false
         selectedSegmentID = nil
         if let timeZone {
             accountTimeZone = timeZone
@@ -329,8 +338,10 @@ final class TimelineViewModel: ObservableObject {
         requestTask?.cancel()
         let id = UUID()
         requestID = id
-        day = nil
-        loadState = .loading
+        let keepsVisibleSnapshot = day?.date == date
+        if !keepsVisibleSnapshot { day = nil }
+        refreshError = nil
+        if !keepsVisibleSnapshot { loadState = .loading }
         isRefreshing = refreshing
         let timeZoneID = timeZone.identifier
         requestTask = Task { [weak self, fetcher] in
@@ -338,12 +349,26 @@ final class TimelineViewModel: ObservableObject {
                 let result = try await fetcher.fetch(day: date, timeZoneID: timeZoneID)
                 guard !Task.isCancelled, let self, self.requestID == id,
                       self.selectedDate == date, result.date == date else { return }
-                self.day = result
+                if self.day != result { self.day = result }
+                if let selected = self.selectedSegmentID,
+                   !result.segments.contains(where: { $0.id == selected }) {
+                    self.selectedSegmentID = nil
+                    self.removedSelectionNotice = true
+                }
                 self.isRefreshing = false
+                self.refreshError = nil
                 self.loadState = self.presentations.isEmpty ? .empty : .loaded
             } catch {
                 guard !Task.isCancelled, let self, self.requestID == id else { return }
                 self.isRefreshing = false
+                if self.day?.date == date {
+                    self.refreshError = Self.message(for: error)
+                    self.loadState = self.presentations.isEmpty ? .empty : .loaded
+                    if let apiError = error as? MosemoAPIError, apiError == .authenticationRequired {
+                        self.authenticationFailed()
+                    }
+                    return
+                }
                 if let apiError = error as? MosemoAPIError, apiError == .authenticationRequired {
                     self.loadState = .failed("로그인이 필요합니다.")
                     self.authenticationFailed()

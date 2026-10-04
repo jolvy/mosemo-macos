@@ -94,15 +94,19 @@ struct LabelReviewSnapshot: Equatable, Sendable {
 struct LabelReviewState: Equatable, Sendable {
     let snapshot: LabelReviewSnapshot
     private let confirmedVersions: [UUID: String]
+    private let pinnedGroups: [[UUID]]
 
     init(snapshot: LabelReviewSnapshot) {
         self.snapshot = snapshot
         confirmedVersions = [:]
+        pinnedGroups = []
     }
 
-    private init(snapshot: LabelReviewSnapshot, confirmedVersions: [UUID: String]) {
+    private init(snapshot: LabelReviewSnapshot, confirmedVersions: [UUID: String], pinnedGroups: [[UUID]]) {
         self.snapshot = snapshot
         self.confirmedVersions = confirmedVersions
+        let currentIDs = Set(snapshot.segments.map(\.id))
+        self.pinnedGroups = pinnedGroups.map { $0.filter(currentIDs.contains) }.filter { !$0.isEmpty }
     }
 
     var labels: [LabelReviewLabel] { snapshot.labels }
@@ -114,8 +118,28 @@ struct LabelReviewState: Equatable, Sendable {
 
     var groups: [LabelReviewGroup] {
         var groupedSegments: [[LabelReviewSegment]] = []
-        for segment in pendingSegments {
+        let segments = pendingSegments
+        let pinnedByID = Dictionary(uniqueKeysWithValues: pinnedGroups.flatMap { group in
+            group.map { ($0, group) }
+        })
+        var index = 0
+        while index < segments.count {
+            let segment = segments[index]
+            if let pinned = pinnedByID[segment.id] {
+                var members = [segment]
+                var next = index + 1
+                while next < segments.count,
+                      pinned.contains(segments[next].id),
+                      members.last?.endedAt == segments[next].startedAt {
+                    members.append(segments[next])
+                    next += 1
+                }
+                groupedSegments.append(members)
+                index += members.count
+                continue
+            }
             if let previous = groupedSegments.last?.last,
+               pinnedByID[previous.id] == nil,
                previous.endedAt == segment.startedAt,
                previous.sourceGroupVersion == segment.sourceGroupVersion,
                previous.proposal == segment.proposal {
@@ -123,6 +147,7 @@ struct LabelReviewState: Equatable, Sendable {
             } else {
                 groupedSegments.append([segment])
             }
+            index += 1
         }
         return groupedSegments.map(LabelReviewGroup.init(segments:))
     }
@@ -142,10 +167,25 @@ struct LabelReviewState: Equatable, Sendable {
             }) else { continue }
             nextConfirmedVersions[decision.segmentID] = decision.segmentVersion
         }
-        return Self(snapshot: snapshot, confirmedVersions: nextConfirmedVersions)
+        return Self(snapshot: snapshot, confirmedVersions: nextConfirmedVersions, pinnedGroups: pinnedGroups)
     }
 
     func replacing(with snapshot: LabelReviewSnapshot) -> Self {
-        Self(snapshot: snapshot, confirmedVersions: confirmedVersions)
+        Self(snapshot: snapshot, confirmedVersions: confirmedVersions, pinnedGroups: pinnedGroups)
+    }
+
+    func pinning(_ group: LabelReviewGroup) -> Self {
+        let ids = group.segments.map(\.id)
+        guard ids.count > 1 else { return self }
+        let members = Set(ids)
+        if pinnedGroups.contains(where: { members.isSubset(of: Set($0)) }) { return self }
+        var next = pinnedGroups.filter { Set($0).isDisjoint(with: ids) }
+        next.append(ids)
+        return Self(snapshot: snapshot, confirmedVersions: confirmedVersions, pinnedGroups: next)
+    }
+
+    func keepingPinnedGroups(intersecting segmentIDs: Set<UUID>) -> Self {
+        let next = pinnedGroups.filter { !Set($0).isDisjoint(with: segmentIDs) }
+        return Self(snapshot: snapshot, confirmedVersions: confirmedVersions, pinnedGroups: next)
     }
 }

@@ -40,9 +40,6 @@ struct TimelineView: View {
                 Button { model.moveDate(by: 1) } label: { Image(systemName: "chevron.right") }
                     .accessibilityLabel("다음 날짜")
                 Button("오늘") { model.selectDate(TimelineDate(model.currentDate, timeZone: model.timeZone)) }
-                Button("새로고침") { model.refresh() }
-                    .disabled(model.loadState == .loading)
-                    .accessibilityIdentifier("timeline-refresh")
                 Text("\(model.timeZone.identifier) 기준")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 16)
@@ -54,9 +51,29 @@ struct TimelineView: View {
 
             Divider()
 
+            if let message = model.refreshError {
+                HStack(spacing: 8) {
+                    Label("최신 기록을 반영하지 못했습니다. \(message)", systemImage: "exclamationmark.triangle")
+                    Spacer()
+                    Button("다시 시도") { model.refresh() }
+                }
+                .font(.callout)
+                .padding(9)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            } else if model.isRefreshing {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("최신 기록 확인 중").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if model.removedSelectionNotice {
+                Label("기록 구성이 변경되어 선택한 구간이 사라졌습니다.", systemImage: "info.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
             switch model.loadState {
             case .loading:
-                ProgressView(model.isRefreshing ? "새로고침 중…" : "타임라인을 불러오는 중…")
+                ProgressView("타임라인을 불러오는 중…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 VStack(alignment: .leading, spacing: 12) {

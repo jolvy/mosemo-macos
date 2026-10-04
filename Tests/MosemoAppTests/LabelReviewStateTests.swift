@@ -15,6 +15,27 @@ final class LabelReviewStateTests: XCTestCase {
         XCTAssertEqual(review.groups[6].proposal, .waiting)
     }
 
+    func testPinnedGroupDoesNotAbsorbNewAdjacentSegmentAndCanBeUnpinned() {
+        let response = MockLabelReviewFetcher.demo.response
+        let review = LabelReviewState(snapshot: LabelReviewSnapshot(response: response))
+        let pinned = review.pinning(review.groups[0])
+        let first = response.segments[0]
+        let inserted = LabelReviewSegmentDTO(
+            id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!,
+            version: "new", startedAt: first.endedAt, endedAt: first.endedAt,
+            appName: "New app", context: first.context, proposal: first.proposal
+        )
+        var segments = response.segments
+        segments.insert(inserted, at: 1)
+        let refreshed = pinned.replacing(with: LabelReviewSnapshot(
+            response: LabelReviewResponseDTO(labels: response.labels, segments: segments)
+        ))
+
+        XCTAssertEqual(refreshed.groups.prefix(3).map { $0.segments.count }, [1, 1, 2])
+        let unlocked = refreshed.keepingPinnedGroups(intersecting: [])
+        XCTAssertEqual(unlocked.groups[0].segments.count, 4)
+    }
+
     func testConfirmingGroupRemovesOnlyMatchingVersionsAndSurvivesRefresh() {
         let response = MockLabelReviewFetcher.demo.response
         let review = LabelReviewState(snapshot: LabelReviewSnapshot(response: response))
@@ -155,6 +176,57 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedSegmentIDs, [segment.id])
         XCTAssertEqual(model.selection(for: segment), .unclassified)
         XCTAssertEqual(model.loadState, .loaded)
+    }
+
+    func testExpandedGroupStaysPinnedAcrossRefreshAndNewAdjacentSegmentIsSeparate() async {
+        let response = MockLabelReviewFetcher.demo.response
+        let first = response.segments[0]
+        let inserted = LabelReviewSegmentDTO(
+            id: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!,
+            version: "new", startedAt: first.endedAt, endedAt: first.endedAt,
+            appName: "새 앱", context: first.context, proposal: first.proposal
+        )
+        var refreshedSegments = response.segments
+        refreshedSegments.insert(inserted, at: 1)
+        let fetcher = SnapshotSequenceLabelReviewFetcher(responses: [
+            response, LabelReviewResponseDTO(labels: response.labels, segments: refreshedSegments)
+        ], confirmedByID: [:])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let originalIDs = Set(model.groups[0].segments.map(\.id))
+        model.toggleExpansion(for: model.groups[0])
+
+        await model.activityUploaded()
+
+        XCTAssertEqual(model.groups.prefix(3).map { $0.segments.count }, [1, 1, 2])
+        XCTAssertFalse(model.expandedGroupIDs.contains(inserted.id))
+        XCTAssertEqual(Set(model.groups.filter { model.expandedGroupIDs.contains($0.id) }
+            .flatMap { $0.segments.map(\.id) }), originalIDs)
+
+        for group in model.groups where model.expandedGroupIDs.contains(group.id) {
+            model.toggleExpansion(for: group)
+        }
+        XCTAssertEqual(model.groups[0].segments.count, 4)
+        XCTAssertFalse(model.expandedGroupIDs.contains(model.groups[0].id))
+    }
+
+    func testAutomaticRefreshFailureKeepsReviewAndCanRetry() async {
+        let snapshot = LabelReviewSnapshot(response: MockLabelReviewFetcher.demo.response)
+        let fetcher = SequenceLabelReviewFetcher(results: [
+            .success(snapshot), .failure(.offline), .success(snapshot)
+        ])
+        let model = LabelReviewViewModel(fetcher: fetcher, writer: RecordingLabelConfirmationWriter())
+        await model.load()
+        let originalGroupCount = model.groups.count
+
+        await model.activityUploaded()
+        XCTAssertEqual(model.loadState, .loaded)
+        XCTAssertEqual(model.groups.count, originalGroupCount)
+        XCTAssertNotNil(model.refreshError)
+
+        await model.load()
+        XCTAssertNil(model.refreshError)
+        XCTAssertEqual(model.groups.count, originalGroupCount)
     }
 
     func testAutomaticRefreshWaitsTwoSecondsAndStopsWhenProposalsComplete() async {
@@ -316,7 +388,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectionState(for: group), .none)
     }
 
-    func testDateChangeFetchesSelectedDayAndRefreshRestoresServerState() async {
+    func testDateChangeFetchesSelectedDayAndRetainsLocallyConfirmedSegments() async {
         let fetcher = RecordingLabelReviewFetcher(response: MockLabelReviewFetcher.demo.response)
         let zone = TimeZone(identifier: "Asia/Seoul")!
         let today = TimelineDate(year: 2026, month: 9, day: 27)
@@ -332,7 +404,7 @@ final class LabelReviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.segmentCount, 7)
 
         await model.load()
-        XCTAssertEqual(model.segmentCount, 10)
+        XCTAssertEqual(model.segmentCount, 7)
         model.selectDate(TimelineDate(year: 2026, month: 9, day: 26))
         await waitUntil { model.loadState == .loaded && model.selectedDate.day == 26 }
 
