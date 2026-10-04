@@ -176,7 +176,6 @@ struct LabelReviewState: Equatable, Sendable {
 
     func pinning(_ group: LabelReviewGroup) -> Self {
         let ids = group.segments.map(\.id)
-        guard ids.count > 1 else { return self }
         let members = Set(ids)
         if pinnedGroups.contains(where: { members.isSubset(of: Set($0)) }) { return self }
         var next = pinnedGroups.filter { Set($0).isDisjoint(with: ids) }

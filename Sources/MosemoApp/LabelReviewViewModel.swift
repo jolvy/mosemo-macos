@@ -156,6 +156,7 @@ final class LabelReviewViewModel: ObservableObject {
                 refreshError = nil
                 reconcileInteractionState()
             } catch {
+                guard !(error is CancellationError), !Task.isCancelled else { return }
                 guard requestID == id else { continue }
                 refreshError = "최신 제안을 불러오지 못했습니다. 다시 시도해 주세요."
             }
