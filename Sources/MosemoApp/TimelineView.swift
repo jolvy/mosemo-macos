@@ -4,6 +4,7 @@ import MosemoAPI
 struct TimelineView: View {
     @ObservedObject var model: TimelineViewModel
     let showsPreviewNotice: Bool
+    var previewUpload: (() -> Void)? = nil
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
@@ -29,6 +30,13 @@ struct TimelineView: View {
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(alignment: .trailing) {
+                        if let previewUpload {
+                            Button("새 기록 시뮬레이션", action: previewUpload)
+                                .accessibilityIdentifier("timeline-preview-upload")
+                                .padding(.trailing, 10)
+                        }
+                    }
             }
 
             HStack(spacing: 10) {
@@ -118,6 +126,10 @@ struct TimelineView: View {
 
 private struct TimelineList: View {
     @ObservedObject var model: TimelineViewModel
+    @State private var isAtBottom = false
+    @State private var shouldFollowNewItems = false
+    @State private var previousEntryIDs: Set<UUID> = []
+    @State private var scrollToBottomRequest = 0
     private var entries: [TimelinePresentation] { model.presentations }
     private var timeZone: TimeZone { model.timeZone }
 
@@ -152,6 +164,22 @@ private struct TimelineList: View {
                     .accessibilityIdentifier("timeline-segment-\(entry.id)")
                 }
             }
+        }
+        .background(TimelineListScrollObserver(scrollToBottomRequest: scrollToBottomRequest) { atBottom in
+            isAtBottom = atBottom
+            if model.isRefreshing { shouldFollowNewItems = atBottom }
+        })
+        .onAppear { previousEntryIDs = Set(entries.map(\.id)) }
+        .onChange(of: model.isRefreshing) { _, isRefreshing in
+            if isRefreshing { shouldFollowNewItems = isAtBottom }
+        }
+        .onChange(of: entries.map(\.id)) { _, ids in
+            let currentIDs = Set(ids)
+            let addedItems = !currentIDs.subtracting(previousEntryIDs).isEmpty
+            previousEntryIDs = currentIDs
+            guard addedItems, shouldFollowNewItems else { return }
+            shouldFollowNewItems = false
+            scrollToBottomRequest += 1
         }
         .accessibilityIdentifier("timeline-list")
     }
@@ -393,6 +421,92 @@ private struct TimelineScrollObserver: NSViewRepresentable {
         func stopObserving() {
             if let observation { NotificationCenter.default.removeObserver(observation) }
             observation = nil
+        }
+    }
+}
+
+private struct TimelineListScrollObserver: NSViewRepresentable {
+    let scrollToBottomRequest: Int
+    let onScroll: (Bool) -> Void
+
+    func makeNSView(context: Context) -> ObserverView {
+        ObserverView(scrollToBottomRequest: scrollToBottomRequest, onScroll: onScroll)
+    }
+    func updateNSView(_ view: ObserverView, context: Context) {
+        view.onScroll = onScroll
+        view.handleScrollToBottomRequest(scrollToBottomRequest)
+    }
+    static func dismantleNSView(_ view: ObserverView, coordinator: ()) { view.stopObserving() }
+
+    final class ObserverView: NSView {
+        var onScroll: (Bool) -> Void
+        private var observation: NSObjectProtocol?
+        private weak var scrollView: NSScrollView?
+        private weak var clipView: NSClipView?
+        private var lastOriginY: CGFloat?
+        private var lastScrollToBottomRequest: Int
+
+        init(scrollToBottomRequest: Int, onScroll: @escaping (Bool) -> Void) {
+            lastScrollToBottomRequest = scrollToBottomRequest
+            self.onScroll = onScroll
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stopObserving()
+            guard window != nil, let scrollView = enclosingScrollView else { return }
+            self.scrollView = scrollView
+            let clipView = scrollView.contentView
+            self.clipView = clipView
+            clipView.postsBoundsChangedNotifications = true
+            DispatchQueue.main.async { [weak self] in self?.reportBottomState() }
+            observation = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: clipView, queue: .main
+            ) { [weak self] _ in
+                guard let self, let clipView = self.clipView else { return }
+                let originY = clipView.bounds.origin.y
+                guard self.lastOriginY.map({ abs($0 - originY) > 0.5 }) ?? true else { return }
+                self.lastOriginY = originY
+                self.reportBottomState()
+            }
+        }
+
+        private func reportBottomState() {
+            guard let clipView, let documentView = clipView.documentView else { return }
+            let originY = clipView.bounds.origin.y
+            lastOriginY = originY
+            if let scroller = scrollView?.verticalScroller {
+                onScroll(CGFloat(scroller.floatValue) + scroller.knobProportion >= 0.99)
+                return
+            }
+            let maximumOffset = max(0, documentView.frame.height - clipView.bounds.height)
+            onScroll(maximumOffset - originY <= 12)
+        }
+
+        func handleScrollToBottomRequest(_ request: Int) {
+            guard request > lastScrollToBottomRequest else { return }
+            lastScrollToBottomRequest = request
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let scrollView = self.scrollView,
+                      let clipView = self.clipView, let documentView = clipView.documentView else { return }
+                scrollView.layoutSubtreeIfNeeded()
+                documentView.layoutSubtreeIfNeeded()
+                let bottom = max(0, documentView.frame.height - clipView.bounds.height)
+                clipView.scroll(to: NSPoint(x: clipView.bounds.origin.x, y: bottom))
+                scrollView.reflectScrolledClipView(clipView)
+                self.reportBottomState()
+            }
+        }
+
+        func stopObserving() {
+            if let observation { NotificationCenter.default.removeObserver(observation) }
+            observation = nil
+            scrollView = nil
+            clipView = nil
+            lastOriginY = nil
         }
     }
 }

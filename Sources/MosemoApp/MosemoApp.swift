@@ -77,11 +77,18 @@ struct MosemoApp: App {
                 if CommandLine.arguments.contains("--timeline-ui-preview") {
                     MainWorkspaceView(
                         account: Self.previewAccount,
-                        timelineFetcher: TimelinePreviewFetcher(delayNanoseconds: 800_000_000, now: Self.timelinePreviewNow ?? .now),
+                        timelineFetcher: TimelinePreviewFetcher(
+                            delayNanoseconds: 800_000_000,
+                            now: Self.timelinePreviewNow ?? .now,
+                            additionalSegmentCount: CommandLine.arguments.contains("--timeline-preview-follow-bottom") ? 18 : 0,
+                            appendsSegmentOnRefresh: CommandLine.arguments.contains("--timeline-preview-follow-bottom")
+                        ),
                         reviewFetcher: MockLabelReviewFetcher.demo,
                         reviewWriter: MockLabelConfirmationWriter(),
                         signOut: nil,
                         acceptedActivityUploads: Self.previewUploadEvents,
+                        previewUpload: CommandLine.arguments.contains("--timeline-preview-follow-bottom")
+                            ? { Self.previewUploadSubject.send(Self.previewAccount.id) } : nil,
                         showsPreviewNotice: true,
                         timelineNow: Self.timelinePreviewNow
                     )
@@ -137,7 +144,12 @@ struct MosemoApp: App {
         timeZoneID: "Asia/Seoul"
     )
 
+    private static let previewUploadSubject = PassthroughSubject<UUID, Never>()
+
     private static var previewUploadEvents: AnyPublisher<UUID, Never> {
+        if CommandLine.arguments.contains("--timeline-preview-follow-bottom") {
+            return previewUploadSubject.eraseToAnyPublisher()
+        }
         guard CommandLine.arguments.contains("--timeline-preview-auto-refresh") else {
             return Empty().eraseToAnyPublisher()
         }

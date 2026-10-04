@@ -69,6 +69,7 @@ struct MainWorkspaceView: View {
 
     private let accountID: UUID
     private let acceptedActivityUploads: AnyPublisher<UUID, Never>
+    private let previewUpload: (() -> Void)?
     let signOut: (() -> Void)?
     let showsPreviewNotice: Bool
 
@@ -79,12 +80,14 @@ struct MainWorkspaceView: View {
         reviewWriter: any LabelConfirmationWriting,
         signOut: (() -> Void)?,
         acceptedActivityUploads: AnyPublisher<UUID, Never> = Empty().eraseToAnyPublisher(),
+        previewUpload: (() -> Void)? = nil,
         authenticationFailed: @escaping @MainActor () -> Void = {},
         showsPreviewNotice: Bool = false,
         timelineNow: Date? = nil
     ) {
         self.accountID = account.id
         self.acceptedActivityUploads = acceptedActivityUploads
+        self.previewUpload = previewUpload
         self.signOut = signOut
         self.showsPreviewNotice = showsPreviewNotice
         let timeZone = TimeZone(identifier: account.timeZoneID) ?? .current
@@ -110,7 +113,7 @@ struct MainWorkspaceView: View {
             Group {
                 switch selectedPage {
                 case .timeline:
-                    TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice)
+                    TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice, previewUpload: previewUpload)
                 case .labelReview:
                     LabelReviewView(viewModel: reviewModel)
                 }
