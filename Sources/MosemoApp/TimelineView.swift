@@ -60,11 +60,6 @@ struct TimelineView: View {
                 .font(.callout)
                 .padding(9)
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            } else if model.isRefreshing {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("최신 기록 확인 중").font(.caption).foregroundStyle(.secondary)
-                }
             }
             if model.removedSelectionNotice {
                 Label("기록 구성이 변경되어 선택한 구간이 사라졌습니다.", systemImage: "info.circle")

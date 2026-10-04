@@ -95,6 +95,30 @@ final class TimelineUITests: XCTestCase {
         XCTAssertFalse(app.buttons["새로고침"].exists)
     }
 
+    func testAutomaticRefreshDoesNotMoveVisibleTimelineRows() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--timeline-ui-preview",
+            "--timeline-preview-now", "2026-09-30T07:00:00Z",
+            "--timeline-preview-auto-refresh"
+        ]
+        app.launch()
+
+        let first = app.buttons["timeline-segment-00000000-0000-0000-0000-000000000001"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let initialMidY = first.frame.midY
+        XCTAssertTrue(app.scrollViews["timeline-list"].exists)
+
+        var greatestMovement: CGFloat = 0
+        let observationEnd = Date().addingTimeInterval(4)
+        while Date() < observationEnd {
+            greatestMovement = max(greatestMovement, abs(first.frame.midY - initialMidY))
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        XCTAssertEqual(greatestMovement, 0, accuracy: 3)
+    }
+
     func testViewSwitchKeepsDateAndEmptyState() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]

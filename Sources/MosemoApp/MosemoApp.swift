@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import CollectorCore
 import MosemoAPI
 import SwiftUI
@@ -80,6 +81,7 @@ struct MosemoApp: App {
                         reviewFetcher: MockLabelReviewFetcher.demo,
                         reviewWriter: MockLabelConfirmationWriter(),
                         signOut: nil,
+                        acceptedActivityUploads: Self.previewUploadEvents,
                         showsPreviewNotice: true,
                         timelineNow: Self.timelinePreviewNow
                     )
@@ -134,6 +136,16 @@ struct MosemoApp: App {
         lastAuthenticatedAt: .now,
         timeZoneID: "Asia/Seoul"
     )
+
+    private static var previewUploadEvents: AnyPublisher<UUID, Never> {
+        guard CommandLine.arguments.contains("--timeline-preview-auto-refresh") else {
+            return Empty().eraseToAnyPublisher()
+        }
+        return Timer.publish(every: 2, on: .main, in: .common)
+            .autoconnect()
+            .map { _ in previewAccount.id }
+            .eraseToAnyPublisher()
+    }
 }
 
 private struct CollectorMenuView: View {
