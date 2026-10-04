@@ -134,6 +134,8 @@ final class TimelineUITests: XCTestCase {
         let bottomBeforeRefresh = app.buttons["timeline-segment-20000000-0000-0000-0000-000000000017"]
         XCTAssertTrue(bottomBeforeRefresh.waitForExistence(timeout: 5))
         XCTAssertTrue(bottomBeforeRefresh.isHittable)
+        XCTAssertEqual(bottomBeforeRefresh.frame.maxY, list.frame.maxY, accuracy: 12,
+                       "The fixture should be at the bottom before the refresh starts.")
 
         app.buttons["timeline-preview-upload"].click()
         XCTAssertTrue(app.staticTexts["27개 표시 구간"].waitForExistence(timeout: 8))
@@ -144,6 +146,8 @@ final class TimelineUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         XCTAssertTrue(added.isHittable, "The list should follow an appended item when it was at the bottom.")
+        XCTAssertEqual(added.frame.maxY, list.frame.maxY, accuracy: 12,
+                       "The appended last row should stay aligned with the list's bottom edge.")
     }
 
     func testAutomaticRefreshKeepsPositionWhenNotAtBottom() {

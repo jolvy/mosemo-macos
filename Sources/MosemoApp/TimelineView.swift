@@ -164,14 +164,16 @@ private struct TimelineList: View {
                     .accessibilityIdentifier("timeline-segment-\(entry.id)")
                 }
             }
+            .background(TimelineListScrollObserver(scrollToBottomRequest: scrollToBottomRequest) { atBottom in
+                isAtBottom = atBottom
+                if model.isRefreshing { shouldFollowNewItems = atBottom }
+            })
         }
-        .background(TimelineListScrollObserver(scrollToBottomRequest: scrollToBottomRequest) { atBottom in
-            isAtBottom = atBottom
-            if model.isRefreshing { shouldFollowNewItems = atBottom }
-        })
         .onAppear { previousEntryIDs = Set(entries.map(\.id)) }
         .onChange(of: model.isRefreshing) { _, isRefreshing in
-            if isRefreshing { shouldFollowNewItems = isAtBottom }
+            if isRefreshing {
+                shouldFollowNewItems = isAtBottom
+            }
         }
         .onChange(of: entries.map(\.id)) { _, ids in
             let currentIDs = Set(ids)
@@ -445,6 +447,7 @@ private struct TimelineListScrollObserver: NSViewRepresentable {
         private weak var clipView: NSClipView?
         private var lastOriginY: CGFloat?
         private var lastScrollToBottomRequest: Int
+        private var attachmentAttempts = 0
 
         init(scrollToBottomRequest: Int, onScroll: @escaping (Bool) -> Void) {
             lastScrollToBottomRequest = scrollToBottomRequest
@@ -457,12 +460,25 @@ private struct TimelineListScrollObserver: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             stopObserving()
-            guard window != nil, let scrollView = enclosingScrollView else { return }
+            attachmentAttempts = 0
+            connectToScrollView()
+        }
+
+        private func connectToScrollView() {
+            guard window != nil else { return }
+            guard let scrollView = enclosingScrollView else {
+                guard attachmentAttempts < 20 else { return }
+                attachmentAttempts += 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.connectToScrollView()
+                }
+                return
+            }
             self.scrollView = scrollView
             let clipView = scrollView.contentView
             self.clipView = clipView
             clipView.postsBoundsChangedNotifications = true
-            DispatchQueue.main.async { [weak self] in self?.reportBottomState() }
+            reportBottomState()
             observation = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clipView, queue: .main
             ) { [weak self] _ in
