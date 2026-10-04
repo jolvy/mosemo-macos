@@ -16,6 +16,40 @@ final class TimelineViewTests: XCTestCase {
         return day.startOfDay(timeZone: zone).addingTimeInterval(Double(hour * 60 + minute) * 60)
     }
 
+    func testAxisHorizontalLayoutKeepsFiveEqualSlotsBeforeOverflow() {
+        for viewport in [354.0, 554.0, 1054.0] {
+            let activityArea = viewport - 54
+            for count in [1, 3, 5, 6, 8] {
+                let layout = TimelineAxisHorizontalLayout(viewportWidth: viewport, laneCount: count)
+                XCTAssertEqual(layout.activityWidth, activityArea / 5 - 12, accuracy: 0.001)
+                XCTAssertEqual(layout.contentWidth, count <= 5 ? viewport : 54 + Double(count) * activityArea / 5,
+                               accuracy: 0.001)
+                XCTAssertEqual(layout.activityOffset(lane: 0), 6)
+                for lane in 1..<count {
+                    let previousRight = layout.activityOffset(lane: lane - 1) + layout.activityWidth
+                    XCTAssertEqual(layout.activityOffset(lane: lane) - previousRight, 12, accuracy: 0.001)
+                }
+                let lastRight = 54 + layout.activityOffset(lane: count - 1) + layout.activityWidth
+                XCTAssertLessThanOrEqual(lastRight, layout.contentWidth - 6 + 0.001)
+                if count > 5 {
+                    XCTAssertGreaterThan(lastRight, viewport)
+                    let maximumScroll = layout.contentWidth - viewport
+                    XCTAssertEqual(lastRight - maximumScroll, viewport - 6, accuracy: 0.001)
+                }
+            }
+        }
+    }
+
+    func testAxisHorizontalLayoutRecalculatesWhenDetailPanelOrWindowChangesWidth() {
+        let wide = TimelineAxisHorizontalLayout(viewportWidth: 1054, laneCount: 8)
+        let narrow = TimelineAxisHorizontalLayout(viewportWidth: 554, laneCount: 8)
+        XCTAssertEqual(wide.activityWidth, 188)
+        XCTAssertEqual(narrow.activityWidth, 88)
+        XCTAssertEqual(wide.activityOffset(lane: 7), 1406)
+        XCTAssertEqual(narrow.activityOffset(lane: 7), 706)
+        XCTAssertEqual(narrow.contentWidth, 854)
+    }
+
     func testAcceptedUploadRefreshesTheSelectedHistoricalDate() async {
         let fetcher = RecordingFetcher()
         let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: instant(16, 0))

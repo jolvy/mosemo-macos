@@ -224,7 +224,7 @@ private struct TimelineTimeAxis: View {
             GeometryReader { viewport in
                 ScrollViewReader { proxy in
                     ScrollView([.vertical, .horizontal]) {
-                        let contentWidth = max(viewport.size.width, 54 + Double(axis.laneCount) * 186)
+                        let layout = TimelineAxisHorizontalLayout(viewportWidth: viewport.size.width, laneCount: axis.laneCount)
                         ZStack(alignment: .topLeading) {
                             VStack(spacing: 0) {
                                 ForEach(0...Int(axis.height / TimelineAxis.pointsPerMinute), id: \.self) { minute in
@@ -232,7 +232,7 @@ private struct TimelineTimeAxis: View {
                                 }
                             }
                             .accessibilityHidden(true)
-                            HStack(alignment: .top, spacing: 10) {
+                            HStack(alignment: .top, spacing: TimelineAxisHorizontalLayout.timeLabelSpacing) {
                                 ZStack(alignment: .topTrailing) {
                                     ForEach(axis.ticks) { tick in
                                         Text(tick.label).accessibilityIdentifier("timeline-tick-\(tick.id)")
@@ -240,9 +240,9 @@ private struct TimelineTimeAxis: View {
                                             .offset(y: max(0, tick.position - 6))
                                     }
                                 }
-                                .frame(width: 44, height: height, alignment: .top)
+                                .frame(width: TimelineAxisHorizontalLayout.timeLabelWidth, height: height, alignment: .top)
 
-                                GeometryReader { geometry in
+                                GeometryReader { _ in
                                     ZStack(alignment: .topLeading) {
                                         ForEach(axis.ticks) { tick in
                                             Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
@@ -250,13 +250,12 @@ private struct TimelineTimeAxis: View {
                                         }
                                         ForEach(axis.segments) { segment in
                                             let entry = segment.entry
-                                            let laneWidth = geometry.size.width / Double(axis.laneCount)
                                             Button { onSelect(entry.id) } label: {
                                                 Group {
                                                     if segment.isShort {
                                                         RoundedRectangle(cornerRadius: 3)
                                                             .fill(color(for: entry.kind))
-                                                            .frame(width: 29, height: segment.visualHeight)
+                                                            .frame(width: layout.activityWidth, height: segment.visualHeight)
                                                     } else {
                                                         VStack(alignment: .leading, spacing: 1) {
                                                             Text("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle)")
@@ -270,7 +269,7 @@ private struct TimelineTimeAxis: View {
                                                         .background(color(for: entry.kind).opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
                                                     }
                                                 }
-                                                .frame(width: segment.isShort ? 29 : laneWidth - 12,
+                                                .frame(width: layout.activityWidth,
                                                        height: segment.hitHeight, alignment: .topLeading)
                                                 .contentShape(Rectangle())
                                                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(
@@ -280,14 +279,15 @@ private struct TimelineTimeAxis: View {
                                             .accessibilityLabel("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label) · \(entry.durationText)")
                                             .accessibilityIdentifier("timeline-segment-\(entry.id)")
                                             .help("\(entry.timeText(timeZone: timeZone)) · \(entry.axisTitle) · \(entry.labelStateText ?? entry.kind.label) · \(entry.durationText)")
-                                            .offset(x: 6 + Double(segment.lane) * laneWidth, y: segment.top)
+                                            .offset(x: layout.activityOffset(lane: segment.lane), y: segment.top)
                                         }
                                     }
                                 }
-                                .frame(height: height)
+                                .frame(width: layout.contentWidth - TimelineAxisHorizontalLayout.timeLabelWidth - TimelineAxisHorizontalLayout.timeLabelSpacing,
+                                       height: height, alignment: .topLeading)
                             }
                         }
-                        .frame(width: contentWidth, height: height + 24)
+                        .frame(width: layout.contentWidth, height: height + 24)
                         .background(TimelineScrollObserver { offset in
                             if let target = restorationOffset, offset > 0 || target == 0 {
                                 didRestore = true

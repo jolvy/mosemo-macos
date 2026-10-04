@@ -1,6 +1,43 @@
 import XCTest
 
 final class TimelineUITests: XCTestCase {
+    func testAxisUsesFiveSlotsAndSelectsOverflowShortActivity() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--timeline-ui-preview",
+            "--timeline-preview-now", "2026-09-30T05:00:00Z",
+            "--timeline-preview-follow-bottom"
+        ]
+        app.launch()
+        XCTAssertTrue(app.scrollViews["timeline-list"].waitForExistence(timeout: 5))
+        app.radioButtons["시간축"].click()
+        let axis = app.scrollViews["timeline-time-axis"]
+        XCTAssertTrue(axis.waitForExistence(timeout: 5))
+        func short(_ index: Int) -> XCUIElement {
+            app.buttons[String(format: "timeline-segment-20000000-0000-0000-0000-%012d", index)]
+        }
+        let first = short(0)
+        let fifth = short(4)
+        let eighth = short(7)
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertEqual(first.frame.width, (axis.frame.width - 54) / 5 - 12, accuracy: 2)
+        XCTAssertEqual(fifth.frame.width, first.frame.width, accuracy: 1)
+        XCTAssertEqual(short(1).frame.minX - first.frame.maxX, 12, accuracy: 1)
+        XCTAssertLessThanOrEqual(fifth.frame.maxX, axis.frame.maxX)
+        XCTAssertGreaterThan(eighth.frame.maxX, axis.frame.maxX)
+        axis.scroll(byDeltaX: 10_000, deltaY: 0)
+        XCTAssertTrue(eighth.isHittable)
+        eighth.click()
+        XCTAssertTrue(app.staticTexts["timeline-detail-title"].waitForExistence(timeout: 3))
+        XCTAssertTrue(text(app.staticTexts["timeline-detail-title"]).contains("추가 기록 7"))
+        XCTAssertEqual(eighth.frame.width, (axis.frame.width - 54) / 5 - 12, accuracy: 2)
+        axis.scroll(byDeltaX: -10_000, deltaY: 0)
+        XCTAssertEqual(first.frame.width, (axis.frame.width - 54) / 5 - 12, accuracy: 2)
+        axis.scroll(byDeltaX: 0, deltaY: -10_000)
+        let long = app.buttons["timeline-segment-00000000-0000-0000-0000-000000000001"]
+        XCTAssertEqual(long.frame.width, first.frame.width, accuracy: 1)
+    }
+
     func testCommonDetailSurvivesModeSwitchAndExplainsMissingItems() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]
