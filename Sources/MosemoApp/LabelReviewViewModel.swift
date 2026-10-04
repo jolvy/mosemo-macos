@@ -65,11 +65,13 @@ final class LabelReviewViewModel: ObservableObject {
     @Published private(set) var selectedDate: TimelineDate
     @Published private(set) var selectedSegmentIDs: Set<UUID> = []
     @Published private(set) var expandedGroupIDs: Set<UUID> = []
+    private var expandedSegmentIDs: Set<UUID> = []
     @Published private var draftOverrides: [UUID: LabelReviewSelection] = [:]
     @Published private(set) var isSubmitting = false
     @Published private(set) var submissionMessage: String?
     @Published private(set) var canRetrySubmission = false
     @Published private(set) var conflictedDrafts: [LabelReviewConflictedDraft] = []
+    @Published private(set) var refreshError: String?
 
     private let fetcher: any LabelReviewFetching
     private let writer: any LabelConfirmationWriting
@@ -149,10 +151,13 @@ final class LabelReviewViewModel: ObservableObject {
             do {
                 let snapshot = try await fetcher.fetchLabelReview(day: day)
                 guard !Task.isCancelled, requestID == id else { continue }
-                review = review?.replacing(with: snapshot)
+                let updated = review?.replacing(with: snapshot) ?? LabelReviewState(snapshot: snapshot)
+                if review != updated { review = updated }
+                refreshError = nil
                 reconcileInteractionState()
             } catch {
-                // Keep the visible result and retry on the next interval.
+                guard requestID == id else { continue }
+                refreshError = "최신 제안을 불러오지 못했습니다. 다시 시도해 주세요."
             }
         }
     }
@@ -170,13 +175,17 @@ final class LabelReviewViewModel: ObservableObject {
             do {
                 let snapshot = try await fetcher.fetchLabelReview(day: date)
                 guard requestID == id, selectedDate == date else { continue }
-                review = review?.replacing(with: snapshot) ?? LabelReviewState(snapshot: snapshot)
+                let updated = review?.replacing(with: snapshot) ?? LabelReviewState(snapshot: snapshot)
+                if review != updated { review = updated }
                 loadState = .loaded
+                refreshError = nil
                 reconcileInteractionState()
             } catch {
                 guard requestID == id else { continue }
                 if review == nil {
                     loadState = .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요.")
+                } else {
+                    refreshError = "최신 제안을 불러오지 못했습니다. 다시 시도해 주세요."
                 }
             }
         }
@@ -191,7 +200,7 @@ final class LabelReviewViewModel: ObservableObject {
         guard !isSubmitting else { return }
         let id = UUID()
         requestID = id
-        loadState = .loading
+        if review == nil { loadState = .loading }
         submissionMessage = nil
         retryDecisions = nil
         retryAvailableAt = nil
@@ -200,12 +209,18 @@ final class LabelReviewViewModel: ObservableObject {
         do {
             let snapshot = try await fetcher.fetchLabelReview(day: selectedDate)
             guard requestID == id else { return }
-            review = LabelReviewState(snapshot: snapshot)
+            let updated = review?.replacing(with: snapshot) ?? LabelReviewState(snapshot: snapshot)
+            if review != updated { review = updated }
             loadState = .loaded
+            refreshError = nil
             reconcileInteractionState()
         } catch {
             guard requestID == id else { return }
-            loadState = .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요.")
+            if review == nil {
+                loadState = .failed("라벨 제안을 불러오지 못했습니다. 다시 시도해 주세요.")
+            } else {
+                refreshError = "최신 제안을 불러오지 못했습니다. 다시 시도해 주세요."
+            }
         }
     }
 
@@ -216,8 +231,10 @@ final class LabelReviewViewModel: ObservableObject {
         review = nil
         selectedSegmentIDs = []
         expandedGroupIDs = []
+        expandedSegmentIDs = []
         draftOverrides = [:]
         conflictedDrafts = []
+        refreshError = nil
         loadState = .loading
         Task { await load() }
     }
@@ -251,6 +268,7 @@ final class LabelReviewViewModel: ObservableObject {
         } else {
             selectedSegmentIDs.insert(segment.id)
         }
+        synchronizePinnedGroups()
     }
 
     func unclassifiedCount(in group: LabelReviewGroup) -> Int {
@@ -264,6 +282,7 @@ final class LabelReviewViewModel: ObservableObject {
         } else {
             selectedSegmentIDs = Set(review?.pendingSegments.map(\.id) ?? [])
         }
+        synchronizePinnedGroups()
     }
 
     func toggleSelection(for group: LabelReviewGroup) {
@@ -274,15 +293,19 @@ final class LabelReviewViewModel: ObservableObject {
         } else {
             selectedSegmentIDs.formUnion(ids)
         }
+        synchronizePinnedGroups()
     }
 
     func toggleExpansion(for group: LabelReviewGroup) {
         guard !isSubmitting else { return }
         if expandedGroupIDs.contains(group.id) {
             expandedGroupIDs.remove(group.id)
+            expandedSegmentIDs.subtract(group.segments.map(\.id))
         } else {
             expandedGroupIDs.insert(group.id)
+            expandedSegmentIDs.formUnion(group.segments.map(\.id))
         }
+        synchronizePinnedGroups()
     }
 
     func selection(for segment: LabelReviewSegment) -> LabelReviewSelection? {
@@ -292,6 +315,7 @@ final class LabelReviewViewModel: ObservableObject {
     func setSelection(_ selection: LabelReviewSelection, for segment: LabelReviewSegment) {
         guard !isSubmitting else { return }
         draftOverrides[segment.id] = selection
+        synchronizePinnedGroups()
         if retryConflictReview == nil {
             retryDecisions = nil
             retryAvailableAt = nil
@@ -421,7 +445,7 @@ final class LabelReviewViewModel: ObservableObject {
                 reconcileInteractionState()
             } catch {
                 guard requestID == id else { return }
-                submissionMessage = "확정은 완료됐지만 최신 목록을 불러오지 못했습니다. 새로고침해 주세요."
+                refreshError = "확정은 완료됐지만 최신 목록을 불러오지 못했습니다. 다시 시도해 주세요."
             }
         } catch {
             guard requestID == id else { return }
@@ -489,11 +513,30 @@ final class LabelReviewViewModel: ObservableObject {
     }
 
     private func reconcileInteractionState() {
-        let validGroupIDs = Set(groups.map(\.id))
-        expandedGroupIDs.formIntersection(validGroupIDs)
-
         let validSegmentIDs = Set((review?.pendingSegments ?? []).map(\.id))
         selectedSegmentIDs.formIntersection(validSegmentIDs)
         draftOverrides = draftOverrides.filter { validSegmentIDs.contains($0.key) }
+        expandedSegmentIDs.formIntersection(validSegmentIDs)
+        synchronizePinnedGroups()
+        expandedGroupIDs = Set(groups.filter { group in
+            group.segments.contains { expandedSegmentIDs.contains($0.id) }
+        }.map(\.id))
+    }
+
+    private func synchronizePinnedGroups() {
+        guard let current = review else { return }
+        var updated = current
+        for group in current.groups {
+            let ids = Set(group.segments.map(\.id))
+            let shouldPin = !expandedSegmentIDs.isDisjoint(with: ids)
+                || !selectedSegmentIDs.isDisjoint(with: ids)
+                || draftOverrides.keys.contains(where: ids.contains)
+            if shouldPin {
+                updated = updated.pinning(group)
+            }
+        }
+        let activeIDs = expandedSegmentIDs.union(selectedSegmentIDs).union(draftOverrides.keys)
+        updated = updated.keepingPinnedGroups(intersecting: activeIDs)
+        if updated != review { review = updated }
     }
 }

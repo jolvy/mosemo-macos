@@ -45,7 +45,7 @@ final class TimelineUITests: XCTestCase {
         app.radioButtons["목록"].click()
         app.radioButtons["시간축"].click()
         assertPosition(tick, equals: before)
-        app.buttons["timeline-refresh"].click()
+        XCTAssertFalse(app.buttons["timeline-refresh"].exists)
         XCTAssertTrue(axis.waitForExistence(timeout: 5))
         assertPosition(tick, equals: before)
         app.buttons["이전 날짜"].click()
@@ -77,7 +77,7 @@ final class TimelineUITests: XCTestCase {
         XCTAssertEqual(element.frame.midY, y, accuracy: 3)
     }
 
-    func testPreviewShowsSegmentsInBothModesAndRefreshes() {
+    func testPreviewShowsSegmentsInBothModesWithoutManualRefreshControl() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]
         app.launch()
@@ -88,9 +88,11 @@ final class TimelineUITests: XCTestCase {
 
         app.radioButtons["시간축"].click()
         XCTAssertTrue(app.scrollViews["timeline-time-axis"].waitForExistence(timeout: 5))
-        app.buttons["timeline-refresh"].click()
-        XCTAssertFalse(app.buttons["timeline-refresh"].isEnabled)
+        XCTAssertFalse(app.buttons["timeline-refresh"].exists)
         XCTAssertTrue(app.scrollViews["timeline-time-axis"].waitForExistence(timeout: 5))
+        app.buttons["navigation-label-review"].click()
+        XCTAssertTrue(app.staticTexts["라벨 제안"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["새로고침"].exists)
     }
 
     func testViewSwitchKeepsDateAndEmptyState() {

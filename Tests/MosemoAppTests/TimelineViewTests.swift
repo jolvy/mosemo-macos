@@ -100,13 +100,13 @@ final class TimelineViewTests: XCTestCase {
         model.selectSegment(uuid(1))
         await fetcher.replace(with: [activity(1, .label(id: labelID, displayName: "코딩"))])
         model.refresh()
-        await waitUntil { model.loadState == .loaded }
+        await waitUntil { model.loadState == .loaded && !model.isRefreshing }
         XCTAssertEqual(model.selectedSegmentID, uuid(1))
         XCTAssertEqual(model.presentations.first?.confirmedLabelText, "코딩")
         XCTAssertEqual(model.axis.segments.first?.entry.confirmedLabelText, "코딩")
         await fetcher.replace(with: [activity(1, .unclassified)])
         model.refresh()
-        await waitUntil { model.loadState == .loaded }
+        await waitUntil { model.loadState == .loaded && !model.isRefreshing }
         XCTAssertEqual(model.presentations.first?.confirmedLabelText, "미분류")
     }
 
@@ -392,7 +392,7 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(requests[0].1, "America/New_York")
     }
 
-    func testRefreshRequestsSameDateAndShowsProgress() async {
+    func testRefreshRequestsSameDateAndKeepsCurrentSnapshotVisible() async {
         let requested = date()
         let fetcher = ZoneRecordingFetcher(delayNanoseconds: 80_000_000)
         let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: requested.startOfDay(timeZone: zone))
@@ -400,10 +400,35 @@ final class TimelineViewTests: XCTestCase {
 
         model.refresh()
         XCTAssertTrue(model.isRefreshing)
-        XCTAssertEqual(model.loadState, .loading)
+        XCTAssertEqual(model.loadState, .empty)
         await waitUntil { model.loadState == .empty && !model.isRefreshing }
         let requests = await fetcher.requests()
         XCTAssertEqual(requests.map(\.0), [requested, requested])
+    }
+
+    func testRefreshFailureKeepsSnapshotAndRetryAppliesRemovalOfSelectedSegment() async {
+        let requested = date()
+        let segment = TimelineSegment.activity(.init(
+            id: uuid(61), startedAt: instant(9, 0), endedAt: instant(9, 10),
+            lastObservedAt: instant(9, 10), context: .opaque
+        ))
+        let initial = TimelineDay(date: requested, timeZoneID: zone.identifier, segments: [segment])
+        let changed = TimelineDay(date: requested, timeZoneID: zone.identifier, segments: [])
+        let fetcher = SequenceTimelineFetcher(results: [.success(initial), .failure(.expected), .success(changed)])
+        let model = TimelineViewModel(fetcher: fetcher, timeZone: zone, now: requested.startOfDay(timeZone: zone))
+        await waitUntil { model.loadState == .loaded }
+        model.selectSegment(uuid(61))
+
+        model.refresh()
+        await waitUntil { model.refreshError != nil && !model.isRefreshing }
+        XCTAssertEqual(model.loadState, .loaded)
+        XCTAssertEqual(model.day, initial)
+        XCTAssertEqual(model.selectedSegmentID, uuid(61))
+
+        model.refresh()
+        await waitUntil { !model.isRefreshing && model.day == changed }
+        XCTAssertNil(model.selectedSegmentID)
+        XCTAssertTrue(model.removedSelectionNotice)
     }
 
     func testUnauthorizedTimelineResponseNotifiesAuthenticationCoordinator() async {
@@ -518,6 +543,14 @@ private actor ZoneRecordingFetcher: TimelineFetching {
 private struct AuthenticationFailureFetcher: TimelineFetching {
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         throw MosemoAPIError.authenticationRequired
+    }
+}
+
+private actor SequenceTimelineFetcher: TimelineFetching {
+    private var results: [Result<TimelineDay, TestError>]
+    init(results: [Result<TimelineDay, TestError>]) { self.results = results }
+    func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
+        try results.removeFirst().get()
     }
 }
 

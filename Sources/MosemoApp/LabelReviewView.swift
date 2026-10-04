@@ -32,11 +32,19 @@ struct LabelReviewView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("새로고침", systemImage: "arrow.clockwise") {
-                    Task { await viewModel.load() }
-                }
             }
             .disabled(viewModel.isSubmitting)
+
+            if let message = viewModel.refreshError {
+                HStack {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                    Spacer()
+                    Button("다시 시도") { Task { await viewModel.load() } }
+                }
+                .font(.callout)
+                .padding(9)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             if let message = viewModel.submissionMessage {
                 HStack {
