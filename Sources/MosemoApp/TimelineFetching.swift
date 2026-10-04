@@ -4,18 +4,57 @@ import MosemoAPI
 struct TimelinePreviewFetcher: TimelineFetching {
     let delayNanoseconds: UInt64
     let now: Date
+    private let additionalSegmentCount: Int
+    private let appendsSegmentOnRefresh: Bool
+    private let fetchCounter: TimelinePreviewFetchCounter
 
-    init(delayNanoseconds: UInt64 = 100_000_000, now: Date = .now) {
+    init(
+        delayNanoseconds: UInt64 = 100_000_000,
+        now: Date = .now,
+        additionalSegmentCount: Int = 0,
+        appendsSegmentOnRefresh: Bool = false
+    ) {
         self.delayNanoseconds = delayNanoseconds
         self.now = now
+        self.additionalSegmentCount = additionalSegmentCount
+        self.appendsSegmentOnRefresh = appendsSegmentOnRefresh
+        fetchCounter = TimelinePreviewFetchCounter()
     }
 
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay {
         try await Task.sleep(nanoseconds: delayNanoseconds)
         let zone = TimeZone(identifier: "Asia/Seoul")!
         let today = TimelineDate(now, timeZone: zone)
-        let segments = day == today ? Self.examples(for: day, timeZone: zone) : []
+        let fetchIndex = await fetchCounter.next()
+        var segments = day == today ? Self.examples(for: day, timeZone: zone) : []
+        if day == today {
+            segments += Self.additionalExamples(count: additionalSegmentCount, day: day, timeZone: zone)
+            if appendsSegmentOnRefresh, fetchIndex > 0 {
+                segments += Self.additionalExamples(count: fetchIndex, day: day, timeZone: zone, idOffset: 100)
+            }
+        }
         return TimelineDay(date: day, timeZoneID: zone.identifier, segments: segments)
+    }
+
+    private static func additionalExamples(
+        count: Int,
+        day: TimelineDate,
+        timeZone: TimeZone,
+        idOffset: Int = 0
+    ) -> [TimelineSegment] {
+        let start = day.startOfDay(timeZone: timeZone)
+        return (0..<count).map { index in
+            let number = index + idOffset
+            let segmentID = UUID(uuidString: String(format: "20000000-0000-0000-0000-%012d", number))!
+            let began = start.addingTimeInterval(Double(14 * 60 + number * 2) * 60)
+            return .activity(.init(
+                id: segmentID,
+                startedAt: began,
+                endedAt: began.addingTimeInterval(90),
+                lastObservedAt: began.addingTimeInterval(90),
+                context: .detailed(appName: "Mosemo Preview", windowTitle: "추가 기록 \(number)", webURL: nil)
+            ))
+        }
     }
 
     private static func examples(for day: TimelineDate, timeZone: TimeZone) -> [TimelineSegment] {
@@ -31,5 +70,14 @@ struct TimelinePreviewFetcher: TimelineFetching {
             .captureGap(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000007")!, startedAt: at(12, 15), endedAt: nil, reason: "종료 시각을 아직 알 수 없습니다")),
             .activity(.init(id: UUID(uuidString: "00000000-0000-0000-0000-000000000008")!, startedAt: at(13, 0), endedAt: nil, lastObservedAt: at(13, 12), context: .detailed(appName: "Xcode", windowTitle: "열린 구간", webURL: nil)))
         ]
+    }
+}
+
+private actor TimelinePreviewFetchCounter {
+    private var value = 0
+
+    func next() -> Int {
+        defer { value += 1 }
+        return value
     }
 }

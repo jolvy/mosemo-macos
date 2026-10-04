@@ -119,6 +119,50 @@ final class TimelineUITests: XCTestCase {
         XCTAssertEqual(greatestMovement, 0, accuracy: 3)
     }
 
+    func testAutomaticRefreshFollowsNewItemsWhenAlreadyAtBottom() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--timeline-ui-preview",
+            "--timeline-preview-now", "2026-09-30T07:00:00Z",
+            "--timeline-preview-follow-bottom"
+        ]
+        app.launch()
+
+        let list = app.scrollViews["timeline-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        list.scroll(byDeltaX: 0, deltaY: 10_000)
+        let bottomBeforeRefresh = app.buttons["timeline-segment-20000000-0000-0000-0000-000000000017"]
+        XCTAssertTrue(bottomBeforeRefresh.waitForExistence(timeout: 5))
+        XCTAssertTrue(bottomBeforeRefresh.isHittable)
+
+        app.buttons["timeline-preview-upload"].click()
+        XCTAssertTrue(app.staticTexts["27개 표시 구간"].waitForExistence(timeout: 8))
+        let added = app.buttons["timeline-segment-20000000-0000-0000-0000-000000000100"]
+        XCTAssertTrue(added.waitForExistence(timeout: 5))
+        let deadline = Date().addingTimeInterval(4)
+        while !added.isHittable, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertTrue(added.isHittable, "The list should follow an appended item when it was at the bottom.")
+    }
+
+    func testAutomaticRefreshKeepsPositionWhenNotAtBottom() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--timeline-ui-preview",
+            "--timeline-preview-now", "2026-09-30T07:00:00Z",
+            "--timeline-preview-follow-bottom"
+        ]
+        app.launch()
+
+        let first = app.buttons["timeline-segment-00000000-0000-0000-0000-000000000001"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let initialMidY = first.frame.midY
+        app.buttons["timeline-preview-upload"].click()
+        XCTAssertTrue(app.staticTexts["27개 표시 구간"].waitForExistence(timeout: 8))
+        XCTAssertEqual(first.frame.midY, initialMidY, accuracy: 3)
+    }
+
     func testViewSwitchKeepsDateAndEmptyState() {
         let app = XCUIApplication()
         app.launchArguments = ["--timeline-ui-preview", "--timeline-preview-now", "2026-09-30T07:00:00Z"]
