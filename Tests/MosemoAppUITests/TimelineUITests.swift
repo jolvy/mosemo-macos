@@ -161,7 +161,7 @@ final class TimelineUITests: XCTestCase {
         XCTAssertFalse(app.buttons["timeline-refresh"].exists)
         XCTAssertTrue(app.scrollViews["timeline-time-axis"].waitForExistence(timeout: 5))
         app.buttons["navigation-label-review"].click()
-        XCTAssertTrue(app.staticTexts["라벨 제안"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["라벨 검토"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["새로고침"].exists)
     }
 
@@ -317,23 +317,23 @@ final class LabelReviewUITests: XCTestCase {
         XCTAssertFalse(firstCheck.exists)
     }
 
-    func testGroupSubmissionUpdatesPendingCount() {
+    func testGroupSubmissionRemovesConfirmedGroup() {
         let app = XCUIApplication()
         app.launchArguments = ["--label-review-ui-preview"]
         app.launch()
 
-        let pendingCount = app.staticTexts["label-review-pending-count"]
-        XCTAssertTrue(pendingCount.waitForExistence(timeout: 5))
-        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in (pendingCount.value as? String ?? pendingCount.label).contains("10건") }, object: pendingCount)
-        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 5), .completed)
+        let title = app.staticTexts["label-review-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.value as? String ?? title.label, "라벨 검토")
+        XCTAssertFalse(app.staticTexts["label-review-pending-count"].exists)
         let confirm = app.buttons["3건 확정"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.click()
 
-        let deadline = Date().addingTimeInterval(5)
-        while !(pendingCount.value as? String ?? pendingCount.label).contains("7건"), Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-        }
-        XCTAssertTrue((pendingCount.value as? String ?? pendingCount.label).contains("7건"))
+        let removed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: confirm
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed)
     }
 }
