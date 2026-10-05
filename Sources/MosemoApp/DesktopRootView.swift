@@ -52,7 +52,7 @@ private enum WorkspacePage: Hashable {
         switch self {
         case .timeline: "관찰 타임라인"
         case .labelReview: "라벨 검토"
-        case .activityChat: "AI 채팅"
+        case .activityChat: "AI Agent"
         }
     }
 
@@ -150,12 +150,6 @@ struct MainWorkspaceView: View {
             .padding(.horizontal, 20)
             .padding(.top, 25)
             .padding(.bottom, 35)
-
-            Text("화면")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.5))
-                .padding(.horizontal, 20)
-                .padding(.bottom, 9)
 
             pageButton(.timeline)
             pageButton(.labelReview)

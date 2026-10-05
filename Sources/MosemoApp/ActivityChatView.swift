@@ -10,16 +10,6 @@ struct ActivityChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("AI 채팅").font(.largeTitle.bold())
-                    Text("예시 데이터 · 실제 AI 연결 없음 · 대화는 앱 실행 중에만 유지됩니다.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(24)
-            Divider()
             GeometryReader { geometry in
                 HStack(spacing: 0) {
                     if model.selectedActivity == nil || geometry.size.width >= 760 {

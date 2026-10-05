@@ -16,10 +16,7 @@ struct TimelineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("관찰 타임라인").font(.largeTitle.bold())
-                    Text("하루의 활동과 관찰하지 못한 시간을 살펴봅니다.").foregroundStyle(.secondary)
-                }
+                Text("관찰 타임라인").font(.largeTitle.bold())
                 Spacer()
             }
 
