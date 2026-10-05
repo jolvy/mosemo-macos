@@ -28,6 +28,9 @@
 
 		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
 		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
+		2000000000000000000000C1 /* ActivityChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3000000000000000000000C1 /* ActivityChatView.swift */; };
+		2000000000000000000000C2 /* ActivityChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3000000000000000000000C2 /* ActivityChatViewModel.swift */; };
+		2000000000000000000000C3 /* ActivityChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3000000000000000000000C3 /* ActivityChatInput.swift */; };
 		2000000000000000000000F1 /* FocusSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3000000000000000000000F1 /* FocusSessionView.swift */; };
 		2000000000000000000000F2 /* FocusSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3000000000000000000000F2 /* FocusSessionViewModel.swift */; };
 /* End PBXBuildFile section */
@@ -56,6 +59,9 @@
 
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000040 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3000000000000000000000C1 /* ActivityChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatView.swift; sourceTree = "<group>"; };
+		3000000000000000000000C2 /* ActivityChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatViewModel.swift; sourceTree = "<group>"; };
+		3000000000000000000000C3 /* ActivityChatInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatInput.swift; sourceTree = "<group>"; };
 		3000000000000000000000F1 /* FocusSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionView.swift; sourceTree = "<group>"; };
 		3000000000000000000000F2 /* FocusSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -96,6 +102,9 @@
 			children = (
 				300000000000000000000011 /* MosemoApp.swift */,
 				300000000000000000000031 /* OfflineActivityCoordinator.swift */,
+				3000000000000000000000C3 /* ActivityChatInput.swift */,
+				3000000000000000000000C2 /* ActivityChatViewModel.swift */,
+				3000000000000000000000C1 /* ActivityChatView.swift */,
 				300000000000000000000032 /* ApplicationWindowContextClient.swift */,
 				300000000000000000000012 /* CollectorViewModel.swift */,
 				300000000000000000000013 /* ChromeAppleEventClient.swift */,
@@ -213,6 +222,9 @@
 			files = (
 				200000000000000000000011 /* MosemoApp.swift in Sources */,
 				200000000000000000000031 /* OfflineActivityCoordinator.swift in Sources */,
+				2000000000000000000000C3 /* ActivityChatInput.swift in Sources */,
+				2000000000000000000000C2 /* ActivityChatViewModel.swift in Sources */,
+				2000000000000000000000C1 /* ActivityChatView.swift in Sources */,
 				200000000000000000000032 /* ApplicationWindowContextClient.swift in Sources */,
 				200000000000000000000012 /* CollectorViewModel.swift in Sources */,
 				200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */,

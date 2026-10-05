@@ -53,12 +53,14 @@ struct DesktopRootView: View {
 private enum WorkspacePage: Hashable {
     case timeline
     case labelReview
+    case activityChat
     case focusSession
 
     var title: String {
         switch self {
         case .timeline: "관찰 타임라인"
         case .labelReview: "라벨 검토"
+        case .activityChat: "AI Agent"
         case .focusSession: "집중 세션"
         }
     }
@@ -67,6 +69,7 @@ private enum WorkspacePage: Hashable {
         switch self {
         case .timeline: "calendar"
         case .labelReview: "checkmark.rectangle.stack"
+        case .activityChat: "sparkles"
         case .focusSession: "timer"
         }
     }
@@ -76,6 +79,7 @@ struct MainWorkspaceView: View {
     @State private var selectedPage: WorkspacePage = .timeline
     @StateObject private var timelineModel: TimelineViewModel
     @StateObject private var reviewModel: LabelReviewViewModel
+    @StateObject private var chatModel = ActivityChatViewModel()
     @StateObject private var focusModel: FocusSessionViewModel
 
     private let accountID: UUID
@@ -98,8 +102,10 @@ struct MainWorkspaceView: View {
         previewUpload: (() -> Void)? = nil,
         authenticationFailed: @escaping @MainActor () -> Void = {},
         showsPreviewNotice: Bool = false,
-        timelineNow: Date? = nil
+        timelineNow: Date? = nil,
+        showsActivityChatInitially: Bool = false
     ) {
+        _selectedPage = State(initialValue: showsActivityChatInitially ? .activityChat : .timeline)
         self.accountID = account.id
         self.acceptedActivityUploads = acceptedActivityUploads
         self.previewUpload = previewUpload
@@ -147,6 +153,8 @@ struct MainWorkspaceView: View {
                     TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice, previewUpload: previewUpload)
                 case .labelReview:
                     LabelReviewView(viewModel: reviewModel)
+                case .activityChat:
+                    ActivityChatView(model: chatModel)
                 case .focusSession:
                     FocusSessionView(model: focusModel)
                 }
@@ -181,14 +189,9 @@ struct MainWorkspaceView: View {
             .padding(.top, 25)
             .padding(.bottom, 35)
 
-            Text("화면")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.5))
-                .padding(.horizontal, 20)
-                .padding(.bottom, 9)
-
             pageButton(.timeline)
             pageButton(.labelReview)
+            pageButton(.activityChat)
             pageButton(.focusSession)
 
             Spacer()
@@ -231,7 +234,14 @@ struct MainWorkspaceView: View {
         .foregroundStyle(selectedPage == page ? .white : .white.opacity(0.68))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
-        .accessibilityIdentifier(page == .timeline ? "navigation-timeline" : page == .labelReview ? "navigation-label-review" : "navigation-focus-session")
+        .accessibilityIdentifier({
+            switch page {
+            case .timeline: "navigation-timeline"
+            case .labelReview: "navigation-label-review"
+            case .focusSession: "navigation-focus-session"
+            case .activityChat: "navigation-activity-chat"
+            }
+        }())
     }
 }
 
