@@ -17,12 +17,13 @@ final class TimelineViewTests: XCTestCase {
     }
 
     func testAxisHorizontalLayoutKeepsFiveEqualSlotsBeforeOverflow() {
-        for viewport in [354.0, 554.0, 1054.0] {
+        for viewport in [300.0, 413.0, 414.0, 554.0, 1054.0] {
             let activityArea = viewport - 54
+            let laneWidth = max(activityArea / 5, 72)
             for count in [1, 3, 5, 6, 8] {
                 let layout = TimelineAxisHorizontalLayout(viewportWidth: viewport, laneCount: count)
-                XCTAssertEqual(layout.activityWidth, activityArea / 5 - 12, accuracy: 0.001)
-                XCTAssertEqual(layout.contentWidth, count <= 5 ? viewport : 54 + Double(count) * activityArea / 5,
+                XCTAssertEqual(layout.activityWidth, laneWidth - 12, accuracy: 0.001)
+                XCTAssertEqual(layout.contentWidth, max(viewport, 54 + Double(count) * laneWidth),
                                accuracy: 0.001)
                 XCTAssertEqual(layout.activityOffset(lane: 0), 6)
                 for lane in 1..<count {
@@ -31,10 +32,13 @@ final class TimelineViewTests: XCTestCase {
                 }
                 let lastRight = 54 + layout.activityOffset(lane: count - 1) + layout.activityWidth
                 XCTAssertLessThanOrEqual(lastRight, layout.contentWidth - 6 + 0.001)
-                if count > 5 {
+                if lastRight > viewport {
                     XCTAssertGreaterThan(lastRight, viewport)
                     let maximumScroll = layout.contentWidth - viewport
                     XCTAssertEqual(lastRight - maximumScroll, viewport - 6, accuracy: 0.001)
+                }
+                if viewport >= 414 && count <= 5 {
+                    XCTAssertEqual(layout.contentWidth, viewport, accuracy: 0.001)
                 }
             }
         }
@@ -48,6 +52,10 @@ final class TimelineViewTests: XCTestCase {
         XCTAssertEqual(wide.activityOffset(lane: 7), 1406)
         XCTAssertEqual(narrow.activityOffset(lane: 7), 706)
         XCTAssertEqual(narrow.contentWidth, 854)
+        let smallest = TimelineAxisHorizontalLayout(viewportWidth: 300, laneCount: 8)
+        XCTAssertEqual(smallest.activityWidth, 60)
+        XCTAssertEqual(smallest.activityOffset(lane: 7), 510)
+        XCTAssertEqual(smallest.contentWidth, 630)
     }
 
     func testAcceptedUploadRefreshesTheSelectedHistoricalDate() async {

@@ -132,7 +132,7 @@ struct TimelineAxisHorizontalLayout {
     init(viewportWidth: Double, laneCount: Int) {
         let labelArea = Self.timeLabelWidth + Self.timeLabelSpacing
         let activityArea = max(0, viewportWidth - labelArea)
-        laneWidth = activityArea / Double(Self.visibleLaneCount)
+        laneWidth = max(activityArea / Double(Self.visibleLaneCount), 72)
         contentWidth = max(viewportWidth, labelArea + Double(laneCount) * laneWidth)
     }
 
