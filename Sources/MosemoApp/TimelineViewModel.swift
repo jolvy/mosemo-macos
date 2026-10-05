@@ -119,6 +119,28 @@ struct TimelinePresentation: Identifiable {
     }
 }
 
+struct TimelineAxisHorizontalLayout {
+    static let timeLabelWidth = 44.0
+    static let timeLabelSpacing = 10.0
+    static let activitySpacing = 12.0
+    static let visibleLaneCount = 5
+
+    let laneWidth: Double
+    let contentWidth: Double
+    var activityWidth: Double { max(0, laneWidth - Self.activitySpacing) }
+
+    init(viewportWidth: Double, laneCount: Int) {
+        let labelArea = Self.timeLabelWidth + Self.timeLabelSpacing
+        let activityArea = max(0, viewportWidth - labelArea)
+        laneWidth = max(activityArea / Double(Self.visibleLaneCount), 72)
+        contentWidth = max(viewportWidth, labelArea + Double(laneCount) * laneWidth)
+    }
+
+    func activityOffset(lane: Int) -> Double {
+        Self.activitySpacing / 2 + Double(lane) * laneWidth
+    }
+}
+
 struct TimelineAxis {
     static let pointsPerMinute = 1.25
     struct Tick: Identifiable {
