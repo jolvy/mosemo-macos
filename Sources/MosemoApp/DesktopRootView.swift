@@ -46,11 +46,13 @@ struct DesktopRootView: View {
 private enum WorkspacePage: Hashable {
     case timeline
     case labelReview
+    case activityChat
 
     var title: String {
         switch self {
         case .timeline: "관찰 타임라인"
         case .labelReview: "라벨 검토"
+        case .activityChat: "AI 채팅"
         }
     }
 
@@ -58,6 +60,7 @@ private enum WorkspacePage: Hashable {
         switch self {
         case .timeline: "calendar"
         case .labelReview: "checkmark.rectangle.stack"
+        case .activityChat: "sparkles"
         }
     }
 }
@@ -66,6 +69,7 @@ struct MainWorkspaceView: View {
     @State private var selectedPage: WorkspacePage = .timeline
     @StateObject private var timelineModel: TimelineViewModel
     @StateObject private var reviewModel: LabelReviewViewModel
+    @StateObject private var chatModel = ActivityChatViewModel()
 
     private let accountID: UUID
     private let acceptedActivityUploads: AnyPublisher<UUID, Never>
@@ -83,8 +87,10 @@ struct MainWorkspaceView: View {
         previewUpload: (() -> Void)? = nil,
         authenticationFailed: @escaping @MainActor () -> Void = {},
         showsPreviewNotice: Bool = false,
-        timelineNow: Date? = nil
+        timelineNow: Date? = nil,
+        showsActivityChatInitially: Bool = false
     ) {
+        _selectedPage = State(initialValue: showsActivityChatInitially ? .activityChat : .timeline)
         self.accountID = account.id
         self.acceptedActivityUploads = acceptedActivityUploads
         self.previewUpload = previewUpload
@@ -116,6 +122,8 @@ struct MainWorkspaceView: View {
                     TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice, previewUpload: previewUpload)
                 case .labelReview:
                     LabelReviewView(viewModel: reviewModel)
+                case .activityChat:
+                    ActivityChatView(model: chatModel)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -151,6 +159,7 @@ struct MainWorkspaceView: View {
 
             pageButton(.timeline)
             pageButton(.labelReview)
+            pageButton(.activityChat)
 
             Spacer()
 
@@ -192,7 +201,13 @@ struct MainWorkspaceView: View {
         .foregroundStyle(selectedPage == page ? .white : .white.opacity(0.68))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
-        .accessibilityIdentifier(page == .timeline ? "navigation-timeline" : "navigation-label-review")
+        .accessibilityIdentifier({
+            switch page {
+            case .timeline: "navigation-timeline"
+            case .labelReview: "navigation-label-review"
+            case .activityChat: "navigation-activity-chat"
+            }
+        }())
     }
 }
 

@@ -27,6 +27,9 @@
 
 		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
 		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
+		200000000000000000000032 /* ActivityChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000032 /* ActivityChatView.swift */; };
+		200000000000000000000033 /* ActivityChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000033 /* ActivityChatViewModel.swift */; };
+		200000000000000000000034 /* ActivityChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000034 /* ActivityChatInput.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +55,9 @@
 
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000040 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		300000000000000000000032 /* ActivityChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatView.swift; sourceTree = "<group>"; };
+		300000000000000000000033 /* ActivityChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatViewModel.swift; sourceTree = "<group>"; };
+		300000000000000000000034 /* ActivityChatInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityChatInput.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +96,9 @@
 			children = (
 				300000000000000000000011 /* MosemoApp.swift */,
 				300000000000000000000031 /* OfflineActivityCoordinator.swift */,
+				300000000000000000000034 /* ActivityChatInput.swift */,
+				300000000000000000000033 /* ActivityChatViewModel.swift */,
+				300000000000000000000032 /* ActivityChatView.swift */,
 				300000000000000000000012 /* CollectorViewModel.swift */,
 				300000000000000000000013 /* ChromeAppleEventClient.swift */,
 				300000000000000000000016 /* SystemEventsClient.swift */,
@@ -204,6 +213,9 @@
 			files = (
 				200000000000000000000011 /* MosemoApp.swift in Sources */,
 				200000000000000000000031 /* OfflineActivityCoordinator.swift in Sources */,
+				200000000000000000000034 /* ActivityChatInput.swift in Sources */,
+				200000000000000000000033 /* ActivityChatViewModel.swift in Sources */,
+				200000000000000000000032 /* ActivityChatView.swift in Sources */,
 				200000000000000000000012 /* CollectorViewModel.swift in Sources */,
 				200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */,
 				200000000000000000000016 /* SystemEventsClient.swift in Sources */,
