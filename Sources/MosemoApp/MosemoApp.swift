@@ -74,7 +74,9 @@ struct MosemoApp: App {
         Window("Mosemo", id: "main") {
             Group {
                 #if DEBUG
-                if CommandLine.arguments.contains("--timeline-ui-preview") || CommandLine.arguments.contains("--focus-session-ui-preview") {
+                if CommandLine.arguments.contains("--timeline-ui-preview")
+                    || CommandLine.arguments.contains("--activity-chat-ui-preview")
+                    || CommandLine.arguments.contains("--focus-session-ui-preview") {
                     MainWorkspaceView(
                         account: Self.previewAccount,
                         timelineFetcher: TimelinePreviewFetcher(
@@ -91,7 +93,8 @@ struct MosemoApp: App {
                         previewUpload: CommandLine.arguments.contains("--timeline-preview-follow-bottom")
                             ? { Self.previewUploadSubject.send(Self.previewAccount.id) } : nil,
                         showsPreviewNotice: true,
-                        timelineNow: Self.timelinePreviewNow
+                        timelineNow: Self.timelinePreviewNow,
+                        showsActivityChatInitially: CommandLine.arguments.contains("--activity-chat-ui-preview")
                     )
                 } else if CommandLine.arguments.contains("--label-review-ui-preview") {
                     LabelReviewDemoView()
