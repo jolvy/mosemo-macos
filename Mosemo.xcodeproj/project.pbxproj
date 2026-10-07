@@ -24,6 +24,7 @@
 		200000000000000000000028 /* TimelineViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000028 /* TimelineViewModel.swift */; };
 		200000000000000000000029 /* TimelineUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000029 /* TimelineUITests.swift */; };
 		200000000000000000000031 /* OfflineActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000031 /* OfflineActivityCoordinator.swift */; };
+		200000000000000000000032 /* ApplicationWindowContextClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000032 /* ApplicationWindowContextClient.swift */; };
 
 		200000000000000000000041 /* CollectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000001 /* CollectorCore */; };
 		200000000000000000000042 /* MosemoAPI in Frameworks */ = {isa = PBXBuildFile; productRef = B00000000000000000000002 /* MosemoAPI */; };
@@ -48,6 +49,7 @@
 		300000000000000000000028 /* TimelineViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineViewModel.swift; sourceTree = "<group>"; };
 		300000000000000000000029 /* TimelineUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineUITests.swift; sourceTree = "<group>"; };
 		300000000000000000000031 /* OfflineActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineActivityCoordinator.swift; sourceTree = "<group>"; };
+		300000000000000000000032 /* ApplicationWindowContextClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationWindowContextClient.swift; sourceTree = "<group>"; };
 		300000000000000000000025 /* MosemoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MosemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 
 		300000000000000000000030 /* Mosemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mosemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -90,6 +92,7 @@
 			children = (
 				300000000000000000000011 /* MosemoApp.swift */,
 				300000000000000000000031 /* OfflineActivityCoordinator.swift */,
+				300000000000000000000032 /* ApplicationWindowContextClient.swift */,
 				300000000000000000000012 /* CollectorViewModel.swift */,
 				300000000000000000000013 /* ChromeAppleEventClient.swift */,
 				300000000000000000000016 /* SystemEventsClient.swift */,
@@ -204,6 +207,7 @@
 			files = (
 				200000000000000000000011 /* MosemoApp.swift in Sources */,
 				200000000000000000000031 /* OfflineActivityCoordinator.swift in Sources */,
+				200000000000000000000032 /* ApplicationWindowContextClient.swift in Sources */,
 				200000000000000000000012 /* CollectorViewModel.swift in Sources */,
 				200000000000000000000013 /* ChromeAppleEventClient.swift in Sources */,
 				200000000000000000000016 /* SystemEventsClient.swift in Sources */,

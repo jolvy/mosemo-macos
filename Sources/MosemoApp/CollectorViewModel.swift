@@ -45,6 +45,7 @@ struct CollectorObservationEnvironment {
     var frontmostBundleID: () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
     var readChrome: (() async -> Result<ChromeReadResult, ChromeReadFailure>)? = nil
     var readFirefox: (() async -> Result<FirefoxObservation, SystemEventsReadFailure>)? = nil
+    var readApplicationWindow: ((String) async -> ApplicationWindowReadResult)? = nil
     var captureReturnAnchor: (() -> ReturnAnchorDescriptor?)? = nil
     var initialTrackingEnabled: Bool? = nil
     var persistTrackingPreference = true
@@ -58,9 +59,8 @@ final class CollectorViewModel: ObservableObject {
     @Published private(set) var currentAnchor: ReturnAnchorDescriptor?
     @Published private(set) var statusMessage = "활동 추적 상태를 확인하는 중입니다."
     @Published private(set) var automaticPauseReason: String?
-    @Published private(set) var systemEventsAutomationPermission: AutomationPermissionStatus = .notRequested
+    @Published private(set) var accessibilityPermission: AutomationPermissionStatus = .notRequested
     @Published private(set) var chromeAutomationPermission: AutomationPermissionStatus = .notRequested
-    @Published private(set) var systemEventsPermissionRequestInFlight = false
     @Published private(set) var chromeAutomationPermissionRequestInFlight = false
     @Published private(set) var currentCPUPercent = 0.0
     @Published private(set) var averageCPUPercent = 0.0
@@ -76,6 +76,8 @@ final class CollectorViewModel: ObservableObject {
     private let performanceSampler = PerformanceSampler()
     private let chromeQueue = DispatchQueue(label: "io.mosemo.collector.chrome-apple-events")
     private let firefoxQueue = DispatchQueue(label: "io.mosemo.collector.firefox-system-events")
+    private let applicationWindowQueue = DispatchQueue(label: "io.mosemo.collector.application-window-context")
+    private let applicationWindowClient = ApplicationWindowContextClient()
     private lazy var anchorStore = ReturnAnchorStore(chrome: chrome)
     let acceptedActivityUploads = PassthroughSubject<UUID, Never>()
     private var synchronization: OfflineActivityCoordinator?
@@ -85,6 +87,7 @@ final class CollectorViewModel: ObservableObject {
     private var firefoxObservation: FirefoxObservationIdentity?
     private var chromePollInFlight = false
     private var firefoxPollInFlight = false
+    private var applicationWindowPollInFlight = false
     private var chromeRestartPending = false
     private var lastChromePollCompletedAt: Date?
     private var lastFirefoxPollCompletedAt: Date?
@@ -110,6 +113,7 @@ final class CollectorViewModel: ObservableObject {
         let environment = environment ?? CollectorObservationEnvironment()
         self.environment = environment
         self.workspaceObserver = workspaceObserver
+        accessibilityPermission = AXIsProcessTrusted() ? .granted : .denied
         let savedTrackingPreference = UserDefaults.standard.object(forKey: Self.activityTrackingPreferenceKey) as? Bool
         isActivityTrackingEnabled = environment.initialTrackingEnabled ?? savedTrackingPreference ?? true
         configureCallbacks()
@@ -306,19 +310,17 @@ final class CollectorViewModel: ObservableObject {
         statusMessage = "전환 측정 통계를 초기화했습니다."
     }
 
-    func requestSystemEventsAutomationPermission() {
-        guard !systemEventsPermissionRequestInFlight else { return }
-
-        systemEventsPermissionRequestInFlight = true
-        statusMessage = "System Events 자동화 권한을 요청하는 중입니다. macOS 확인 창에 응답해 주세요."
-        let systemEvents = systemEvents
-        firefoxQueue.async { [weak self, systemEvents] in
-            guard let self else { return }
-            let result = systemEvents.requestAutomationPermission()
-            DispatchQueue.main.async {
-                Task { @MainActor in self.handleSystemEventsAutomationPermissionResult(result) }
-            }
+    func requestAccessibilityPermission() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let isTrusted = AXIsProcessTrustedWithOptions(options)
+        accessibilityPermission = isTrusted ? .granted : .denied
+        if !isTrusted,
+           let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(settingsURL)
         }
+        statusMessage = isTrusted
+            ? "앱 접근성 권한이 허용되었습니다."
+            : "시스템 설정의 개인정보 보호 및 보안 → 손쉬운 사용에서 Mosemo를 허용해 주세요."
     }
 
     func requestChromeAutomationPermission() {
@@ -349,7 +351,7 @@ final class CollectorViewModel: ObservableObject {
         return ([
             "activityTrackingEnabled=\(isActivityTrackingEnabled)",
             "observationState=\(collectionAllowed ? "observed" : "paused")",
-            "systemEventsAutomationPermission=\(systemEventsAutomationPermission.rawValue)",
+            "accessibilityPermission=\(accessibilityPermission.rawValue)",
             "chromeAutomationPermission=\(chromeAutomationPermission.rawValue)",
             "cpuCurrentPercent=\(String(format: "%.2f", currentCPUPercent))",
             "cpuAveragePercent=\(String(format: "%.2f", averageCPUPercent))",
@@ -383,31 +385,6 @@ final class CollectorViewModel: ObservableObject {
         }
         workspaceObserver.onAutomaticResume = { [weak self] reason in
             self?.handleAutomaticResume(reason: reason)
-        }
-    }
-
-    private func handleSystemEventsAutomationPermissionResult(
-        _ result: SystemEventsAutomationPermissionResult
-    ) {
-        systemEventsPermissionRequestInFlight = false
-
-        switch result {
-        case .granted:
-            systemEventsAutomationPermission = .granted
-            statusMessage = "System Events 자동화 권한이 허용되었습니다."
-        case .denied:
-            systemEventsAutomationPermission = .denied
-            if systemEvents.openAutomationSettings() {
-                statusMessage = "System Events 자동화 요청이 거부되었습니다. 열린 자동화 설정에서 Mosemo의 System Events 토글을 허용해 주세요."
-            } else {
-                statusMessage = "System Events 자동화 요청이 거부되었습니다. 시스템 설정의 개인정보 보호 및 보안 → 자동화에서 허용해 주세요."
-            }
-        case .firefoxNotRunning:
-            systemEventsAutomationPermission = .unavailable
-            statusMessage = "Firefox를 먼저 실행한 뒤 System Events 자동화 권한 요청을 다시 눌러 주세요."
-        case .unavailable:
-            systemEventsAutomationPermission = .unavailable
-            statusMessage = "System Events 자동화 권한을 확인하지 못했습니다. Firefox가 실행 중인지 확인해 주세요."
         }
     }
 
@@ -478,11 +455,16 @@ final class CollectorViewModel: ObservableObject {
             pollFirefoxIfNeeded()
         } else {
             browserApplicationTransition = nil
-            emitApplicationObservation(bundleID: bundleID, transition: transition)
+            pollApplicationWindow(bundleID: bundleID, transition: transition)
         }
     }
 
-    private func emitApplicationObservation(bundleID: String, transition: ActivityTransitionType) {
+    private func emitApplicationObservation(
+        bundleID: String,
+        transition: ActivityTransitionType,
+        windowTitle: String?,
+        windowCaptureFailure: String? = nil
+    ) {
         emitTransition(SafeActivityEvent(
             eventType: .activity,
             appBundleID: bundleID,
@@ -494,7 +476,60 @@ final class CollectorViewModel: ObservableObject {
             occurredAt: environment.now(),
             detectionLatencyMilliseconds: 0,
             protectedContext: false
-        ), countsAsDetection: transition == .appSwitch)
+        ), windowTitle: windowTitle, windowCaptureFailure: windowCaptureFailure,
+           countsAsDetection: transition == .appSwitch)
+    }
+
+    private func pollApplicationWindow(bundleID: String, transition: ActivityTransitionType) {
+        guard collectionAllowed,
+              environment.frontmostBundleID() == bundleID,
+              !applicationWindowPollInFlight else { return }
+
+        applicationWindowPollInFlight = true
+        let generation = observationGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.readApplicationWindow(bundleID: bundleID)
+            self.applicationWindowPollInFlight = false
+            guard self.collectionAllowed,
+                  self.observationGeneration == generation,
+                  self.environment.frontmostBundleID() == bundleID else {
+                self.pollCurrentActivity()
+                return
+            }
+
+            switch result {
+            case let .captured(context):
+                self.accessibilityPermission = .granted
+                self.emitApplicationObservation(
+                    bundleID: bundleID,
+                    transition: transition,
+                    windowTitle: context.title
+                )
+            case let .unavailable(reason):
+                if reason == "accessibility_permission" {
+                    self.accessibilityPermission = .denied
+                }
+                self.emitApplicationObservation(
+                    bundleID: bundleID,
+                    transition: transition,
+                    windowTitle: nil,
+                    windowCaptureFailure: reason
+                )
+            }
+        }
+    }
+
+    private func readApplicationWindow(bundleID: String) async -> ApplicationWindowReadResult {
+        if let readApplicationWindow = environment.readApplicationWindow {
+            return await readApplicationWindow(bundleID)
+        }
+        let client = applicationWindowClient
+        return await withCheckedContinuation { continuation in
+            applicationWindowQueue.async {
+                continuation.resume(returning: client.read(bundleID: bundleID))
+            }
+        }
     }
 
     private func pollChromeIfNeeded() {
@@ -566,6 +601,7 @@ final class CollectorViewModel: ObservableObject {
                 detectionLatencyMilliseconds: upperBoundLatency,
                 protectedContext: classification.protectedContext
             ), browserContext: observation.diagnosticContext,
+               windowTitle: observation.diagnosticContext?.windowTitle ?? observation.diagnosticContext?.title,
                countsAsDetection: transition != .initialContext && transition != .periodicObservation)
         case .success(.notRunning):
             chromeAutomationPermission = .unavailable
@@ -621,6 +657,7 @@ final class CollectorViewModel: ObservableObject {
 
         switch result {
         case let .success(observation):
+            accessibilityPermission = .granted
             lastObservationFailure = nil
             var transition = browserApplicationTransition ?? FirefoxTransitionDetector.transition(
                 from: firefoxObservation,
@@ -648,12 +685,14 @@ final class CollectorViewModel: ObservableObject {
                 detectionLatencyMilliseconds: upperBoundLatency,
                 protectedContext: classification.protectedContext
             ), browserContext: observation.diagnosticContext,
+               windowTitle: observation.diagnosticContext?.windowTitle ?? observation.diagnosticContext?.title,
                countsAsDetection: transition != .initialContext && transition != .periodicObservation)
         case let .failure(error):
             let reason: String
             switch error {
-            case .automationPermissionDenied:
-                reason = "system_events_automation_permission"
+            case .accessibilityPermissionDenied:
+                accessibilityPermission = .denied
+                reason = "accessibility_permission"
             case .noFocusedWindow:
                 reason = "firefox_no_focused_window"
             case .pageContextUnavailable:
@@ -693,12 +732,14 @@ final class CollectorViewModel: ObservableObject {
     private func emitTransition(
         _ event: SafeActivityEvent,
         browserContext: TransientBrowserContext? = nil,
+        windowTitle: String? = nil,
+        windowCaptureFailure: String? = nil,
         countsAsDetection: Bool
     ) {
         guard collectionAllowed else { return }
         lastFullObservationUptime = environment.uptime()
         guard countsAsDetection else {
-            append(event, browserContext: browserContext)
+            append(event, browserContext: browserContext, windowTitle: windowTitle, windowCaptureFailure: windowCaptureFailure)
             return
         }
 
@@ -726,7 +767,7 @@ final class CollectorViewModel: ObservableObject {
             latencyMilliseconds: measuredLatency,
             matchesExpectedTransition: matchesExpected
         )
-        append(measuredEvent, browserContext: browserContext)
+        append(measuredEvent, browserContext: browserContext, windowTitle: windowTitle, windowCaptureFailure: windowCaptureFailure)
     }
 
     private func emitReturnWithoutAnchor() {
@@ -748,14 +789,21 @@ final class CollectorViewModel: ObservableObject {
 
     private func append(
         _ event: SafeActivityEvent,
-        browserContext: TransientBrowserContext? = nil
+        browserContext: TransientBrowserContext? = nil,
+        windowTitle: String? = nil,
+        windowCaptureFailure: String? = nil
     ) {
         guard collectionAllowed else { return }
         eventBuffer.append(DiagnosticActivityEvent(
             safeEvent: event
         ))
         events = eventBuffer.elements
-        synchronization?.record(event, browserContext: browserContext)
+        synchronization?.record(
+            event,
+            browserContext: browserContext,
+            windowTitle: windowTitle,
+            windowCaptureFailure: windowCaptureFailure
+        )
     }
 
     private func handleAutomaticPause(reason: String) {
@@ -845,7 +893,7 @@ final class CollectorViewModel: ObservableObject {
         } else if bundleID == SystemEventsClient.firefoxBundleID {
             pollFirefoxIfNeeded()
         } else if periodicObservationDue {
-            emitApplicationObservation(bundleID: bundleID, transition: .periodicObservation)
+            pollApplicationWindow(bundleID: bundleID, transition: .periodicObservation)
         }
     }
 

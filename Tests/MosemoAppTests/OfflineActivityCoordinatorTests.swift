@@ -382,6 +382,45 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(observation.context, .opaque)
     }
 
+    func testApplicationWindowTitleIsPersistedForGenericAppObservation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let account = Account(id: UUID(), provider: .kakao, createdAt: .now,
+                              lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
+        let device = UUID()
+        let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
+                                               keyStore: QueueTestKeyStore())
+        let coordinator = OfflineActivityCoordinator(
+            queue: queue,
+            client: QueueTestClient(firstError: .validationFailed),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            onStatus: { _, _ in }
+        )
+        await coordinator.activate(account)
+
+        coordinator.record(
+            makeActivityEvent(appBundleID: "com.kakao.KakaoTalkMac"),
+            browserContext: nil,
+            windowTitle: "KakaoTalk - Example conversation"
+        )
+        for _ in 0..<100 {
+            if try await queue.count(accountID: account.id) == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let saved = try await queue.first(accountID: account.id, deviceID: device)
+        guard case .observation(let observation)? = saved?.record,
+              case .detailed(let detail) = observation.context else {
+            return XCTFail("Expected a detailed application observation")
+        }
+        XCTAssertEqual(detail.app.bundleID, .captured("com.kakao.KakaoTalkMac"))
+        XCTAssertEqual(
+            detail.window,
+            .captured(title: ActivityPrivacyFilter.title("KakaoTalk - Example conversation"))
+        )
+        XCTAssertEqual(detail.web, .notApplicable)
+    }
+
     func testQueueReadFailureStopsSendingAndPreservesPendingRecord() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
