@@ -155,7 +155,8 @@ struct ActivityChatView: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 8) {
+        let conversationID = model.selectedConversationID
+        return VStack(spacing: 8) {
             VStack(spacing: 8) {
                 ZStack(alignment: .topLeading) {
                     if model.draft.isEmpty {
@@ -165,7 +166,14 @@ struct ActivityChatView: View {
                             .padding(.top, 8)
                             .allowsHitTesting(false)
                     }
-                    ActivityChatInput(text: Binding(get: { model.draft }, set: { model.draft = $0 }), onSend: { model.send() })
+                    ActivityChatInput(
+                        text: Binding(
+                            get: { model.draft(for: conversationID) },
+                            set: { model.updateDraft($0, for: conversationID) }
+                        ),
+                        conversationID: conversationID,
+                        onSend: { model.send() }
+                    )
                 }
                 HStack {
                     Spacer()
