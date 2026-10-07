@@ -4,6 +4,7 @@ import SwiftUI
 /// NSTextView keeps Return used to commit marked Korean text out of the send path.
 struct ActivityChatInput: NSViewRepresentable {
     @Binding var text: String
+    let conversationID: UUID
     let onSend: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -34,8 +35,13 @@ struct ActivityChatInput: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        context.coordinator.parent = self
         guard let editor = scroll.documentView as? ChatTextView else { return }
+        if context.coordinator.parent.conversationID != conversationID, editor.hasMarkedText() {
+            // Finish composition while the coordinator still owns the previous draft.
+            editor.unmarkText()
+            context.coordinator.parent.text = editor.string
+        }
+        context.coordinator.parent = self
         editor.onSend = onSend
         if editor.string != text, !editor.hasMarkedText() {
             editor.string = text
