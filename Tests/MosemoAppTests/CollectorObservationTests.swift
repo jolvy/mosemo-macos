@@ -404,6 +404,24 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(model.events.last?.safeEvent.appBundleID, "com.example.editor")
     }
 
+    func testLateApplicationReadPreservesLatestAppSwitch() async throws {
+        let source = ObservationSource()
+        source.holdApplicationReads = true
+        let model = source.makeCollector()
+        await waitUntil { source.pendingApplicationReads.count == 1 }
+        source.bundleID = "com.example.second"
+        source.advance(to: 1)
+        model.pollCurrentActivity()
+        source.pendingApplicationReads.removeFirst().resume(returning: .captured(
+            ApplicationWindowContext(title: "Old window", browserURL: nil)))
+        await waitUntil { source.pendingApplicationReads.count == 1 }
+        source.pendingApplicationReads.removeFirst().resume(returning: .captured(
+            ApplicationWindowContext(title: "New window", browserURL: nil)))
+        await waitUntil { model.events.count == 1 }
+        XCTAssertEqual(model.events.last?.safeEvent.appBundleID, "com.example.second")
+        XCTAssertEqual(model.events.last?.safeEvent.transitionType, .appSwitch)
+    }
+
     private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         for _ in 0..<100 {
             if condition() { return }
@@ -431,6 +449,8 @@ private final class ObservationSource {
     var chromeReads = 0
     var holdChromeReads = false
     var pendingChromeReads: [CheckedContinuation<Result<ChromeReadResult, ChromeReadFailure>, Never>] = []
+    var holdApplicationReads = false
+    var pendingApplicationReads: [CheckedContinuation<ApplicationWindowReadResult, Never>] = []
     var holdFirefoxReads = false
     var pendingFirefoxReads: [CheckedContinuation<Result<FirefoxObservation, SystemEventsReadFailure>, Never>] = []
     var chromeResult: Result<ChromeReadResult, ChromeReadFailure> = .success(.observation(ChromeObservation(
@@ -479,7 +499,10 @@ private final class ObservationSource {
                 return self.firefoxResult
             },
             readApplicationWindow: { _ in
-                .captured(ApplicationWindowContext(title: "Example window", browserURL: nil))
+                if self.holdApplicationReads {
+                    return await withCheckedContinuation { self.pendingApplicationReads.append($0) }
+                }
+                return .captured(ApplicationWindowContext(title: "Example window", browserURL: nil))
             },
             captureReturnAnchor: { nil },
             initialTrackingEnabled: true,

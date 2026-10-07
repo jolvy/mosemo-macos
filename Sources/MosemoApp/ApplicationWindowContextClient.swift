@@ -9,6 +9,7 @@ struct ApplicationWindowContext: Equatable, Sendable {
 
 enum ApplicationWindowReadResult: Equatable, Sendable {
     case captured(ApplicationWindowContext)
+    case noFocusedWindow
     case unavailable(String)
 }
 
@@ -24,26 +25,23 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
         AXUIElementSetMessagingTimeout(applicationElement, 0.75)
         guard let window = focusedWindow(of: applicationElement) else {
-            return .unavailable("focused_window_unavailable")
+            return .noFocusedWindow
         }
 
         let title = stringAttribute(kAXTitleAttribute, of: window)
         let browserURL = bundleID == firefoxBundleID ? firefoxAddress(in: window) : nil
-        guard let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard title != nil || browserURL != nil else {
             return .unavailable("window_title_unavailable")
         }
         return .captured(ApplicationWindowContext(title: title, browserURL: browserURL))
     }
 
     private func focusedWindow(of application: AXUIElement) -> AXUIElement? {
-        if let focused = elementAttribute(kAXFocusedWindowAttribute, of: application) {
-            return focused
-        }
-        return (attribute(kAXWindowsAttribute, of: application) as? [AXUIElement])?.first
+        elementAttribute(kAXFocusedWindowAttribute, of: application)
     }
 
     private func firefoxAddress(in window: AXUIElement) -> String? {
-        var pending: [(element: AXUIElement, depth: Int)] = [(window, 0)]
+        var pending: [(element: AXUIElement, depth: Int, inToolbar: Bool)] = [(window, 0, false)]
         var visited = 0
 
         while !pending.isEmpty, visited < 300 {
@@ -51,18 +49,23 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
             visited += 1
 
             let element = current.element
-            if stringAttribute(kAXRoleAttribute, of: element) == kAXComboBoxRole as String,
+            let role = stringAttribute(kAXRoleAttribute, of: element)
+            let inToolbar = current.inToolbar || role == kAXToolbarRole as String
+            // Never descend into page content or read an actively edited address field.
+            if role == "AXWebArea" { continue }
+            if inToolbar, role == kAXComboBoxRole as String,
                isFirefoxAddressField(element),
+               (attribute(kAXFocusedAttribute, of: element) as? Bool) == false,
                let value = stringAttribute(kAXValueAttribute, of: element),
                !value.isEmpty {
-                return normalizedFirefoxURL(value)
+                return value
             }
 
             guard current.depth < 7,
                   let children = attribute(kAXChildrenAttribute, of: element) as? [AXUIElement] else {
                 continue
             }
-            pending.append(contentsOf: children.map { ($0, current.depth + 1) })
+            pending.append(contentsOf: children.map { ($0, current.depth + 1, inToolbar) })
         }
         return nil
     }
@@ -71,12 +74,7 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
         let description = stringAttribute(kAXDescriptionAttribute, of: element)?.lowercased() ?? ""
         let title = stringAttribute(kAXTitleAttribute, of: element)?.lowercased() ?? ""
         let label = description + " " + title
-        return ["address", "search", "url", "주소", "검색"].contains { label.contains($0) }
-    }
-
-    private func normalizedFirefoxURL(_ value: String) -> String {
-        guard URLComponents(string: value)?.scheme == nil else { return value }
-        return "https://\(value)"
+        return ["address", "url", "주소"].contains { label.contains($0) }
     }
 
     private func stringAttribute(_ name: String, of element: AXUIElement) -> String? {

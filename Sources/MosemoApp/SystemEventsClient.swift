@@ -22,7 +22,7 @@ final class SystemEventsClient: @unchecked Sendable {
     func readFirefoxFrontmostContext() -> Result<FirefoxObservation, SystemEventsReadFailure> {
         let context: ApplicationWindowContext
         switch ApplicationWindowContextClient().read(bundleID: Self.firefoxBundleID) {
-        case .unavailable("application_not_running"), .unavailable("focused_window_unavailable"):
+        case .unavailable("application_not_running"), .noFocusedWindow:
             return .failure(.noFocusedWindow)
         case .unavailable("accessibility_permission"):
             return .failure(.accessibilityPermissionDenied)
@@ -31,10 +31,10 @@ final class SystemEventsClient: @unchecked Sendable {
         case let .captured(value):
             context = value
         }
-        guard let windowTitle = context.title else { return .failure(.pageContextUnavailable) }
+        let windowTitle = context.title
 
         let isProtected = ["private", "사생활 보호", "개인 정보 보호"].contains {
-            windowTitle.localizedCaseInsensitiveContains($0)
+            windowTitle?.localizedCaseInsensitiveContains($0) == true
         }
         if isProtected {
             return .success(FirefoxObservation(

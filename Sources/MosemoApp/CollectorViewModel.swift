@@ -88,6 +88,7 @@ final class CollectorViewModel: ObservableObject {
     private var chromePollInFlight = false
     private var firefoxPollInFlight = false
     private var applicationWindowPollInFlight = false
+    private var applicationWindowTransition: ActivityTransitionType?
     private var chromeRestartPending = false
     private var lastChromePollCompletedAt: Date?
     private var lastFirefoxPollCompletedAt: Date?
@@ -446,6 +447,7 @@ final class CollectorViewModel: ObservableObject {
         lastChromePollCompletedAt = nil
         lastFirefoxPollCompletedAt = nil
 
+        applicationWindowTransition = nil
         let transition: ActivityTransitionType = initial ? .initialContext : .appSwitch
         if bundleID == ChromeAppleEventClient.bundleID {
             browserApplicationTransition = transition
@@ -455,6 +457,7 @@ final class CollectorViewModel: ObservableObject {
             pollFirefoxIfNeeded()
         } else {
             browserApplicationTransition = nil
+            applicationWindowTransition = transition
             pollApplicationWindow(bundleID: bundleID, transition: transition)
         }
     }
@@ -498,7 +501,12 @@ final class CollectorViewModel: ObservableObject {
                 return
             }
 
+            let transition = self.applicationWindowTransition ?? transition
+            self.applicationWindowTransition = nil
             switch result {
+            case .noFocusedWindow:
+                self.accessibilityPermission = .granted
+                self.emitApplicationObservation(bundleID: bundleID, transition: transition, windowTitle: nil)
             case let .captured(context):
                 self.accessibilityPermission = .granted
                 self.emitApplicationObservation(
@@ -833,6 +841,7 @@ final class CollectorViewModel: ObservableObject {
     private func stopActiveCollection() {
         observationGeneration += 1
         browserApplicationTransition = nil
+        applicationWindowTransition = nil
         chromeRestartPending = false
         lastObservationFailure = nil
         activeBundleID = nil
@@ -883,6 +892,7 @@ final class CollectorViewModel: ObservableObject {
             if activeBundleID != nil { observationGeneration += 1 }
             activeBundleID = nil
             browserApplicationTransition = nil
+            applicationWindowTransition = nil
             emitObservationUnavailable(reason: "frontmost_application_unavailable")
             return
         }
