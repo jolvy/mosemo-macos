@@ -5,19 +5,43 @@ import MosemoAPI
 
 @MainActor
 final class OfflineActivityCoordinator {
+    var focusSessionID: UUID? {
+        didSet {
+            guard oldValue != focusSessionID else { return }
+            let now = focusClock()
+            if !focusWindows.isEmpty, focusWindows[focusWindows.count - 1].endedAt == nil {
+                focusWindows[focusWindows.count - 1].endedAt = now
+            }
+            if let focusSessionID { focusWindows.append(FocusWindow(id: focusSessionID, startedAt: now, endedAt: nil)) }
+        }
+    }
+    private struct FocusWindow {
+        let id: UUID
+        let startedAt: Date
+        var endedAt: Date?
+    }
+    private var focusWindows: [FocusWindow] = []
+    private let focusClock: @MainActor () -> Date
+
+    // Resolve at observation time: browser enrichment may arrive after pause/end.
+    private func focusSession(at observedAt: Date) -> UUID? {
+        focusWindows.last { observedAt >= $0.startedAt && ($0.endedAt == nil || observedAt < $0.endedAt!) }?.id
+    }
+
     private enum PendingPayload: Sendable {
         case observation(ActivityContext)
         case collectionStateChanged(state: CollectionStateChange.State, reason: String)
 
-        func makeRecord(metadata: ActivityRecordMetadata) -> ActivityRecord {
+        func makeRecord(metadata: ActivityRecordMetadata, focusSessionID: UUID?) -> ActivityRecord {
             switch self {
             case .observation(let context):
-                return .observation(ActivityObservation(metadata: metadata, context: context))
+                return .observation(ActivityObservation(metadata: metadata, context: context, focusSessionID: focusSessionID))
             case .collectionStateChanged(let state, let reason):
                 return .collectionStateChanged(CollectionStateChange(
                     metadata: metadata,
                     state: state,
-                    reason: reason
+                    reason: reason,
+                    focusSessionID: focusSessionID
                 ))
             }
         }
@@ -30,6 +54,7 @@ final class OfflineActivityCoordinator {
         let observedAt: Date
         let timezoneID: String
         let utcOffsetMinutes: Int
+        let focusSessionID: UUID?
         let payload: PendingPayload
     }
 
@@ -55,6 +80,7 @@ final class OfflineActivityCoordinator {
 
     init(queue: EncryptedActivityQueue, client: any MosemoAPIClient,
          deviceStateStore: any DeviceRegistrationStateStoring,
+         focusClock: @escaping @MainActor () -> Date = { .now },
          sleepBeforeRetry: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
              try? await Task.sleep(for: .seconds(seconds))
          },
@@ -62,6 +88,7 @@ final class OfflineActivityCoordinator {
          onStorageFailure: @escaping @MainActor () -> Void = {},
          onActivityAccepted: @escaping @MainActor (UUID) -> Void = { _ in },
          onStatus: @escaping @MainActor (Int, String) -> Void) {
+        self.focusClock = focusClock
         self.queue = queue
         self.client = client
         self.deviceStateStore = deviceStateStore
@@ -73,6 +100,8 @@ final class OfflineActivityCoordinator {
     }
 
     func activate(_ account: Account?) async {
+        focusSessionID = nil
+        focusWindows.removeAll()
         sendTask?.cancel()
         sendTask = nil
         isSending = false
@@ -209,6 +238,7 @@ final class OfflineActivityCoordinator {
             observedAt: observedAt,
             timezoneID: timezone.identifier,
             utcOffsetMinutes: timezone.secondsFromGMT(for: observedAt) / 60,
+            focusSessionID: focusSession(at: observedAt),
             payload: payload
         ))
         startWriterIfNeeded()
@@ -232,7 +262,7 @@ final class OfflineActivityCoordinator {
                     timezoneID: pending.timezoneID,
                     utcOffsetMinutes: pending.utcOffsetMinutes
                 ) { metadata in
-                    pending.payload.makeRecord(metadata: metadata)
+                    pending.payload.makeRecord(metadata: metadata, focusSessionID: pending.focusSessionID)
                 }
                 pendingWrites.removeFirst()
                 guard generation == pending.generation else { continue }

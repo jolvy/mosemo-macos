@@ -192,6 +192,10 @@ final class CollectorViewModel: ObservableObject {
             }
     }
 
+    func focusSessionChanged(_ sessionID: UUID?) {
+        synchronization?.focusSessionID = sessionID
+    }
+
     func synchronizationAccountChanged(_ account: Account?) async {
         await synchronization?.activate(account)
         guard account != nil else { return }
