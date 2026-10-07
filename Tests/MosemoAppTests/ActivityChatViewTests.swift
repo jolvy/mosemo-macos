@@ -100,6 +100,52 @@ final class ActivityChatViewTests: XCTestCase {
         XCTAssertEqual(sends, 1)
     }
 
+    func testSwitchingConversationCommitsMarkedTextToOriginalDraft() async {
+        _ = NSApplication.shared
+        let model = ActivityChatViewModel()
+        let first = model.selectedConversationID
+        model.send("첫 질문")
+        model.stop()
+        model.draft = "원래 초안 "
+        model.newConversation()
+        let second = model.selectedConversationID
+        model.draft = "다른 대화 초안"
+        model.selectConversation(first)
+
+        let host = NSHostingView(rootView: ActivityChatView(model: model))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        _ = host.fittingSize
+        func findEditor(_ view: NSView) -> ActivityChatInput.ChatTextView? {
+            if let editor = view as? ActivityChatInput.ChatTextView { return editor }
+            return view.subviews.lazy.compactMap { findEditor($0) }.first
+        }
+        guard let editor = findEditor(host) else { return XCTFail("Native input was not mounted") }
+        window.makeFirstResponder(editor)
+        await waitUntil { editor.string == "원래 초안 " }
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.setMarkedText("한", selectedRange: NSRange(location: 1, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        editor.didChangeText()
+        XCTAssertTrue(editor.hasMarkedText())
+        let composedDraft = editor.string
+
+        model.selectConversation(second)
+        await waitUntil { editor.string == "다른 대화 초안" }
+        XCTAssertFalse(editor.hasMarkedText())
+        XCTAssertEqual(model.draft, "다른 대화 초안")
+        XCTAssertEqual(model.draft(for: first), composedDraft)
+        editor.insertText(" 유지", replacementRange: NSRange(location: editor.string.utf16.count, length: 0))
+        XCTAssertEqual(model.draft(for: first), composedDraft)
+        XCTAssertEqual(model.draft, "다른 대화 초안 유지")
+
+        model.selectConversation(first)
+        await waitUntil { editor.string == composedDraft }
+        XCTAssertEqual(model.draft(for: second), "다른 대화 초안 유지")
+    }
+
     func testInputGrowsThroughTenVisibleLinesAndCapsAtEleven() {
         let one = inputHeight("질문")
         let ten = inputHeight(Array(repeating: "질문", count: 10).joined(separator: "\n"))
@@ -119,7 +165,7 @@ final class ActivityChatViewTests: XCTestCase {
     func testShiftReturnKeepsScrollerDisabledUntilEleventhLine() {
         _ = NSApplication.shared
         var draft = "질문"
-        let host = NSHostingView(rootView: ActivityChatInput(text: Binding(get: { draft }, set: { draft = $0 }), onSend: {}).frame(width: 300))
+        let host = NSHostingView(rootView: ActivityChatInput(text: Binding(get: { draft }, set: { draft = $0 }), conversationID: UUID(), onSend: {}).frame(width: 300))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
@@ -147,7 +193,7 @@ final class ActivityChatViewTests: XCTestCase {
 
     private func inputHeight(_ text: String, width: CGFloat = 300) -> CGFloat {
         _ = NSApplication.shared
-        let host = NSHostingView(rootView: ActivityChatInput(text: .constant(text), onSend: {}).frame(width: width))
+        let host = NSHostingView(rootView: ActivityChatInput(text: .constant(text), conversationID: UUID(), onSend: {}).frame(width: width))
         host.layoutSubtreeIfNeeded()
         return host.fittingSize.height
     }

@@ -59,11 +59,17 @@ final class ActivityChatViewModel: ObservableObject {
     }
 
     var draft: String {
-        get { conversation.draft }
-        set {
-            guard let index = conversations.firstIndex(where: { $0.id == selectedConversationID }) else { return }
-            conversations[index].draft = newValue
-        }
+        get { draft(for: selectedConversationID) }
+        set { updateDraft(newValue, for: selectedConversationID) }
+    }
+
+    func draft(for conversationID: UUID) -> String {
+        conversations.first { $0.id == conversationID }?.draft ?? ""
+    }
+
+    func updateDraft(_ text: String, for conversationID: UUID) {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[index].draft = text
     }
 
     func newConversation() {
