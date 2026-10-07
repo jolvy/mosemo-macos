@@ -33,8 +33,10 @@ public enum ActivityRecord: Codable, Equatable, Sendable {
 public struct ActivityObservation: Codable, Equatable, Sendable {
     public let metadata: ActivityRecordMetadata
     public let context: ActivityContext
+    public let focusSessionID: UUID?
 
-    public init(metadata: ActivityRecordMetadata, context: ActivityContext) {
+    public init(metadata: ActivityRecordMetadata, context: ActivityContext, focusSessionID: UUID? = nil) {
+        self.focusSessionID = focusSessionID
         self.metadata = metadata
         self.context = context
     }
@@ -49,12 +51,15 @@ public struct CollectionStateChange: Codable, Equatable, Sendable {
     public let metadata: ActivityRecordMetadata
     public let state: State
     public let reason: String
+    public let focusSessionID: UUID?
 
     public init(
         metadata: ActivityRecordMetadata,
         state: State,
-        reason: String
+        reason: String,
+        focusSessionID: UUID? = nil
     ) {
+        self.focusSessionID = focusSessionID
         self.metadata = metadata
         self.state = state
         self.reason = reason

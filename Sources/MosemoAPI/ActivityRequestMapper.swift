@@ -14,6 +14,7 @@ enum ActivityRequestMapper {
                     context: context(observation.context),
                     deviceId: metadata.deviceRegistrationID.uuidString,
                     eventId: metadata.eventID.uuidString,
+                    focusSessionId: observation.focusSessionID?.uuidString,
                     observedAt: metadata.observedAt,
                     recordType: .activityObservation,
                     sequence: metadata.sequence,
@@ -32,6 +33,7 @@ enum ActivityRequestMapper {
                 .collectionStateChanged(.init(
                     deviceId: metadata.deviceRegistrationID.uuidString,
                     eventId: metadata.eventID.uuidString,
+                    focusSessionId: change.focusSessionID?.uuidString,
                     observedAt: metadata.observedAt,
                     reason: change.reason,
                     recordType: .collectionStateChanged,
