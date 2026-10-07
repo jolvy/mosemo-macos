@@ -13,7 +13,22 @@ enum ApplicationWindowReadResult: Equatable, Sendable {
     case unavailable(String)
 }
 
+enum FocusedWindowReadFailure: Error, Equatable {
+    case noValue
+    case unavailable(String)
+}
+
 final class ApplicationWindowContextClient: @unchecked Sendable {
+    private let copyAttributeValue: (AXUIElement, String) -> (AXError, CFTypeRef?)
+
+    init(copyAttributeValue: @escaping (AXUIElement, String) -> (AXError, CFTypeRef?) = { element, name in
+        var value: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(element, name as CFString, &value)
+        return (error, value)
+    }) {
+        self.copyAttributeValue = copyAttributeValue
+    }
+
     private let firefoxBundleID = SystemEventsClient.firefoxBundleID
 
     func read(bundleID: String) -> ApplicationWindowReadResult {
@@ -24,8 +39,11 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
 
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
         AXUIElementSetMessagingTimeout(applicationElement, 0.75)
-        guard let window = focusedWindow(of: applicationElement) else {
-            return .noFocusedWindow
+        let window: AXUIElement
+        switch focusedWindow(of: applicationElement) {
+        case .success(let focused): window = focused
+        case .failure(.noValue): return .noFocusedWindow
+        case .failure(.unavailable(let reason)): return .unavailable(reason)
         }
 
         let title = stringAttribute(kAXTitleAttribute, of: window)
@@ -36,8 +54,16 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
         return .captured(ApplicationWindowContext(title: title, browserURL: browserURL))
     }
 
-    private func focusedWindow(of application: AXUIElement) -> AXUIElement? {
-        elementAttribute(kAXFocusedWindowAttribute, of: application)
+    func focusedWindow(of application: AXUIElement) -> Result<AXUIElement, FocusedWindowReadFailure> {
+        let (error, value) = copyAttributeValue(application, kAXFocusedWindowAttribute)
+        if error == .noValue { return .failure(.noValue) }
+        guard error == .success else {
+            return .failure(.unavailable("focused_window_ax_error_\(error.rawValue)"))
+        }
+        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            return .failure(.unavailable("focused_window_invalid_value"))
+        }
+        return .success(unsafeBitCast(value, to: AXUIElement.self))
     }
 
     private func firefoxAddress(in window: AXUIElement) -> String? {
@@ -81,17 +107,8 @@ final class ApplicationWindowContextClient: @unchecked Sendable {
         attribute(name, of: element) as? String
     }
 
-    private func elementAttribute(_ name: String, of element: AXUIElement) -> AXUIElement? {
-        guard let value = attribute(name, of: element),
-              CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-        return unsafeBitCast(value, to: AXUIElement.self)
-    }
-
     private func attribute(_ name: String, of element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else {
-            return nil
-        }
-        return value
+        let (error, value) = copyAttributeValue(element, name)
+        return error == .success ? value : nil
     }
 }

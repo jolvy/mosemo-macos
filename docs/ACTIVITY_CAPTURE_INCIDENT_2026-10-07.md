@@ -40,6 +40,9 @@ Firefox UI 읽기 실패의 원인으로 취급하지 않는다.
 
 - 포커스 창이 없을 때 `AXWindows.first`로 다른 창을 대신 기록하지 않는다.
   일반 앱은 창 absent인 유효한 앱 활동을 유지한다.
+- 포커스 창 조회의 AX 결과를 보존한다. `noValue`만 창 absent로 처리하고,
+  `cannotComplete`, `attributeUnsupported` 등은 AX 오류 코드가 포함된 unavailable로
+  기록한다. 성공 응답에 값이 없거나 AX element가 아니어도 unavailable로 처리한다.
 - 이전 AX 읽기가 끝나기 전에 다른 앱이 활성화돼도 최신 `appSwitch`를 유지한다.
   늦게 도착한 이전 앱의 결과는 버린다.
 - Firefox 도구막대 밖의 검색 필드와 `AXWebArea` 내부 입력은 읽지 않는다.
@@ -68,6 +71,8 @@ CI의 `Swift regression tests` 단계에서 같은 명령을 실행한다.
 | `testFirefoxUnknownPrivateStateSuppressesDetailedContext` | 제목이 없어 보호 여부를 판단할 수 없는데 URL을 저장 |
 | `testProtectedActivityPersistsOnlyOpaqueContext` | 보호 활동의 상세 맥락 저장 |
 | `testAccessibilityStatusRefreshesWhileTrackingIsDisabled` | 설정 변경 후 권한 표시가 갱신되지 않음 |
+| `testFocusedWindowAXErrorsAreNotReportedAsAbsent` | 응답 불가·미지원 등 AX 오류를 창 없음으로 오인 |
+| `testFocusedWindowNoValueIsAbsentButMalformedSuccessIsUnavailable` | 실제 창 부재와 비정상 응답을 혼동 |
 
 마지막 권한 테스트는 수정 전 `denied != granted`로 실패하는 것을 확인했다.
 OS의 AX 트리 탐색과 TCC 허용 자체는 이 테스트의 검증 범위가 아니다.

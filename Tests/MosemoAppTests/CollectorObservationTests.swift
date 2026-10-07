@@ -1,3 +1,4 @@
+import ApplicationServices
 import CollectorCore
 import Foundation
 import MosemoAPI
@@ -455,6 +456,40 @@ final class CollectorObservationTests: XCTestCase {
         model.pollCurrentActivity()
         XCTAssertEqual(model.accessibilityPermission, .denied)
         XCTAssertTrue(model.events.isEmpty)
+    }
+
+    func testFocusedWindowAXErrorsAreNotReportedAsAbsent() {
+        let application = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        for error: AXError in [.cannotComplete, .attributeUnsupported, .apiDisabled, .invalidUIElement] {
+            let client = ApplicationWindowContextClient(copyAttributeValue: { _, attribute in
+                XCTAssertEqual(attribute, kAXFocusedWindowAttribute)
+                return (error, nil)
+            })
+            guard case .failure(let failure) = client.focusedWindow(of: application) else {
+                return XCTFail("Expected an AX failure")
+            }
+            XCTAssertEqual(failure, .unavailable("focused_window_ax_error_\(error.rawValue)"))
+        }
+    }
+
+    func testFocusedWindowNoValueIsAbsentButMalformedSuccessIsUnavailable() {
+        let application = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        let absent = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.noValue, nil) })
+        guard case .failure(let absentFailure) = absent.focusedWindow(of: application) else {
+            return XCTFail("Expected absent window")
+        }
+        XCTAssertEqual(absentFailure, .noValue)
+        for value: CFTypeRef? in [nil, "invalid" as CFString] {
+            let malformed = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.success, value) })
+            guard case .failure(let failure) = malformed.focusedWindow(of: application) else {
+                return XCTFail("Expected malformed attribute failure")
+            }
+            XCTAssertEqual(failure, .unavailable("focused_window_invalid_value"))
+        }
+        let captured = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.success, application) })
+        guard case .success = captured.focusedWindow(of: application) else {
+            return XCTFail("Expected captured AX element")
+        }
     }
 
     private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
