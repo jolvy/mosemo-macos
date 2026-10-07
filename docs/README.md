@@ -24,6 +24,7 @@ Device 등록, 활동 등록과 날짜별 관찰 타임라인 조회를 포함�
 - [ADR-0001: OpenAPI 생성 코드를 MosemoAPI 내부에 둔다](adr/0001-keep-generated-openapi-inside-mosemo-api.md)
 - [ADR-0002: 브라우저 OAuth와 generated API 호출을 분리한다](adr/0002-separate-browser-oauth-from-generated-api.md)
 - [Kakao 로그인 수동 runtime 검증](AUTH_RUNTIME_CHECKLIST.md)
+- [2026-10-07 활동 인식 장애 원인과 재발 방지](ACTIVITY_CAPTURE_INCIDENT_2026-10-07.md)
 
 ## 구현 경계
 
@@ -35,11 +36,12 @@ Device 등록, 활동 등록과 날짜별 관찰 타임라인 조회를 포함�
   필터 후 암호화 대기열에 저장한다. 진단 ring buffer에는 원문을 보관하지 않는다.
 - 시크릿 창은 `mode`를 먼저 확인하고 URL·제목을 요청하는 Apple Event 분기로
   들어가지 않는다.
-- Firefox가 전면이면 System Events UI scripting으로 Accessibility tree의 활성
-  web area 또는 주소 표시줄에서 제목·URL을 0.5초 간격으로 읽는다. Firefox는 Chrome과 같은 탭 ID API를
-  제공하지 않으므로 `firefoxPageChange`는 탭 전환과 같은 탭 이동을 구분하지
-  않는다. Firefox UI 구조가 바뀌거나 값을 노출하지 않으면 추측하지 않고
-  `firefox_page_context` 관찰 불가로 기록한다.
+- Firefox와 일반 앱의 포커스 창은 Mosemo의 손쉬운 사용 권한으로 직접 AX API를
+  사용해 읽는다. Firefox 주소는 브라우저 도구막대의 주소 필드에서 읽으며, 편집 중인
+  필드와 웹 페이지 내부 입력은 제외한다. 고정된 group 순번에 의존하지 않는다.
+- Firefox에는 Chrome과 같은 탭 ID API가 없어 `firefoxPageChange`는 탭 전환과
+  같은 탭 이동을 구분하지 않는다. URL이 없더라도 읽은 창 제목은 앱 활동으로 보존한다.
+  Firefox 제목을 읽지 못해 보호 여부를 판단할 수 없으면 상세 맥락을 저장하지 않는다.
 - 일반 앱 복귀는 PID로 앱을 활성화하고, Chrome 복귀는 창·탭 ID를 사용한다.
   현재 화면이나 탭을 닫지 않는다.
 - 화면 잠금, 사용자 세션 비활성, sleep 중에는 관찰을 자동 일시정지한다. 다시
@@ -66,7 +68,8 @@ Device 등록, 활동 등록과 날짜별 관찰 타임라인 조회를 포함�
 | `Sources/MosemoApp/CollectorViewModel.swift` | 활동 추적 설정, 관찰 adapter, ring buffer, 진단 상태 조정 |
 | `Sources/MosemoApp/WorkspaceObserver.swift` | 전면 앱·Chrome 수명·sleep·사용자 세션 알림 수신 |
 | `Sources/MosemoApp/ChromeAppleEventClient.swift` | Chrome 권한 요청, 활성 창·탭 관찰, 저장된 탭 활성화 |
-| `Sources/MosemoApp/SystemEventsClient.swift` | System Events 자동화 권한과 실험적 Firefox 맥락 관찰 |
+| `Sources/MosemoApp/SystemEventsClient.swift` | AX 관찰 결과의 Firefox 분류와 보호 맥락 처리 (이름은 기존 호환용) |
+| `Sources/MosemoApp/ApplicationWindowContextClient.swift` | 손쉬운 사용 권한 검사, 포커스 창 제목과 Firefox 주소 읽기 |
 | `Sources/MosemoApp/ReturnAnchorStore.swift` | 앱 활성화와 Chrome 창·탭 복귀 지점 |
 | `Sources/MosemoApp/PerformanceSampler.swift` | 프로세스 CPU·메모리 표본 |
 | `Sources/MosemoApp/AuthCoordinator.swift` | PKCE와 ASWebAuthenticationSession 로그인 생명주기 |
@@ -147,7 +150,7 @@ scripts/update_openapi.sh
 
 | 권한 | 사용 목적 | 허용 방법 |
 | --- | --- | --- |
-| 자동화 → System Events | Firefox 전면 창의 활성 탭 제목·URL 읽기 | Firefox를 먼저 실행하고 진단 창의 `System Events 권한 요청`을 누른 뒤 macOS prompt를 허용. 이미 거부했다면 자동으로 열린 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Mosemo 아래 System Events 허용 |
+| 손쉬운 사용 → Mosemo | Firefox와 일반 앱의 포커스 창 제목·Firefox 주소 읽기 | 진단 창의 `접근성 설정 열기`를 누르고 Mosemo를 허용. 실제 앱 진단에서 `앱 접근성: 허용됨`인지 확인 |
 | 자동화 → Google Chrome | 전면 Chrome 창의 mode, 활성 탭 ID·URL 읽기와 저장된 탭 활성화 | Chrome을 먼저 실행하고 진단 창의 `Chrome 자동화 권한 요청`을 누른 뒤 macOS prompt를 허용. 이미 거부했다면 자동으로 열린 시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Mosemo 아래 Google Chrome 허용 |
 
 화면 기록 권한은 요청하지 않는다. `Info.plist`에도 화면 기록 usage description이
@@ -298,14 +301,12 @@ scripts/check_safe_diagnostics.sh /tmp/collector-safe-diagnostics.txt
 
 ## 알려진 실패 조건
 
-- Firefox 관찰은 공식 탭 API가 아닌 System Events UI scripting과 Accessibility UI
-  구조에 의존하는 실험적 경로다. 탭 ID가 없어 탭 전환과 같은 탭 navigation을 구분하지 못하며 Firefox
-  버전·UI·전체 화면 상태에 따라 관찰 불가가 될 수 있다.
-- Firefox 개인정보 보호 창은 접근성 트리의 비공개 브라우징 표식을 발견하면
-  원시 값을 읽거나 표시하지 않는다. 표식 노출은 Firefox UI 구현에 의존하므로
-  원시 테스트 모드에서는 개인정보 보호 창을 사용하지 않는다.
-- System Events UI 구조나 macOS Automation 정책이 바뀌면 Firefox 관찰이 불가할
-  수 있다. Chrome AppleScript dictionary가 바뀌면 Chrome 관찰이 불가하다.
+- Firefox 관찰은 공식 탭 API가 아닌 Accessibility UI 구조에 의존한다. 탭 ID가
+  없으며 Firefox 버전·언어·전체 화면 상태에 따라 제목 또는 URL이 관찰 불가일 수 있다.
+- Firefox 비공개 창 판별은 창 제목의 표식에 의존한다. 제목이 없으면 보호 활동으로
+  처리한다. 다른 언어에서 비공개 표식이 노출되는지는 별도 수동 검증이 필요하다.
+- Firefox UI 구조나 macOS Accessibility 정책이 바뀌면 Firefox 관찰이 불가할 수 있다.
+  Chrome AppleScript dictionary 또는 Automation 정책이 바뀌면 Chrome 관찰이 불가하다.
 - 닫힌 앱·Chrome 탭은 이 spike에서 복원하지 않으며 복귀 실패다.
 - 시크릿 Chrome은 상세 관찰과 상세 복귀 대상에서 제외한다.
 - 등록 도메인 계산은 전체 Public Suffix List 구현이 아니다.

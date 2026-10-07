@@ -438,6 +438,25 @@ final class CollectorObservationTests: XCTestCase {
         }
     }
 
+    func testAccessibilityStatusRefreshesWhileTrackingIsDisabled() {
+        var trusted = false
+        let model = CollectorViewModel(environment: CollectorObservationEnvironment(
+            frontmostBundleID: { nil },
+            isAccessibilityTrusted: { trusted },
+            captureReturnAnchor: { nil },
+            initialTrackingEnabled: false,
+            persistTrackingPreference: false
+        ), startAutomatically: false)
+        XCTAssertEqual(model.accessibilityPermission, .denied)
+        trusted = true
+        model.pollCurrentActivity()
+        XCTAssertEqual(model.accessibilityPermission, .granted)
+        trusted = false
+        model.pollCurrentActivity()
+        XCTAssertEqual(model.accessibilityPermission, .denied)
+        XCTAssertTrue(model.events.isEmpty)
+    }
+
     private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         for _ in 0..<100 {
             if condition() { return }

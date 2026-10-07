@@ -46,6 +46,7 @@ struct CollectorObservationEnvironment {
     var readChrome: (() async -> Result<ChromeReadResult, ChromeReadFailure>)? = nil
     var readFirefox: (() async -> Result<FirefoxObservation, SystemEventsReadFailure>)? = nil
     var readApplicationWindow: ((String) async -> ApplicationWindowReadResult)? = nil
+    var isAccessibilityTrusted: () -> Bool = { AXIsProcessTrusted() }
     var captureReturnAnchor: (() -> ReturnAnchorDescriptor?)? = nil
     var initialTrackingEnabled: Bool? = nil
     var persistTrackingPreference = true
@@ -114,7 +115,7 @@ final class CollectorViewModel: ObservableObject {
         let environment = environment ?? CollectorObservationEnvironment()
         self.environment = environment
         self.workspaceObserver = workspaceObserver
-        accessibilityPermission = AXIsProcessTrusted() ? .granted : .denied
+        accessibilityPermission = environment.isAccessibilityTrusted() ? .granted : .denied
         let savedTrackingPreference = UserDefaults.standard.object(forKey: Self.activityTrackingPreferenceKey) as? Bool
         isActivityTrackingEnabled = environment.initialTrackingEnabled ?? savedTrackingPreference ?? true
         configureCallbacks()
@@ -887,6 +888,9 @@ final class CollectorViewModel: ObservableObject {
     }
 
     func pollCurrentActivity() {
+        // Settings can change while Chrome is frontmost or tracking is disabled.
+        // Refresh without prompting rather than waiting for a successful AX window read.
+        accessibilityPermission = environment.isAccessibilityTrusted() ? .granted : .denied
         guard collectionAllowed else { return }
         guard let bundleID = environment.frontmostBundleID() else {
             if activeBundleID != nil { observationGeneration += 1 }

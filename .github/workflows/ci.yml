@@ -47,6 +47,9 @@ jobs:
       - name: Privacy boundary
         run: scripts/check_collector_privacy.sh
 
+      - name: Swift regression tests
+        run: swift test
+
       - name: Xcode Debug build
         run: >-
           xcodebuild
