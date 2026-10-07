@@ -14,7 +14,7 @@ struct LabelReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 19) {
-            LabelReviewHeader(segmentCount: viewModel.segmentCount)
+            LabelReviewHeader()
 
             HStack(spacing: 10) {
                 Button { viewModel.moveDate(by: -1) } label: { Image(systemName: "chevron.left") }
@@ -113,19 +113,11 @@ struct LabelReviewView: View {
 }
 
 private struct LabelReviewHeader: View {
-    let segmentCount: Int
-
     var body: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("라벨 제안")
-                    .font(.largeTitle.bold())
-                    .accessibilityIdentifier("label-review-title")
-                Text("검토 대기 중인 활동 \(segmentCount)건 · 이어진 기록은 한 묶음으로 표시됩니다.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("label-review-pending-count")
-            }
+            Text("라벨 검토")
+                .font(.largeTitle.bold())
+                .accessibilityIdentifier("label-review-title")
             Spacer()
             Label("검토 대기", systemImage: "tray.full")
                 .font(.caption.weight(.semibold))
