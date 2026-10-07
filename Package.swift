@@ -54,7 +54,7 @@ let package = Package(
             name: "MosemoApp",
             dependencies: ["CollectorCore", "MosemoAPI"],
             path: "Sources/MosemoApp",
-            exclude: ["TimelineView.prototype.html"]
+            exclude: ["TimelineView.prototype.html", "TimerSessionView.prototype.html"]
         ),
         .testTarget(
             name: "CollectorCoreTests",

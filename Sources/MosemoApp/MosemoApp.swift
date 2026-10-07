@@ -74,7 +74,7 @@ struct MosemoApp: App {
         Window("Mosemo", id: "main") {
             Group {
                 #if DEBUG
-                if CommandLine.arguments.contains("--timeline-ui-preview") {
+                if CommandLine.arguments.contains("--timeline-ui-preview") || CommandLine.arguments.contains("--focus-session-ui-preview") {
                     MainWorkspaceView(
                         account: Self.previewAccount,
                         timelineFetcher: TimelinePreviewFetcher(
@@ -85,6 +85,7 @@ struct MosemoApp: App {
                         ),
                         reviewFetcher: MockLabelReviewFetcher.demo,
                         reviewWriter: MockLabelConfirmationWriter(),
+                        focusLabelReader: FocusSessionPreviewReader(),
                         signOut: nil,
                         acceptedActivityUploads: Self.previewUploadEvents,
                         previewUpload: CommandLine.arguments.contains("--timeline-preview-follow-bottom")
@@ -434,3 +435,16 @@ private struct SafeEventRow: View {
         }
     }
 }
+
+#if DEBUG
+private struct FocusSessionPreviewReader: LabelReviewReading {
+    func listLabels() async throws -> [LabelCatalogEntry] {
+        [LabelCatalogEntry(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, displayName: "개발", archivedAt: nil),
+         LabelCatalogEntry(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, displayName: "기획", archivedAt: nil)]
+    }
+    func pendingLabelSegments(day: TimelineDate) async throws -> [PendingLabelTimelineSegment] { [] }
+    func labelState(segmentID: UUID) async throws -> RemoteSegmentLabelState {
+        throw MosemoAPIError.unexpectedResponse(statusCode: 404)
+    }
+}
+#endif
