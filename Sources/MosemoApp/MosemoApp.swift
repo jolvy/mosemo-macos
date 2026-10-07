@@ -303,11 +303,11 @@ private struct DiagnosticsView: View {
             GroupBox("권한") {
                 HStack(spacing: 24) {
                     permission(
-                        "System Events 자동화",
-                        value: model.systemEventsAutomationPermission.rawValue,
-                        buttonTitle: "System Events 권한 요청"
+                        "앱 접근성",
+                        value: model.accessibilityPermission.rawValue,
+                        buttonTitle: "접근성 설정 열기"
                     ) {
-                        model.requestSystemEventsAutomationPermission()
+                        model.requestAccessibilityPermission()
                     }
                     VStack(alignment: .leading) {
                         Text("Chrome 자동화: \(model.chromeAutomationPermission.rawValue)")

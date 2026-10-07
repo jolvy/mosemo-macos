@@ -198,13 +198,13 @@ struct MainWorkspaceView: View {
 
 private enum OnboardingStep: Int, CaseIterable, Hashable {
     case login
-    case systemEventsAutomation
+    case accessibilityPermission
     case chromeAutomation
 
     var shortTitle: String {
         switch self {
         case .login: "로그인"
-        case .systemEventsAutomation: "System Events"
+        case .accessibilityPermission: "접근성"
         case .chromeAutomation: "Chrome"
         }
     }
@@ -217,7 +217,7 @@ private struct OnboardingView: View {
     @State private var step: OnboardingStep = .login
 
     private var allPermissionsGranted: Bool {
-        model.systemEventsAutomationPermission == .granted
+        model.accessibilityPermission == .granted
             && model.chromeAutomationPermission == .granted
     }
 
@@ -271,17 +271,17 @@ private struct OnboardingView: View {
                     .foregroundStyle(.secondary)
             }
 
-        case .systemEventsAutomation:
+        case .accessibilityPermission:
             PermissionOnboardingStep(
-                systemImage: "gearshape.2",
-                title: "System Events 자동화 권한",
-                description: "Firefox의 활성 탭 제목과 URL을 읽기 위해 필요합니다. Firefox를 먼저 실행해 주세요.",
-                statusText: model.systemEventsAutomationPermission.rawValue,
-                isGranted: model.systemEventsAutomationPermission == .granted,
-                requestInFlight: model.systemEventsPermissionRequestInFlight,
-                requestButtonTitle: "System Events 권한 요청",
+                systemImage: "accessibility",
+                title: "앱 접근성 권한",
+                description: "Firefox와 일반 앱의 활성 창 제목을 읽습니다. 권한 요청을 누른 뒤 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 Mosemo를 허용해 주세요.",
+                statusText: model.accessibilityPermission.rawValue,
+                isGranted: model.accessibilityPermission == .granted,
+                requestInFlight: false,
+                requestButtonTitle: "접근성 설정 열기",
                 continueButtonTitle: "다음",
-                requestPermission: model.requestSystemEventsAutomationPermission
+                requestPermission: model.requestAccessibilityPermission
             ) {
                 step = .chromeAutomation
             }
@@ -306,7 +306,7 @@ private struct OnboardingView: View {
 
     private func movePastCompletedLogin() {
         guard auth.account != nil, step == .login else { return }
-        step = .systemEventsAutomation
+        step = .accessibilityPermission
     }
 }
 

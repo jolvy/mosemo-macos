@@ -1,3 +1,4 @@
+import ApplicationServices
 import CollectorCore
 import Foundation
 import MosemoAPI
@@ -6,16 +7,18 @@ import XCTest
 
 @MainActor
 final class CollectorObservationTests: XCTestCase {
-    func testUnchangedApplicationProducesFreshObservationsEveryFiveSeconds() {
+    func testUnchangedApplicationProducesFreshObservationsEveryFiveSeconds() async {
         let source = ObservationSource()
         let model = source.makeCollector()
+        await waitUntil { model.events.count == 1 }
         source.advance(to: 4.9)
         model.pollCurrentActivity()
         XCTAssertEqual(model.events.count, 1)
 
-        for second in [5.0, 10.0, 15.0] {
+        for (index, second) in [5.0, 10.0, 15.0].enumerated() {
             source.advance(to: second)
             model.pollCurrentActivity()
+            await waitUntil { model.events.count == index + 2 }
         }
 
         XCTAssertEqual(model.events.map { $0.safeEvent.occurredAt }, [0, 5, 10, 15].map(source.date))
@@ -119,9 +122,10 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(model.events.first?.safeEvent.occurredAt, source.date(2))
     }
 
-    func testMissingFrontmostApplicationDoesNotExtendActivityAndRecoveryObservesImmediately() {
+    func testMissingFrontmostApplicationDoesNotExtendActivityAndRecoveryObservesImmediately() async {
         let source = ObservationSource()
         let model = source.makeCollector()
+        await waitUntil { model.events.count == 1 }
         source.bundleID = nil
         source.advance(to: 1)
         model.pollCurrentActivity()
@@ -129,6 +133,7 @@ final class CollectorObservationTests: XCTestCase {
         source.bundleID = "com.example.editor"
         source.advance(to: 2)
         model.pollCurrentActivity()
+        await waitUntil { model.events.filter { $0.safeEvent.observationState == .observed }.count == 2 }
         XCTAssertEqual(model.events.filter { $0.safeEvent.observationState == .observed }.map { $0.safeEvent.occurredAt }, [0, 2].map(source.date))
     }
 
@@ -153,9 +158,10 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(model.events.map { $0.safeEvent.occurredAt }, [0, 5].map(source.date))
     }
 
-    func testWallClockChangesDoNotChangeCadenceAndDelayedPollDoesNotBackfill() {
+    func testWallClockChangesDoNotChangeCadenceAndDelayedPollDoesNotBackfill() async {
         let source = ObservationSource()
         let model = source.makeCollector()
+        await waitUntil { model.events.count == 1 }
         source.time = 4
         source.wallTime = 500
         model.pollCurrentActivity()
@@ -163,17 +169,20 @@ final class CollectorObservationTests: XCTestCase {
         source.time = 5
         source.wallTime = -200
         model.pollCurrentActivity()
+        await waitUntil { model.events.count == 2 }
         source.time = 35
         source.wallTime = 100
         model.pollCurrentActivity()
+        await waitUntil { model.events.count == 3 }
         source.time = 36
         model.pollCurrentActivity()
         XCTAssertEqual(model.events.map { $0.safeEvent.occurredAt }, [0, -200, 100].map(source.date))
     }
 
-    func testDisabledAndAutomaticallyPausedCollectionOnlyObservesAfterAllPauseReasonsClear() {
+    func testDisabledAndAutomaticallyPausedCollectionOnlyObservesAfterAllPauseReasonsClear() async {
         let source = ObservationSource()
         let model = source.makeCollector()
+        await waitUntil { model.events.count == 1 }
         model.setActivityTrackingEnabled(false)
         source.advance(to: 20)
         model.pollCurrentActivity()
@@ -182,6 +191,7 @@ final class CollectorObservationTests: XCTestCase {
         model.pollCurrentActivity()
         XCTAssertEqual(model.events.count, 1)
         source.workspace.onAutomaticResume?("system_sleep")
+        await waitUntil { model.events.count == 2 }
         XCTAssertEqual(model.events.last?.safeEvent.occurredAt, source.date(20))
 
         source.workspace.onAutomaticPause?("screen_sleep")
@@ -191,6 +201,7 @@ final class CollectorObservationTests: XCTestCase {
         model.pollCurrentActivity()
         XCTAssertEqual(model.events.count, 2)
         source.workspace.onAutomaticResume?("system_sleep")
+        await waitUntil { model.events.count == 3 }
         XCTAssertEqual(model.events.map { $0.safeEvent.occurredAt }, [0, 20, 40].map(source.date))
         model.synchronizationUnavailable()
         source.advance(to: 60)
@@ -212,9 +223,9 @@ final class CollectorObservationTests: XCTestCase {
         model.pollCurrentActivity()
         source.advance(to: 2)
         source.completeChromeRead()
-        try await Task.sleep(for: .milliseconds(10))
+        await waitUntil { model.events.count == 1 }
         XCTAssertEqual(model.events.map { $0.safeEvent.appBundleID }, ["com.example.editor"])
-        XCTAssertEqual(model.events.first?.safeEvent.occurredAt, source.date(1))
+        XCTAssertEqual(model.events.first?.safeEvent.occurredAt, source.date(2))
     }
 
     func testChromeRestartDiscardsPendingReadAndObservesTheRestartedBrowser() async {
@@ -252,7 +263,11 @@ final class CollectorObservationTests: XCTestCase {
         source.chromeResult = .success(.observation(ChromeObservation(
             identity: ChromeObservationIdentity(windowID: 1, tabID: 1, urlFingerprint: 1,
                 classification: SurfaceClassifier.classify(urlString: "https://example.com/page", protectedContext: false)),
-            diagnosticContext: TransientBrowserContext(title: String(repeating: "a", count: 5_000), url: "https://example.com/page")
+            diagnosticContext: TransientBrowserContext(
+                title: String(repeating: "a", count: 5_000),
+                url: "https://example.com/page",
+                windowTitle: "Example browser window"
+            )
         )))
         source.advance(to: 5)
         model.pollCurrentActivity()
@@ -284,6 +299,7 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(detail.app.bundleID, .captured(ChromeAppleEventClient.bundleID))
         XCTAssertEqual(browser.url, .captured("https://example.com/page"))
         XCTAssertEqual(browser.tabTitle, .captured(ActivityCapturedText(value: String(repeating: "a", count: 4_096), truncated: true, originalByteLength: 5_000)))
+        XCTAssertEqual(detail.window, .captured(title: ActivityPrivacyFilter.title("Example browser window")))
         XCTAssertFalse(model.diagnosticSnapshot().contains(String(repeating: "a", count: 100)))
 
         await client.finishNextObservation()
@@ -344,17 +360,20 @@ final class CollectorObservationTests: XCTestCase {
         await model.synchronizationAccountChanged(nil)
     }
 
-    func testApplicationSwitchIsImmediateAndResetsFiveSecondInterval() {
+    func testApplicationSwitchIsImmediateAndResetsFiveSecondInterval() async {
         let source = ObservationSource()
         let model = source.makeCollector()
+        await waitUntil { model.events.count == 1 }
         source.advance(to: 4)
         source.bundleID = "com.example.other"
         model.pollCurrentActivity()
+        await waitUntil { model.events.count == 2 }
         source.advance(to: 5)
         model.pollCurrentActivity()
         XCTAssertEqual(model.events.count, 2)
         source.advance(to: 9)
         model.pollCurrentActivity()
+        await waitUntil { model.events.count == 3 }
         XCTAssertEqual(model.events.map { $0.safeEvent.occurredAt }, [0, 4, 9].map(source.date))
         XCTAssertEqual(model.events.map { $0.safeEvent.transitionType }, [.initialContext, .appSwitch, .periodicObservation])
     }
@@ -381,9 +400,96 @@ final class CollectorObservationTests: XCTestCase {
         source.advance(to: 3)
         model.pollCurrentActivity()
         source.pendingFirefoxReads.removeFirst().resume(returning: source.firefoxResult)
-        try await Task.sleep(for: .milliseconds(10))
+        await waitUntil { model.events.count == 4 }
         XCTAssertEqual(model.events.count, 4)
         XCTAssertEqual(model.events.last?.safeEvent.appBundleID, "com.example.editor")
+    }
+
+    func testLateApplicationReadPreservesLatestAppSwitch() async throws {
+        let source = ObservationSource()
+        source.holdApplicationReads = true
+        let model = source.makeCollector()
+        await waitUntil { source.pendingApplicationReads.count == 1 }
+        source.bundleID = "com.example.second"
+        source.advance(to: 1)
+        model.pollCurrentActivity()
+        source.pendingApplicationReads.removeFirst().resume(returning: .captured(
+            ApplicationWindowContext(title: "Old window", browserURL: nil)))
+        await waitUntil { source.pendingApplicationReads.count == 1 }
+        source.pendingApplicationReads.removeFirst().resume(returning: .captured(
+            ApplicationWindowContext(title: "New window", browserURL: nil)))
+        await waitUntil { model.events.count == 1 }
+        XCTAssertEqual(model.events.last?.safeEvent.appBundleID, "com.example.second")
+        XCTAssertEqual(model.events.last?.safeEvent.transitionType, .appSwitch)
+    }
+
+    func testFirefoxSchemeLessAddressRemainsObservedWithoutRewriting() {
+        let observation = SystemEventsClient().observation(for: ApplicationWindowContext(
+            title: "Example", browserURL: "example.com/path?query=value#section"))
+        XCTAssertEqual(observation.classification.observationState, .observed)
+        XCTAssertEqual(observation.diagnosticContext?.url, "example.com/path?query=value#section")
+    }
+
+    func testFirefoxUnknownPrivateStateSuppressesDetailedContext() {
+        for title: String? in [nil, ""] {
+            let observation = SystemEventsClient().observation(for: ApplicationWindowContext(
+                title: title, browserURL: "https://example.com/private"))
+            XCTAssertTrue(observation.classification.protectedContext)
+            XCTAssertNil(observation.diagnosticContext)
+        }
+    }
+
+    func testAccessibilityStatusRefreshesWhileTrackingIsDisabled() {
+        var trusted = false
+        let model = CollectorViewModel(environment: CollectorObservationEnvironment(
+            frontmostBundleID: { nil },
+            isAccessibilityTrusted: { trusted },
+            captureReturnAnchor: { nil },
+            initialTrackingEnabled: false,
+            persistTrackingPreference: false
+        ), startAutomatically: false)
+        XCTAssertEqual(model.accessibilityPermission, .denied)
+        trusted = true
+        model.pollCurrentActivity()
+        XCTAssertEqual(model.accessibilityPermission, .granted)
+        trusted = false
+        model.pollCurrentActivity()
+        XCTAssertEqual(model.accessibilityPermission, .denied)
+        XCTAssertTrue(model.events.isEmpty)
+    }
+
+    func testFocusedWindowAXErrorsAreNotReportedAsAbsent() {
+        let application = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        for error: AXError in [.cannotComplete, .attributeUnsupported, .apiDisabled, .invalidUIElement] {
+            let client = ApplicationWindowContextClient(copyAttributeValue: { _, attribute in
+                XCTAssertEqual(attribute, kAXFocusedWindowAttribute)
+                return (error, nil)
+            })
+            guard case .failure(let failure) = client.focusedWindow(of: application) else {
+                return XCTFail("Expected an AX failure")
+            }
+            XCTAssertEqual(failure, .unavailable("focused_window_ax_error_\(error.rawValue)"))
+        }
+    }
+
+    func testFocusedWindowNoValueIsAbsentButMalformedSuccessIsUnavailable() {
+        let application = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        let absent = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.noValue, nil) })
+        guard case .failure(let absentFailure) = absent.focusedWindow(of: application) else {
+            return XCTFail("Expected absent window")
+        }
+        XCTAssertEqual(absentFailure, .noValue)
+        for value: CFTypeRef? in [nil, "invalid" as CFString] {
+            let malformed = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.success, value) })
+            guard case .failure(let failure) = malformed.focusedWindow(of: application) else {
+                return XCTFail("Expected malformed attribute failure")
+            }
+            XCTAssertEqual(failure, .unavailable("focused_window_invalid_value"))
+        }
+        let captured = ApplicationWindowContextClient(copyAttributeValue: { _, _ in (.success, application) })
+        guard case .success = captured.focusedWindow(of: application) else {
+            return XCTFail("Expected captured AX element")
+        }
     }
 
     private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
@@ -413,6 +519,8 @@ private final class ObservationSource {
     var chromeReads = 0
     var holdChromeReads = false
     var pendingChromeReads: [CheckedContinuation<Result<ChromeReadResult, ChromeReadFailure>, Never>] = []
+    var holdApplicationReads = false
+    var pendingApplicationReads: [CheckedContinuation<ApplicationWindowReadResult, Never>] = []
     var holdFirefoxReads = false
     var pendingFirefoxReads: [CheckedContinuation<Result<FirefoxObservation, SystemEventsReadFailure>, Never>] = []
     var chromeResult: Result<ChromeReadResult, ChromeReadFailure> = .success(.observation(ChromeObservation(
@@ -459,6 +567,12 @@ private final class ObservationSource {
                     return await withCheckedContinuation { self.pendingFirefoxReads.append($0) }
                 }
                 return self.firefoxResult
+            },
+            readApplicationWindow: { _ in
+                if self.holdApplicationReads {
+                    return await withCheckedContinuation { self.pendingApplicationReads.append($0) }
+                }
+                return .captured(ApplicationWindowContext(title: "Example window", browserURL: nil))
             },
             captureReturnAnchor: { nil },
             initialTrackingEnabled: true,

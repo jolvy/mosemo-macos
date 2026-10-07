@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import CollectorCore
 import MosemoAPI
@@ -108,7 +109,12 @@ final class OfflineActivityCoordinator {
         }
     }
 
-    func record(_ event: SafeActivityEvent, browserContext: TransientBrowserContext?) {
+    func record(
+        _ event: SafeActivityEvent,
+        browserContext: TransientBrowserContext?,
+        windowTitle: String? = nil,
+        windowCaptureFailure: String? = nil
+    ) {
         guard !storageFailureLatched, let account, let deviceID,
               shouldPersistObservation(event, browserContext: browserContext) else { return }
         let activityContext: ActivityContext
@@ -119,6 +125,9 @@ final class OfflineActivityCoordinator {
             let appID: ActivityObservedString = contextUnavailable
                 ? .absent
                 : (event.appBundleID.map(ActivityObservedString.captured) ?? .absent)
+            let appName: ActivityObservedString = contextUnavailable
+                ? .absent
+                : event.appBundleID.flatMap(Self.applicationName).map(ActivityObservedString.captured) ?? .absent
             let browser: ActivityWebContext
             if event.appBundleID == ChromeAppleEventClient.bundleID || event.appBundleID == SystemEventsClient.firefoxBundleID {
                 let title = contextUnavailable ? nil : browserContext?.title.map(ActivityPrivacyFilter.title)
@@ -133,8 +142,10 @@ final class OfflineActivityCoordinator {
                 browser = .notApplicable
             }
             activityContext = .detailed(DetailedActivityContext(
-                app: ActivityApplicationContext(bundleID: appID, name: .absent),
-                window: .absent,
+                app: ActivityApplicationContext(bundleID: appID, name: appName),
+                window: windowTitle.map { .captured(title: ActivityPrivacyFilter.title($0)) }
+                    ?? windowCaptureFailure.map { .unavailable(reason: $0) }
+                    ?? .absent,
                 web: browser
             ))
         }
@@ -144,6 +155,25 @@ final class OfflineActivityCoordinator {
             observedAt: event.occurredAt,
             payload: .observation(activityContext)
         )
+    }
+
+    private static func applicationName(for bundleID: String) -> String? {
+        if let runningApplication = NSRunningApplication.runningApplications(
+            withBundleIdentifier: bundleID
+        ).first, let name = runningApplication.localizedName, !name.isEmpty {
+            return name
+        }
+
+        guard
+            let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+            let bundle = Bundle(url: applicationURL),
+            let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String,
+            !name.isEmpty
+        else {
+            return nil
+        }
+        return name
     }
 
     func recordCollectionState(_ state: CollectionStateChange.State, reason: String) {

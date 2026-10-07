@@ -24,6 +24,13 @@ enum ChromeAutomationPermissionResult: Equatable {
 struct TransientBrowserContext: Equatable {
     let title: String?
     let url: String?
+    let windowTitle: String?
+
+    init(title: String?, url: String?, windowTitle: String? = nil) {
+        self.title = title
+        self.url = url
+        self.windowTitle = windowTitle
+    }
 }
 
 struct ChromeObservation: Equatable {
@@ -79,7 +86,7 @@ final class ChromeAppleEventClient: @unchecked Sendable {
             if windowMode is "incognito" then return {"protected", windowIdentifier}
             set tabIndex to active tab index of targetWindow
             set targetTab to active tab of targetWindow
-            return {"normal", windowIdentifier, (tabIndex as text), ((id of targetTab) as text), (URL of targetTab), (title of targetTab)}
+            return {"normal", windowIdentifier, (tabIndex as text), ((id of targetTab) as text), (URL of targetTab), (title of targetTab), (name of targetWindow)}
         end tell
         """
 
@@ -113,7 +120,8 @@ final class ChromeAppleEventClient: @unchecked Sendable {
                 tag == "normal",
                 let tabID = descriptor.atIndex(4)?.integerValue,
                 let transientURL = descriptor.atIndex(5)?.stringValue,
-                let transientTitle = descriptor.atIndex(6)?.stringValue
+                let transientTitle = descriptor.atIndex(6)?.stringValue,
+                let windowTitle = descriptor.atIndex(7)?.stringValue
             else {
                 return .failure(.malformedResponse)
             }
@@ -131,7 +139,8 @@ final class ChromeAppleEventClient: @unchecked Sendable {
                 ),
                 diagnosticContext: TransientBrowserContext(
                     title: transientTitle,
-                    url: transientURL
+                    url: transientURL,
+                    windowTitle: windowTitle
                 )
             )))
         }
