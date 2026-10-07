@@ -1,6 +1,8 @@
 import Foundation
 
 public enum MosemoAPIError: Error, Equatable, Sendable {
+    case focusSessionNotFound
+    case focusSessionConflict
     case authenticationRequired
     case invalidAuthorizationCode
     case validationFailed

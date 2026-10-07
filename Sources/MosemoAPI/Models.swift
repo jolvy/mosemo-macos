@@ -143,3 +143,31 @@ public struct LabelConfirmationRejection: Error, Equatable, Sendable {
 public protocol LabelConfirmationWriting: Sendable {
     func confirmSegmentLabels(_ decisions: [LabelConfirmationDecision]) async throws
 }
+
+public struct FocusSessionRecord: Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let deviceID: UUID
+    public let startedAt: Date
+    public let endedAt: Date?
+    public let targetSeconds: Int
+    public let workSeconds: Int?
+    public let labelID: UUID?
+    public let description: String
+
+    public init(id: UUID, deviceID: UUID, startedAt: Date, endedAt: Date?, targetSeconds: Int, workSeconds: Int?, labelID: UUID?, description: String) {
+        self.id = id
+        self.deviceID = deviceID
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.targetSeconds = targetSeconds
+        self.workSeconds = workSeconds
+        self.labelID = labelID
+        self.description = description
+    }
+}
+
+public protocol FocusSessionServing: Sendable {
+    func startFocusSession(id: UUID, deviceID: UUID, startedAt: Date, targetSeconds: Int) async throws -> FocusSessionRecord
+    func completeFocusSession(id: UUID, endedAt: Date, workSeconds: Int, labelID: UUID, description: String) async throws -> FocusSessionRecord
+    func listFocusSessions(date: TimelineDate) async throws -> [FocusSessionRecord]
+}

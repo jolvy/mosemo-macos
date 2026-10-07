@@ -1854,6 +1854,13 @@ private func deviceOutput(statusCode: Int) -> Operations.DevicesCreate.Output {
 }
 
 private struct MockGeneratedAPI: APIProtocol {
+    var createFocus: @Sendable (Operations.FocusSessionsCreate.Input) async throws -> Operations.FocusSessionsCreate.Output = { _ in .undocumented(statusCode: 500, .init()) }
+    var completeFocus: @Sendable (Operations.FocusSessionsComplete.Input) async throws -> Operations.FocusSessionsComplete.Output = { _ in .undocumented(statusCode: 500, .init()) }
+    var listFocus: @Sendable (Operations.FocusSessionsList.Input) async throws -> Operations.FocusSessionsList.Output = { _ in .undocumented(statusCode: 500, .init()) }
+    func focusSessionsCreate(_ input: Operations.FocusSessionsCreate.Input) async throws -> Operations.FocusSessionsCreate.Output { try await createFocus(input) }
+    func focusSessionsComplete(_ input: Operations.FocusSessionsComplete.Input) async throws -> Operations.FocusSessionsComplete.Output { try await completeFocus(input) }
+    func focusSessionsList(_ input: Operations.FocusSessionsList.Input) async throws -> Operations.FocusSessionsList.Output { try await listFocus(input) }
+
     typealias Exchange = @Sendable (
         Operations.AuthExchangeToken.Input
     ) async throws -> Operations.AuthExchangeToken.Output
@@ -2062,3 +2069,67 @@ private actor CallCounter {
 }
 
 private struct TestTransportError: Error {}
+
+extension MosemoAPITests {
+    func testFocusSessionTransportPreservesNullableFieldsAndSendsAuthenticatedCompletion() async throws {
+        let id = UUID(), deviceID = UUID(), labelID = UUID()
+        let store = MemoryAccessTokenStore()
+        await store.save(.init(value: "test-focus-token", expiresAt: now.addingTimeInterval(3600)))
+        let recorder = JSONBodyRecorder()
+        let transport = RecordingClientTransport { request, body, _, operation in
+            XCTAssertEqual(request.headerFields[.authorization], "Bearer test-focus-token")
+            if let body { await recorder.record(request: request, operationID: operation, body: Data(try await Array(collecting: body, upTo: 10000))) }
+            let completed = operation != "focusSessionsCreate"
+            let value: [String: Any] = ["sessionId": id.uuidString, "deviceId": deviceID.uuidString, "startedAt": "2026-10-07T00:00:00.123456Z", "endedAt": completed ? "2026-10-07T00:20:00.123456Z" : NSNull(), "targetSeconds": 1200, "workSeconds": completed ? 1100 : NSNull(), "labelId": completed ? labelID.uuidString : NSNull(), "description": ""]
+            let response = try JSONSerialization.data(withJSONObject: operation == "focusSessionsList" ? [value] : value)
+            return (HTTPResponse(status: operation == "focusSessionsCreate" ? .created : .ok, headerFields: [.contentType: "application/json"]), HTTPBody(response))
+        }
+        let client = makeTransportClient(tokenStore: store, transport: transport)
+        let started = try await client.startFocusSession(id: id, deviceID: deviceID, startedAt: now, targetSeconds: 1200)
+        XCTAssertNil(started.endedAt)
+        XCTAssertNil(started.workSeconds)
+        XCTAssertNil(started.labelID)
+        let finished = try await client.completeFocusSession(id: id, endedAt: now.addingTimeInterval(1200), workSeconds: 1100, labelID: labelID, description: "")
+        XCTAssertEqual(finished.labelID, labelID)
+        XCTAssertEqual(finished.workSeconds, 1100)
+        let history = try await client.listFocusSessions(date: TimelineDate(year: 2026, month: 10, day: 7))
+        XCTAssertEqual(history, [finished])
+        let requests = await recorder.requests()
+        XCTAssertEqual(requests[0].request.path, "/api/v1/focus-sessions")
+        XCTAssertEqual(requests[1].request.path, "/api/v1/focus-sessions/\(id.uuidString)/completion")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].body) as? [String: Any])
+        XCTAssertEqual(body["workSeconds"] as? Int, 1100)
+        XCTAssertEqual(body["labelId"] as? String, labelID.uuidString)
+        XCTAssertEqual(body["description"] as? String, "")
+    }
+
+    func testFocusSessionLiveServerLifecycleAndActivityLink() async throws {
+        guard let path = ProcessInfo.processInfo.environment["MOSEMO_FOCUS_E2E_FIXTURE"] else { throw XCTSkip("Requires disposable focus-session API fixture") }
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: String])
+        let baseURL = try XCTUnwrap(URL(string: json["url"] ?? ""))
+        let deviceID = try XCTUnwrap(UUID(uuidString: json["deviceID"] ?? ""))
+        let labelID = try XCTUnwrap(UUID(uuidString: json["labelID"] ?? ""))
+        let store = MemoryAccessTokenStore()
+        let token = try XCTUnwrap(json["token"])
+        await store.save(.init(value: token, expiresAt: .now.addingTimeInterval(3600)))
+        let generated = Client(serverURL: baseURL, configuration: .init(dateTranscoder: MosemoDateTranscoder()), transport: URLSessionTransport(), middlewares: [BearerAuthenticationMiddleware(tokenStore: store, now: { .now })])
+        let client = LiveMosemoAPIClient(baseURL: baseURL, anonymousClient: generated, authenticatedClient: generated, tokenStore: store, now: { .now })
+        let id = UUID()
+        let start = Date.now.addingTimeInterval(-120)
+        let started = try await client.startFocusSession(id: id, deviceID: deviceID, startedAt: start, targetSeconds: 120)
+        XCTAssertEqual(started.id, id)
+        XCTAssertNil(started.endedAt)
+        let retry = try await client.startFocusSession(id: id, deviceID: deviceID, startedAt: start, targetSeconds: 120)
+        XCTAssertEqual(retry, started)
+        let metadata = ActivityRecordMetadata(deviceRegistrationID: deviceID, eventID: UUID(), sequence: 1, observedAt: start.addingTimeInterval(10), timezoneID: "Asia/Seoul", utcOffsetMinutes: 540)
+        let activity = ActivityRecord.observation(.init(metadata: metadata, context: .opaque, focusSessionID: id))
+        _ = try await client.createActivity(activity)
+        let finished = try await client.completeFocusSession(id: id, endedAt: start.addingTimeInterval(120), workSeconds: 100, labelID: labelID, description: "Swift client end-to-end")
+        XCTAssertEqual(finished.workSeconds, 100)
+        _ = try await client.createActivity(activity)
+        let history = try await client.listFocusSessions(date: TimelineDate(start, timeZone: TimeZone(identifier: "Asia/Seoul")!))
+        XCTAssertEqual(history, [finished])
+        let labels = try await client.listLabels()
+        XCTAssertTrue(labels.contains { $0.id == labelID })
+    }
+}

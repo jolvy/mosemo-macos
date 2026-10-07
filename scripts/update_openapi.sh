@@ -139,6 +139,12 @@ jq '
         . as $property
         | ($property.anyOf | map(select(.type != "null")) | first) as $value
         | ($property | del(.anyOf)) + $value;
+    (.components.schemas.FocusSessionResponse.properties.endedAt,
+     .components.schemas.FocusSessionResponse.properties.workSeconds,
+     .components.schemas.FocusSessionResponse.properties.labelId,
+     .components.schemas.ActivityObservation.properties.focusSessionId,
+     .components.schemas.CollectionStateChanged.properties.focusSessionId) |= without_null_branch |
+    (.components.schemas.FocusSessionResponse.required) |= map(select(. != "endedAt" and . != "workSeconds" and . != "labelId")) |
     (.components.schemas.CapturedText.properties.originalByteLength) |= (
         . as $property
         | ($property.anyOf | map(select(.type == "integer")) | first) as $integer

@@ -215,6 +215,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
                 throw MosemoAPIError.authenticationRequired
             case .notFound(let response):
                 let error = try response.body.json.error
+                if error.status == "FOCUS_SESSION_NOT_FOUND" { throw MosemoAPIError.focusSessionNotFound }
                 guard error.status == "ACTIVITY_DEVICE_NOT_FOUND" else {
                     throw MosemoAPIError.unexpectedResponse(statusCode: 404)
                 }
@@ -695,5 +696,68 @@ extension LiveMosemoAPIClient: LabelReviewReading {
         }
         let title: String? = if case .captured(let window) = context.window { window.title.value } else { nil }
         return .app(title: title)
+    }
+}
+
+extension LiveMosemoAPIClient: FocusSessionServing {
+    public func startFocusSession(id: UUID, deviceID: UUID, startedAt: Date, targetSeconds: Int) async throws -> FocusSessionRecord {
+        do {
+            let output = try await authenticatedClient.focusSessionsCreate(body: .json(.init(deviceId: deviceID.uuidString, sessionId: id.uuidString, startedAt: startedAt, targetSeconds: targetSeconds)))
+            switch output {
+            case .created(let response): return try Self.focusRecord(response.body.json)
+            case .unauthorized: throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent: throw MosemoAPIError.validationFailed
+            case .conflict: throw MosemoAPIError.focusSessionConflict
+            case .notFound: throw MosemoAPIError.focusSessionNotFound
+            case .methodNotAllowed: throw Self.error(forHTTPStatus: 405)
+            case .internalServerError: throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let code, _): throw Self.error(forHTTPStatus: code)
+            }
+        } catch { throw await mappedFocusError(error) }
+    }
+
+    public func completeFocusSession(id: UUID, endedAt: Date, workSeconds: Int, labelID: UUID, description: String) async throws -> FocusSessionRecord {
+        do {
+            let output = try await authenticatedClient.focusSessionsComplete(path: .init(sessionId: id.uuidString), body: .json(.init(description: description, endedAt: endedAt, labelId: labelID.uuidString, workSeconds: workSeconds)))
+            switch output {
+            case .ok(let response): return try Self.focusRecord(response.body.json)
+            case .unauthorized: throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent: throw MosemoAPIError.validationFailed
+            case .conflict: throw MosemoAPIError.focusSessionConflict
+            case .notFound: throw MosemoAPIError.focusSessionNotFound
+            case .methodNotAllowed: throw Self.error(forHTTPStatus: 405)
+            case .internalServerError: throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let code, _): throw Self.error(forHTTPStatus: code)
+            }
+        } catch { throw await mappedFocusError(error) }
+    }
+
+    public func listFocusSessions(date: TimelineDate) async throws -> [FocusSessionRecord] {
+        do {
+            let output = try await authenticatedClient.focusSessionsList(query: .init(date: date.description))
+            switch output {
+            case .ok(let response): return try response.body.json.map(Self.focusRecord)
+            case .unauthorized: throw MosemoAPIError.authenticationRequired
+            case .unprocessableContent: throw MosemoAPIError.validationFailed
+            case .conflict: throw MosemoAPIError.focusSessionConflict
+            case .notFound: throw MosemoAPIError.focusSessionNotFound
+            case .methodNotAllowed: throw Self.error(forHTTPStatus: 405)
+            case .internalServerError: throw Self.error(forHTTPStatus: 500)
+            case .undocumented(let code, _): throw Self.error(forHTTPStatus: code)
+            }
+        } catch { throw await mappedFocusError(error) }
+    }
+
+    private static func focusRecord(_ response: Components.Schemas.FocusSessionResponse) throws -> FocusSessionRecord {
+        guard let id = UUID(uuidString: response.sessionId), let deviceID = UUID(uuidString: response.deviceId) else { throw MosemoAPIError.unexpectedResponse(statusCode: 200) }
+        let labelID = response.labelId.flatMap(UUID.init(uuidString:))
+        guard response.labelId == nil || labelID != nil else { throw MosemoAPIError.unexpectedResponse(statusCode: 200) }
+        return FocusSessionRecord(id: id, deviceID: deviceID, startedAt: response.startedAt, endedAt: response.endedAt, targetSeconds: response.targetSeconds, workSeconds: response.workSeconds, labelID: labelID, description: response.description)
+    }
+
+    private func mappedFocusError(_ error: Error) async -> MosemoAPIError {
+        let mapped = Self.mapCommon(error, statusCode: nil)
+        if mapped == .authenticationRequired { try? await tokenStore.delete() }
+        return mapped
     }
 }

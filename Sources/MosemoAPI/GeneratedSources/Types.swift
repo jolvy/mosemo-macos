@@ -67,6 +67,27 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/devices`.
     /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
     func devicesCreate(_ input: Operations.DevicesCreate.Input) async throws -> Operations.DevicesCreate.Output
+    /// 날짜별 완료한 집중 세션 조회
+    ///
+    /// 계정 시간대의 시작 날짜 기준, 최신순으로 완료한 세션만 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)`.
+    func focusSessionsList(_ input: Operations.FocusSessionsList.Input) async throws -> Operations.FocusSessionsList.Output
+    /// 집중 세션 시작
+    ///
+    /// 활동 업로드 전에 세션을 생성합니다. 같은 세션 ID와 내용의 재시도는 같은 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)`.
+    func focusSessionsCreate(_ input: Operations.FocusSessionsCreate.Input) async throws -> Operations.FocusSessionsCreate.Output
+    /// 종료한 집중 세션 기록 완료
+    ///
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    ///
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    func focusSessionsComplete(_ input: Operations.FocusSessionsComplete.Input) async throws -> Operations.FocusSessionsComplete.Output
     /// 내 라벨 목록 조회
     ///
     /// 인증된 계정의 사용 중인 라벨과 보관한 라벨을 함께 반환합니다.
@@ -185,6 +206,53 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//api/v1/devices/post(devicesCreate)`.
     internal func devicesCreate(headers: Operations.DevicesCreate.Input.Headers) async throws -> Operations.DevicesCreate.Output {
         try await devicesCreate(Operations.DevicesCreate.Input(headers: headers))
+    }
+    /// 날짜별 완료한 집중 세션 조회
+    ///
+    /// 계정 시간대의 시작 날짜 기준, 최신순으로 완료한 세션만 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)`.
+    internal func focusSessionsList(
+        query: Operations.FocusSessionsList.Input.Query,
+        headers: Operations.FocusSessionsList.Input.Headers = .init()
+    ) async throws -> Operations.FocusSessionsList.Output {
+        try await focusSessionsList(Operations.FocusSessionsList.Input(
+            query: query,
+            headers: headers
+        ))
+    }
+    /// 집중 세션 시작
+    ///
+    /// 활동 업로드 전에 세션을 생성합니다. 같은 세션 ID와 내용의 재시도는 같은 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)`.
+    internal func focusSessionsCreate(
+        headers: Operations.FocusSessionsCreate.Input.Headers = .init(),
+        body: Operations.FocusSessionsCreate.Input.Body
+    ) async throws -> Operations.FocusSessionsCreate.Output {
+        try await focusSessionsCreate(Operations.FocusSessionsCreate.Input(
+            headers: headers,
+            body: body
+        ))
+    }
+    /// 종료한 집중 세션 기록 완료
+    ///
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    ///
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    internal func focusSessionsComplete(
+        path: Operations.FocusSessionsComplete.Input.Path,
+        headers: Operations.FocusSessionsComplete.Input.Headers = .init(),
+        body: Operations.FocusSessionsComplete.Input.Body
+    ) async throws -> Operations.FocusSessionsComplete.Output {
+        try await focusSessionsComplete(Operations.FocusSessionsComplete.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
     }
     /// 내 라벨 목록 조회
     ///
@@ -550,6 +618,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/ActivityObservation/eventId`.
             internal var eventId: Swift.String
+            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityObservation/focusSessionId`.
+            internal var focusSessionId: Swift.String?
             /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/ActivityObservation/observedAt`.
@@ -582,6 +654,7 @@ internal enum Components {
             ///   - context: 개인정보 필터링을 마친 전체 활동 문맥입니다.
             ///   - deviceId: 서버에 등록된 Device 식별자입니다.
             ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
             ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
             ///   - recordType: 활동 전체 스냅샷 레코드임을 나타냅니다.
             ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
@@ -591,6 +664,7 @@ internal enum Components {
                 context: Components.Schemas.ActivityObservation.ContextPayload,
                 deviceId: Swift.String,
                 eventId: Swift.String,
+                focusSessionId: Swift.String? = nil,
                 observedAt: Foundation.Date,
                 recordType: Components.Schemas.ActivityObservation.RecordTypePayload,
                 sequence: Swift.Int,
@@ -600,6 +674,7 @@ internal enum Components {
                 self.context = context
                 self.deviceId = deviceId
                 self.eventId = eventId
+                self.focusSessionId = focusSessionId
                 self.observedAt = observedAt
                 self.recordType = recordType
                 self.sequence = sequence
@@ -610,6 +685,7 @@ internal enum Components {
                 case context
                 case deviceId
                 case eventId
+                case focusSessionId
                 case observedAt
                 case recordType
                 case sequence
@@ -629,6 +705,10 @@ internal enum Components {
                 self.eventId = try container.decode(
                     Swift.String.self,
                     forKey: .eventId
+                )
+                self.focusSessionId = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .focusSessionId
                 )
                 self.observedAt = try container.decode(
                     Foundation.Date.self,
@@ -654,6 +734,7 @@ internal enum Components {
                     "context",
                     "deviceId",
                     "eventId",
+                    "focusSessionId",
                     "observedAt",
                     "recordType",
                     "sequence",
@@ -1367,6 +1448,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/eventId`.
             internal var eventId: Swift.String
+            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/focusSessionId`.
+            internal var focusSessionId: Swift.String?
             /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/observedAt`.
@@ -1406,6 +1491,7 @@ internal enum Components {
             /// - Parameters:
             ///   - deviceId: 서버에 등록된 Device 식별자입니다.
             ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
             ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
             ///   - reason: 수집 상태가 변경된 이유입니다.
             ///   - recordType: 수집 가능 상태 변경 레코드임을 나타냅니다.
@@ -1416,6 +1502,7 @@ internal enum Components {
             internal init(
                 deviceId: Swift.String,
                 eventId: Swift.String,
+                focusSessionId: Swift.String? = nil,
                 observedAt: Foundation.Date,
                 reason: Swift.String,
                 recordType: Components.Schemas.CollectionStateChanged.RecordTypePayload,
@@ -1426,6 +1513,7 @@ internal enum Components {
             ) {
                 self.deviceId = deviceId
                 self.eventId = eventId
+                self.focusSessionId = focusSessionId
                 self.observedAt = observedAt
                 self.reason = reason
                 self.recordType = recordType
@@ -1437,6 +1525,7 @@ internal enum Components {
             internal enum CodingKeys: String, CodingKey {
                 case deviceId
                 case eventId
+                case focusSessionId
                 case observedAt
                 case reason
                 case recordType
@@ -1454,6 +1543,10 @@ internal enum Components {
                 self.eventId = try container.decode(
                     Swift.String.self,
                     forKey: .eventId
+                )
+                self.focusSessionId = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .focusSessionId
                 )
                 self.observedAt = try container.decode(
                     Foundation.Date.self,
@@ -1486,6 +1579,7 @@ internal enum Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "deviceId",
                     "eventId",
+                    "focusSessionId",
                     "observedAt",
                     "reason",
                     "recordType",
@@ -1962,6 +2056,223 @@ internal enum Components {
             }
             internal enum CodingKeys: String, CodingKey {
                 case status
+            }
+        }
+        /// 종료한 세션의 작업 시간과 라벨을 확정하는 요청입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FocusSessionCompleteRequest`.
+        internal struct FocusSessionCompleteRequest: Codable, Hashable, Sendable {
+            /// 선택적인 작업 설명입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCompleteRequest/description`.
+            internal var description: Swift.String?
+            /// 일시중지 포함 UTC 세션 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCompleteRequest/endedAt`.
+            internal var endedAt: Foundation.Date
+            /// 계정의 활성 라벨 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCompleteRequest/labelId`.
+            internal var labelId: Swift.String
+            /// 일시중지 시간을 제외한 실제 작업 초입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCompleteRequest/workSeconds`.
+            internal var workSeconds: Swift.Int
+            /// Creates a new `FocusSessionCompleteRequest`.
+            ///
+            /// - Parameters:
+            ///   - description: 선택적인 작업 설명입니다.
+            ///   - endedAt: 일시중지 포함 UTC 세션 종료 시각입니다.
+            ///   - labelId: 계정의 활성 라벨 식별자입니다.
+            ///   - workSeconds: 일시중지 시간을 제외한 실제 작업 초입니다.
+            internal init(
+                description: Swift.String? = nil,
+                endedAt: Foundation.Date,
+                labelId: Swift.String,
+                workSeconds: Swift.Int
+            ) {
+                self.description = description
+                self.endedAt = endedAt
+                self.labelId = labelId
+                self.workSeconds = workSeconds
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case description
+                case endedAt
+                case labelId
+                case workSeconds
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.description = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .description
+                )
+                self.endedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .endedAt
+                )
+                self.labelId = try container.decode(
+                    Swift.String.self,
+                    forKey: .labelId
+                )
+                self.workSeconds = try container.decode(
+                    Swift.Int.self,
+                    forKey: .workSeconds
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "description",
+                    "endedAt",
+                    "labelId",
+                    "workSeconds"
+                ])
+            }
+        }
+        /// 집중 세션을 시작하는 재시도 가능한 요청입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest`.
+        internal struct FocusSessionCreateRequest: Codable, Hashable, Sendable {
+            /// 세션을 시작한 등록 기기 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/deviceId`.
+            internal var deviceId: Swift.String
+            /// 재시도에도 유지하는 클라이언트 발급 세션 UUID입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/sessionId`.
+            internal var sessionId: Swift.String
+            /// UTC 세션 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// 0이면 경과 시간, 양수이면 카운트다운 목표 초입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/targetSeconds`.
+            internal var targetSeconds: Swift.Int
+            /// Creates a new `FocusSessionCreateRequest`.
+            ///
+            /// - Parameters:
+            ///   - deviceId: 세션을 시작한 등록 기기 식별자입니다.
+            ///   - sessionId: 재시도에도 유지하는 클라이언트 발급 세션 UUID입니다.
+            ///   - startedAt: UTC 세션 시작 시각입니다.
+            ///   - targetSeconds: 0이면 경과 시간, 양수이면 카운트다운 목표 초입니다.
+            internal init(
+                deviceId: Swift.String,
+                sessionId: Swift.String,
+                startedAt: Foundation.Date,
+                targetSeconds: Swift.Int
+            ) {
+                self.deviceId = deviceId
+                self.sessionId = sessionId
+                self.startedAt = startedAt
+                self.targetSeconds = targetSeconds
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case deviceId
+                case sessionId
+                case startedAt
+                case targetSeconds
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.deviceId = try container.decode(
+                    Swift.String.self,
+                    forKey: .deviceId
+                )
+                self.sessionId = try container.decode(
+                    Swift.String.self,
+                    forKey: .sessionId
+                )
+                self.startedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .startedAt
+                )
+                self.targetSeconds = try container.decode(
+                    Swift.Int.self,
+                    forKey: .targetSeconds
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "deviceId",
+                    "sessionId",
+                    "startedAt",
+                    "targetSeconds"
+                ])
+            }
+        }
+        /// 진행 중이거나 완료한 집중 세션입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FocusSessionResponse`.
+        internal struct FocusSessionResponse: Codable, Hashable, Sendable {
+            /// 작업 설명입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/description`.
+            internal var description: Swift.String
+            /// 세션을 시작한 등록 기기 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/deviceId`.
+            internal var deviceId: Swift.String
+            /// UTC 종료 시각입니다. 기록 완료 전에는 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/endedAt`.
+            internal var endedAt: Foundation.Date?
+            /// 완료 시 확정된 라벨입니다. 완료 전에는 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/labelId`.
+            internal var labelId: Swift.String?
+            /// 집중 세션 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/sessionId`.
+            internal var sessionId: Swift.String
+            /// UTC 세션 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// 목표 초입니다. 0이면 경과 시간입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/targetSeconds`.
+            internal var targetSeconds: Swift.Int
+            /// 일시중지를 제외한 작업 초입니다. 완료 전에는 null입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/workSeconds`.
+            internal var workSeconds: Swift.Int?
+            /// Creates a new `FocusSessionResponse`.
+            ///
+            /// - Parameters:
+            ///   - description: 작업 설명입니다.
+            ///   - deviceId: 세션을 시작한 등록 기기 식별자입니다.
+            ///   - endedAt: UTC 종료 시각입니다. 기록 완료 전에는 null입니다.
+            ///   - labelId: 완료 시 확정된 라벨입니다. 완료 전에는 null입니다.
+            ///   - sessionId: 집중 세션 식별자입니다.
+            ///   - startedAt: UTC 세션 시작 시각입니다.
+            ///   - targetSeconds: 목표 초입니다. 0이면 경과 시간입니다.
+            ///   - workSeconds: 일시중지를 제외한 작업 초입니다. 완료 전에는 null입니다.
+            internal init(
+                description: Swift.String,
+                deviceId: Swift.String,
+                endedAt: Foundation.Date? = nil,
+                labelId: Swift.String? = nil,
+                sessionId: Swift.String,
+                startedAt: Foundation.Date,
+                targetSeconds: Swift.Int,
+                workSeconds: Swift.Int? = nil
+            ) {
+                self.description = description
+                self.deviceId = deviceId
+                self.endedAt = endedAt
+                self.labelId = labelId
+                self.sessionId = sessionId
+                self.startedAt = startedAt
+                self.targetSeconds = targetSeconds
+                self.workSeconds = workSeconds
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case description
+                case deviceId
+                case endedAt
+                case labelId
+                case sessionId
+                case startedAt
+                case targetSeconds
+                case workSeconds
             }
         }
         /// A detailed activity segment whose end is not yet known.
@@ -7038,6 +7349,1458 @@ internal enum Operations {
             /// - Throws: An error if `self` is not `.internalServerError`.
             /// - SeeAlso: `.internalServerError`.
             internal var internalServerError: Operations.DevicesCreate.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 날짜별 완료한 집중 세션 조회
+    ///
+    /// 계정 시간대의 시작 날짜 기준, 최신순으로 완료한 세션만 반환합니다.
+    ///
+    /// - Remark: HTTP `GET /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)`.
+    internal enum FocusSessionsList {
+        internal static let id: Swift.String = "focusSessionsList"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/query`.
+            internal struct Query: Sendable, Hashable {
+                /// 계정 시간대 기준 세션 시작 날짜입니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/query/date`.
+                internal var date: Swift.String
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - date: 계정 시간대 기준 세션 시작 날짜입니다.
+                internal init(date: Swift.String) {
+                    self.date = date
+                }
+            }
+            internal var query: Operations.FocusSessionsList.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsList.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsList.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.FocusSessionsList.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - query:
+            ///   - headers:
+            internal init(
+                query: Operations.FocusSessionsList.Input.Query,
+                headers: Operations.FocusSessionsList.Input.Headers = .init()
+            ) {
+                self.query = query
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/200/content/application\/json`.
+                    case json([Components.Schemas.FocusSessionResponse])
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: [Components.Schemas.FocusSessionResponse] {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsList.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.FocusSessionsList.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.FocusSessionsList.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.FocusSessionsList.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.FocusSessionsList.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsList.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsList.Output.Unauthorized.Headers = .init(),
+                    body: Operations.FocusSessionsList.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.FocusSessionsList.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.FocusSessionsList.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsList.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.FocusSessionsList.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.FocusSessionsList.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsList.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsList.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.FocusSessionsList.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.FocusSessionsList.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.FocusSessionsList.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsList.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.FocusSessionsList.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.FocusSessionsList.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsList.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.FocusSessionsList.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.FocusSessionsList.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/GET/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsList.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsList.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/get(focusSessionsList)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.FocusSessionsList.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.FocusSessionsList.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 집중 세션 시작
+    ///
+    /// 활동 업로드 전에 세션을 생성합니다. 같은 세션 ID와 내용의 재시도는 같은 결과를 반환합니다.
+    ///
+    /// - Remark: HTTP `POST /api/v1/focus-sessions`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)`.
+    internal enum FocusSessionsCreate {
+        internal static let id: Swift.String = "focusSessionsCreate"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsCreate.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsCreate.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.FocusSessionsCreate.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.FocusSessionCreateRequest)
+            }
+            internal var body: Operations.FocusSessionsCreate.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                headers: Operations.FocusSessionsCreate.Input.Headers = .init(),
+                body: Operations.FocusSessionsCreate.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/201/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.FocusSessionResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.FocusSessionResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsCreate.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.FocusSessionsCreate.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            internal var created: Operations.FocusSessionsCreate.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.FocusSessionsCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.FocusSessionsCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsCreate.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsCreate.Output.Unauthorized.Headers = .init(),
+                    body: Operations.FocusSessionsCreate.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.FocusSessionsCreate.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.FocusSessionsCreate.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsCreate.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.FocusSessionsCreate.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.FocusSessionsCreate.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsCreate.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsCreate.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.FocusSessionsCreate.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.FocusSessionsCreate.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.FocusSessionsCreate.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsCreate.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.FocusSessionsCreate.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.FocusSessionsCreate.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsCreate.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.FocusSessionsCreate.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.FocusSessionsCreate.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/POST/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsCreate.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsCreate.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/post(focusSessionsCreate)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.FocusSessionsCreate.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.FocusSessionsCreate.Output.InternalServerError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 종료한 집중 세션 기록 완료
+    ///
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    ///
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    internal enum FocusSessionsComplete {
+        internal static let id: Swift.String = "focusSessionsComplete"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/path`.
+            internal struct Path: Sendable, Hashable {
+                /// 집중 세션 식별자입니다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/path/session_id`.
+                internal var sessionId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - sessionId: 집중 세션 식별자입니다.
+                internal init(sessionId: Swift.String) {
+                    self.sessionId = sessionId
+                }
+            }
+            internal var path: Operations.FocusSessionsComplete.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsComplete.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsComplete.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.FocusSessionsComplete.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/requestBody/content/application\/json`.
+                case json(Components.Schemas.FocusSessionCompleteRequest)
+            }
+            internal var body: Operations.FocusSessionsComplete.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                path: Operations.FocusSessionsComplete.Input.Path,
+                headers: Operations.FocusSessionsComplete.Input.Headers = .init(),
+                body: Operations.FocusSessionsComplete.Input.Body
+            ) {
+                self.path = path
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/200/content/application\/json`.
+                    case json(Components.Schemas.FocusSessionResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.FocusSessionResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsComplete.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.FocusSessionsComplete.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.FocusSessionsComplete.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
+                    internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case bearer = "Bearer"
+                    }
+                    /// 클라이언트가 사용해야 하는 인증 방식입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.FocusSessionsComplete.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
+                    internal init(wwwAuthenticate: Operations.FocusSessionsComplete.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                        self.wwwAuthenticate = wwwAuthenticate
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsComplete.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsComplete.Output.Unauthorized.Headers = .init(),
+                    body: Operations.FocusSessionsComplete.Output.Unauthorized.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Unauthorized
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.FocusSessionsComplete.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Operations.FocusSessionsComplete.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/404/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsComplete.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// Not Found
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.FocusSessionsComplete.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.FocusSessionsComplete.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct MethodNotAllowed: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// 해당 route에서 허용되는 HTTP method 목록입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/headers/Allow`.
+                    internal var allow: Swift.String?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - allow: 해당 route에서 허용되는 HTTP method 목록입니다.
+                    internal init(allow: Swift.String? = nil) {
+                        self.allow = allow
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsComplete.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.MethodNotAllowed.Body
+                /// Creates a new `MethodNotAllowed`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsComplete.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.FocusSessionsComplete.Output.MethodNotAllowed.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Method Not Allowed
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/405`.
+            ///
+            /// HTTP response code: `405 methodNotAllowed`.
+            case methodNotAllowed(Operations.FocusSessionsComplete.Output.MethodNotAllowed)
+            /// The associated value of the enum case if `self` is `.methodNotAllowed`.
+            ///
+            /// - Throws: An error if `self` is not `.methodNotAllowed`.
+            /// - SeeAlso: `.methodNotAllowed`.
+            internal var methodNotAllowed: Operations.FocusSessionsComplete.Output.MethodNotAllowed {
+                get throws {
+                    switch self {
+                    case let .methodNotAllowed(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "methodNotAllowed",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/409/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsComplete.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// Conflict
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.FocusSessionsComplete.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.FocusSessionsComplete.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/422/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/422/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsComplete.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Unprocessable Content
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.FocusSessionsComplete.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            internal var unprocessableContent: Operations.FocusSessionsComplete.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct InternalServerError: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/500/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/500/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.InternalServerError.Body
+                /// Creates a new `InternalServerError`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.FocusSessionsComplete.Output.InternalServerError.Body) {
+                    self.body = body
+                }
+            }
+            /// Internal Server Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Operations.FocusSessionsComplete.Output.InternalServerError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Operations.FocusSessionsComplete.Output.InternalServerError {
                 get throws {
                     switch self {
                     case let .internalServerError(response):
