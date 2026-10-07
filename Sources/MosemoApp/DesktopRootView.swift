@@ -23,6 +23,7 @@ struct DesktopRootView: View {
                     timelineFetcher: timelineClient,
                     reviewFetcher: LiveLabelReviewFetcher(reader: reviewReader),
                     reviewWriter: timelineClient,
+                    focusLabelReader: reviewReader,
                     signOut: auth.signOut,
                     acceptedActivityUploads: model.acceptedActivityUploads.eraseToAnyPublisher(),
                     authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) }
@@ -46,11 +47,13 @@ struct DesktopRootView: View {
 private enum WorkspacePage: Hashable {
     case timeline
     case labelReview
+    case focusSession
 
     var title: String {
         switch self {
         case .timeline: "관찰 타임라인"
         case .labelReview: "라벨 검토"
+        case .focusSession: "집중 세션"
         }
     }
 
@@ -58,6 +61,7 @@ private enum WorkspacePage: Hashable {
         switch self {
         case .timeline: "calendar"
         case .labelReview: "checkmark.rectangle.stack"
+        case .focusSession: "timer"
         }
     }
 }
@@ -66,6 +70,7 @@ struct MainWorkspaceView: View {
     @State private var selectedPage: WorkspacePage = .timeline
     @StateObject private var timelineModel: TimelineViewModel
     @StateObject private var reviewModel: LabelReviewViewModel
+    @StateObject private var focusModel: FocusSessionViewModel
 
     private let accountID: UUID
     private let acceptedActivityUploads: AnyPublisher<UUID, Never>
@@ -78,6 +83,7 @@ struct MainWorkspaceView: View {
         timelineFetcher: any TimelineFetching,
         reviewFetcher: any LabelReviewFetching,
         reviewWriter: any LabelConfirmationWriting,
+        focusLabelReader: (any LabelReviewReading)? = nil,
         signOut: (() -> Void)?,
         acceptedActivityUploads: AnyPublisher<UUID, Never> = Empty().eraseToAnyPublisher(),
         previewUpload: (() -> Void)? = nil,
@@ -90,6 +96,18 @@ struct MainWorkspaceView: View {
         self.previewUpload = previewUpload
         self.signOut = signOut
         self.showsPreviewNotice = showsPreviewNotice
+        #if DEBUG
+        if showsPreviewNotice && CommandLine.arguments.contains("--focus-session-ui-preview") {
+            _selectedPage = State(initialValue: .focusSession)
+        }
+        #endif
+        _focusModel = StateObject(wrappedValue: FocusSessionViewModel(
+            fetchLabels: {
+                guard let focusLabelReader else { return [] }
+                return try await focusLabelReader.listLabels()
+            },
+            authenticationFailed: authenticationFailed
+        ))
         let timeZone = TimeZone(identifier: account.timeZoneID) ?? .current
         _timelineModel = StateObject(wrappedValue: TimelineViewModel(
             fetcher: timelineFetcher,
@@ -116,12 +134,17 @@ struct MainWorkspaceView: View {
                     TimelineView(model: timelineModel, showsPreviewNotice: showsPreviewNotice, previewUpload: previewUpload)
                 case .labelReview:
                     LabelReviewView(viewModel: reviewModel)
+                case .focusSession:
+                    FocusSessionView(model: focusModel)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(minWidth: 720, minHeight: 520)
+        .frame(minWidth: selectedPage == .focusSession ? 900 : 720, minHeight: 520)
+        .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            focusModel.tick()
+        }
         .onReceive(acceptedActivityUploads) { uploadedAccountID in
             guard uploadedAccountID == accountID else { return }
             Task { await timelineModel.activityUploaded() }
@@ -151,6 +174,7 @@ struct MainWorkspaceView: View {
 
             pageButton(.timeline)
             pageButton(.labelReview)
+            pageButton(.focusSession)
 
             Spacer()
 
@@ -192,7 +216,7 @@ struct MainWorkspaceView: View {
         .foregroundStyle(selectedPage == page ? .white : .white.opacity(0.68))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
-        .accessibilityIdentifier(page == .timeline ? "navigation-timeline" : "navigation-label-review")
+        .accessibilityIdentifier(page == .timeline ? "navigation-timeline" : page == .labelReview ? "navigation-label-review" : "navigation-focus-session")
     }
 }
 
