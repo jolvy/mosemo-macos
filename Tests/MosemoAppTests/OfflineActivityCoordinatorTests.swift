@@ -602,7 +602,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
     }
 }
 
-private func makeActivityEvent(appBundleID: String) -> SafeActivityEvent {
+private func makeActivityEvent(appBundleID: String, occurredAt: Date = .now) -> SafeActivityEvent {
     SafeActivityEvent(
         eventType: .activity,
         appBundleID: appBundleID,
@@ -611,7 +611,7 @@ private func makeActivityEvent(appBundleID: String) -> SafeActivityEvent {
         transitionType: .appSwitch,
         observationState: .observed,
         inputOccurred: nil,
-        occurredAt: .now,
+        occurredAt: occurredAt,
         detectionLatencyMilliseconds: 0,
         protectedContext: false
     )
@@ -774,4 +774,34 @@ private actor FailingQueueTestKeyStore: ActivityQueueKeyStoring {
     }
 
     func loadCount() -> Int { loads }
+}
+
+@MainActor
+extension OfflineActivityCoordinatorTests {
+    func testSessionIDIsCapturedWhenObservationArrivesBeforeAsynchronousQueueWrite() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let account = Account(id: UUID(), provider: .kakao, createdAt: .now, lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
+        let device = UUID()
+        let focusID = UUID()
+        let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"), keyStore: QueueTestKeyStore())
+        let client = QueueTestClient()
+        var focusNow = Date.now
+        let coordinator = OfflineActivityCoordinator(queue: queue, client: client, deviceStateStore: QueueTestDeviceStore(deviceID: device), focusClock: { focusNow }, onStatus: { _, _ in })
+        await coordinator.activate(account)
+        coordinator.focusSessionID = focusID
+        let observedBeforePause = focusNow.addingTimeInterval(1)
+        focusNow = focusNow.addingTimeInterval(2)
+        coordinator.focusSessionID = nil
+        coordinator.record(makeActivityEvent(appBundleID: "com.example.focus", occurredAt: observedBeforePause), browserContext: nil)
+        coordinator.record(makeActivityEvent(appBundleID: "com.example.paused", occurredAt: focusNow.addingTimeInterval(1)), browserContext: nil)
+        for _ in 0..<100 {
+            if await client.records().count == 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let records = await client.records()
+        XCTAssertEqual(records.count, 2)
+        if case .observation(let focused) = records[0] { XCTAssertEqual(focused.focusSessionID, focusID) } else { XCTFail("Expected observation") }
+        if case .observation(let paused) = records[1] { XCTAssertNil(paused.focusSessionID) } else { XCTFail("Expected observation") }
+    }
 }

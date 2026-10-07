@@ -24,11 +24,14 @@ struct DesktopRootView: View {
                     reviewFetcher: LiveLabelReviewFetcher(reader: reviewReader),
                     reviewWriter: timelineClient,
                     focusLabelReader: reviewReader,
+                    focusService: timelineClient,
+                    focusDeviceID: auth.registeredDeviceID,
+                    focusActivityChanged: model.focusSessionChanged,
                     signOut: auth.signOut,
                     acceptedActivityUploads: model.acceptedActivityUploads.eraseToAnyPublisher(),
                     authenticationFailed: { auth.timelineAuthenticationFailed(for: account.id) }
                 )
-                .id("\(account.id):\(account.timeZoneID)")
+                .id("\(account.id):\(account.timeZoneID):\(auth.registeredDeviceID?.uuidString ?? "")")
             } else {
                 OnboardingView(model: model, auth: auth) {
                     onboardingCompleted = true
@@ -84,6 +87,9 @@ struct MainWorkspaceView: View {
         reviewFetcher: any LabelReviewFetching,
         reviewWriter: any LabelConfirmationWriting,
         focusLabelReader: (any LabelReviewReading)? = nil,
+        focusService: (any FocusSessionServing)? = nil,
+        focusDeviceID: UUID? = nil,
+        focusActivityChanged: @escaping @MainActor (UUID?) -> Void = { _ in },
         signOut: (() -> Void)?,
         acceptedActivityUploads: AnyPublisher<UUID, Never> = Empty().eraseToAnyPublisher(),
         previewUpload: (() -> Void)? = nil,
@@ -106,6 +112,10 @@ struct MainWorkspaceView: View {
                 guard let focusLabelReader else { return [] }
                 return try await focusLabelReader.listLabels()
             },
+            service: focusService,
+            deviceID: focusDeviceID,
+            timeZone: TimeZone(identifier: account.timeZoneID) ?? .current,
+            activitySessionChanged: focusActivityChanged,
             authenticationFailed: authenticationFailed
         ))
         let timeZone = TimeZone(identifier: account.timeZoneID) ?? .current
@@ -142,6 +152,8 @@ struct MainWorkspaceView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: selectedPage == .focusSession ? 900 : 720, minHeight: 520)
+        .onAppear { focusModel.attachActivitySession() }
+        .onDisappear { focusModel.detachActivitySession() }
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
             focusModel.tick()
         }
