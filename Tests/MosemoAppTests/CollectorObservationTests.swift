@@ -422,6 +422,22 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(model.events.last?.safeEvent.transitionType, .appSwitch)
     }
 
+    func testFirefoxSchemeLessAddressRemainsObservedWithoutRewriting() {
+        let observation = SystemEventsClient().observation(for: ApplicationWindowContext(
+            title: "Example", browserURL: "example.com/path?query=value#section"))
+        XCTAssertEqual(observation.classification.observationState, .observed)
+        XCTAssertEqual(observation.diagnosticContext?.url, "example.com/path?query=value#section")
+    }
+
+    func testFirefoxUnknownPrivateStateSuppressesDetailedContext() {
+        for title: String? in [nil, ""] {
+            let observation = SystemEventsClient().observation(for: ApplicationWindowContext(
+                title: title, browserURL: "https://example.com/private"))
+            XCTAssertTrue(observation.classification.protectedContext)
+            XCTAssertNil(observation.diagnosticContext)
+        }
+    }
+
     private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         for _ in 0..<100 {
             if condition() { return }

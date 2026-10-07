@@ -31,35 +31,46 @@ final class SystemEventsClient: @unchecked Sendable {
         case let .captured(value):
             context = value
         }
+        return .success(observation(for: context))
+    }
+
+    func observation(for context: ApplicationWindowContext) -> FirefoxObservation {
         let windowTitle = context.title
 
-        let isProtected = ["private", "사생활 보호", "개인 정보 보호"].contains {
+        // Without a readable window label, Firefox's private state cannot be established.
+        let isProtected = windowTitle?.isEmpty != false || ["private", "사생활 보호", "개인 정보 보호"].contains {
             windowTitle?.localizedCaseInsensitiveContains($0) == true
         }
         if isProtected {
-            return .success(FirefoxObservation(
+            return FirefoxObservation(
                 identity: FirefoxObservationIdentity(
                     windowFingerprint: windowTitle.hashValue,
                     contentFingerprint: 0
                 ),
                 classification: SurfaceClassifier.classify(urlString: nil, protectedContext: true),
                 diagnosticContext: nil
-            ))
+            )
         }
 
         let pageURL = context.browserURL
         var hasher = Hasher()
         hasher.combine(windowTitle)
         hasher.combine(pageURL)
-        let classification = pageURL.map {
+        let parsedClassification = pageURL.map {
             SurfaceClassifier.classify(urlString: $0, protectedContext: false)
-        } ?? SurfaceClassification(
-            registeredDomain: nil,
-            surfaceType: .application,
-            observationState: .observed,
-            protectedContext: false
-        )
-        return .success(FirefoxObservation(
+        }
+        let classification: SurfaceClassification
+        if let parsedClassification, parsedClassification.observationState == .observed {
+            classification = parsedClassification
+        } else {
+            classification = SurfaceClassification(
+                registeredDomain: nil,
+                surfaceType: pageURL == nil ? .application : .browserPage,
+                observationState: .observed,
+                protectedContext: false
+            )
+        }
+        return FirefoxObservation(
             identity: FirefoxObservationIdentity(
                 windowFingerprint: windowTitle.hashValue,
                 contentFingerprint: hasher.finalize()
@@ -70,7 +81,7 @@ final class SystemEventsClient: @unchecked Sendable {
                 url: pageURL,
                 windowTitle: windowTitle
             )
-        ))
+        )
     }
 
 }
