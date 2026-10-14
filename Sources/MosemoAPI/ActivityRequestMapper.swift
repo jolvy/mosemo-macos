@@ -1,7 +1,7 @@
 import Foundation
 
 enum ActivityRequestMapper {
-    typealias RequestPayload = Operations.ActivitiesCreate.Input.Body.JsonPayload
+    typealias RequestPayload = Components.Schemas.ActivityBatchRequest.RecordsPayloadPayload
 
     static func request(
         from record: ActivityRecord
@@ -12,7 +12,6 @@ enum ActivityRequestMapper {
             return (
                 .activityObservation(.init(
                     context: context(observation.context),
-                    deviceId: metadata.deviceRegistrationID.uuidString,
                     eventId: metadata.eventID.uuidString,
                     focusSessionId: observation.focusSessionID?.uuidString,
                     observedAt: metadata.observedAt,
@@ -31,7 +30,6 @@ enum ActivityRequestMapper {
             }
             return (
                 .collectionStateChanged(.init(
-                    deviceId: metadata.deviceRegistrationID.uuidString,
                     eventId: metadata.eventID.uuidString,
                     focusSessionId: change.focusSessionID?.uuidString,
                     observedAt: metadata.observedAt,
@@ -58,7 +56,7 @@ enum ActivityRequestMapper {
 
     private static func context(
         _ context: ActivityContext
-    ) -> Components.Schemas.ActivityObservation.ContextPayload {
+    ) -> Components.Schemas.BatchActivityObservation.ContextPayload {
         switch context {
         case .opaque:
             return .opaque(.init(kind: .opaque))

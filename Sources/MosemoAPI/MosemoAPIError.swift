@@ -16,5 +16,7 @@ public enum MosemoAPIError: Error, Equatable, Sendable {
     case timedOut
     case unexpectedResponse(statusCode: Int)
     case credentialStorageFailed
+    case activityBatchRejectedTooLarge
+    case activityBatchRecordTooLarge
     case activityQueueStorageFailed
 }

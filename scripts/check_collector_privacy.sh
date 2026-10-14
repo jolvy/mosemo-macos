@@ -5,7 +5,7 @@ script_directory=$(CDPATH= cd "$(dirname "$0")" && pwd)
 component_root=$(CDPATH= cd "$script_directory/.." && pwd)
 production_sources="$component_root/Sources"
 info_plist="$component_root/Info.plist"
-openapi_contract="$component_root/../mosemo-server/openapi/openapi.json"
+openapi_contract=${MOSEMO_SERVER_OPENAPI_SNAPSHOT:-"$component_root/../mosemo-server/openapi/openapi.json"}
 failed=0
 
 if ! command -v rg >/dev/null 2>&1; then

@@ -250,6 +250,14 @@ final class TimelineViewModel: ObservableObject {
     private var uploadRefreshPending = false
     private var isRefreshingUploads = false
     private var requestTask: Task<Void, Never>?
+    private var pendingLoad: (date: TimelineDate, refreshing: Bool)?
+    private var isFetching = false
+    private var pollingLifecycleStarted = false
+    private var pollingEnabled = false
+    private var pollingTask: Task<Void, Never>?
+    private var pollingFailures = 0
+    private var nextPollAt = Date.distantPast
+    private let pollingSleep: @Sendable (TimeInterval) async throws -> Void
     private var accountTimeZone: TimeZone
     private let authenticationFailed: @MainActor () -> Void
 
@@ -259,8 +267,10 @@ final class TimelineViewModel: ObservableObject {
         timeZone: TimeZone = TimeZone(identifier: "Asia/Seoul") ?? .current,
         now: Date = .now,
         clock: @escaping () -> Date = { .now },
+        pollingSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
         authenticationFailed: @escaping @MainActor () -> Void = {}
     ) {
+        self.pollingSleep = pollingSleep
         self.fetcher = fetcher
         self.clock = clock
         self.accountID = accountID
@@ -325,9 +335,49 @@ final class TimelineViewModel: ObservableObject {
         selectDate(selectedDate.adding(days: days, timeZone: timeZone))
     }
 
+    func setPolling(visible: Bool, active: Bool) {
+        let wasStarted = pollingLifecycleStarted
+        pollingLifecycleStarted = true
+        let enabled = visible && active
+        guard !wasStarted || enabled != pollingEnabled else { return }
+        pollingEnabled = enabled
+        pollingTask?.cancel()
+        pollingTask = nil
+        if !enabled {
+            requestID = UUID()
+            pendingLoad = nil
+            requestTask?.cancel()
+            isRefreshing = false
+            return
+        }
+        pollingFailures = 0
+        nextPollAt = .distantPast
+        load(selectedDate, refreshing: true)
+        let sleep = pollingSleep
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let delay = self?.pollingDelay else { return }
+                do { try await sleep(delay) } catch { return }
+                guard !Task.isCancelled else { return }
+                await self?.pollIfDue()
+            }
+        }
+    }
+
+    private var pollingDelay: TimeInterval {
+        isFetching ? 5 : max(0.1, nextPollAt.timeIntervalSince(clock()))
+    }
+
+    func pollIfDue() async {
+        guard pollingEnabled, !isFetching, clock() >= nextPollAt else { return }
+        load(selectedDate, refreshing: true)
+        await requestTask?.value
+    }
+
     func refresh() { load(selectedDate, refreshing: true) }
 
     func activityUploaded() async {
+        guard !pollingLifecycleStarted || pollingEnabled else { return }
         uploadRefreshPending = true
         guard !isRefreshingUploads else { return }
         isRefreshingUploads = true
@@ -357,9 +407,22 @@ final class TimelineViewModel: ObservableObject {
     }
 
     private func load(_ date: TimelineDate, refreshing: Bool = false) {
-        requestTask?.cancel()
         let id = UUID()
         requestID = id
+        guard !pollingLifecycleStarted || pollingEnabled else { return }
+        if day?.date != date { day = nil; loadState = .loading }
+        pendingLoad = (date, refreshing)
+        guard !isFetching else { return }
+        startPendingLoad()
+    }
+
+    private func startPendingLoad() {
+        guard let pending = pendingLoad else { return }
+        pendingLoad = nil
+        let date = pending.date
+        let refreshing = pending.refreshing
+        let id = requestID
+        isFetching = true
         let keepsVisibleSnapshot = day?.date == date
         if !keepsVisibleSnapshot { day = nil }
         refreshError = nil
@@ -367,10 +430,19 @@ final class TimelineViewModel: ObservableObject {
         isRefreshing = refreshing
         let timeZoneID = timeZone.identifier
         requestTask = Task { [weak self, fetcher] in
+            defer {
+                if let self {
+                    self.isFetching = false
+                    self.requestTask = nil
+                    self.startPendingLoad()
+                }
+            }
             do {
                 let result = try await fetcher.fetch(day: date, timeZoneID: timeZoneID)
                 guard !Task.isCancelled, let self, self.requestID == id,
                       self.selectedDate == date, result.date == date else { return }
+                self.pollingFailures = 0
+                self.nextPollAt = self.clock().addingTimeInterval(5)
                 if self.day != result { self.day = result }
                 if let selected = self.selectedSegmentID,
                    !result.segments.contains(where: { $0.id == selected }) {
@@ -382,6 +454,8 @@ final class TimelineViewModel: ObservableObject {
                 self.loadState = self.presentations.isEmpty ? .empty : .loaded
             } catch {
                 guard !Task.isCancelled, let self, self.requestID == id else { return }
+                self.pollingFailures += 1
+                self.nextPollAt = self.clock().addingTimeInterval(min(60, 5 * pow(2, Double(min(self.pollingFailures, 4)))))
                 self.isRefreshing = false
                 if self.day?.date == date {
                     self.refreshError = Self.message(for: error)

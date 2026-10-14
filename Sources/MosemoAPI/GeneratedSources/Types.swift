@@ -18,13 +18,13 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/accounts/me`.
     /// - Remark: Generated from `#/paths//api/v1/accounts/me/get(accountsGetMe)`.
     func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output
-    /// 활동 레코드 생성
+    /// 활동 배치 전달 수락
     ///
-    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
     ///
-    /// - Remark: HTTP `POST /api/v1/activities`.
-    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
-    func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output
+    /// - Remark: HTTP `POST /api/v1/activities/batches`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
+    func activitiesAcceptBatch(_ input: Operations.ActivitiesAcceptBatch.Input) async throws -> Operations.ActivitiesAcceptBatch.Output
     /// 관찰 구간 라벨 일괄 확정
     ///
     /// 라벨 타임라인 그룹과 관계없이 닫힌 상세 관찰 구간마다 선택을 지정해 한 요청에서 확정합니다. 모든 항목이 유효해야 전체 요청을 적용하며, 같은 관찰 버전에 이미 다른 선택이 확정되어 있으면 충돌을 반환합니다.
@@ -108,17 +108,17 @@ extension APIProtocol {
     internal func accountsGetMe(headers: Operations.AccountsGetMe.Input.Headers = .init()) async throws -> Operations.AccountsGetMe.Output {
         try await accountsGetMe(Operations.AccountsGetMe.Input(headers: headers))
     }
-    /// 활동 레코드 생성
+    /// 활동 배치 전달 수락
     ///
-    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
     ///
-    /// - Remark: HTTP `POST /api/v1/activities`.
-    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
-    internal func activitiesCreate(
-        headers: Operations.ActivitiesCreate.Input.Headers = .init(),
-        body: Operations.ActivitiesCreate.Input.Body
-    ) async throws -> Operations.ActivitiesCreate.Output {
-        try await activitiesCreate(Operations.ActivitiesCreate.Input(
+    /// - Remark: HTTP `POST /api/v1/activities/batches`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
+    internal func activitiesAcceptBatch(
+        headers: Operations.ActivitiesAcceptBatch.Input.Headers = .init(),
+        body: Operations.ActivitiesAcceptBatch.Input.Body
+    ) async throws -> Operations.ActivitiesAcceptBatch.Output {
+        try await activitiesAcceptBatch(Operations.ActivitiesAcceptBatch.Input(
             headers: headers,
             body: body
         ))
@@ -399,46 +399,136 @@ internal enum Components {
                 case timezone
             }
         }
-        /// 활동 레코드 저장 결과입니다.
+        /// 같은 Device의 활동 원본을 함께 전달하는 배치입니다.
         ///
-        /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse`.
-        internal struct ActivityCreateResponse: Codable, Hashable, Sendable {
-            /// 저장하거나 중복 확인한 활동 이벤트 식별자입니다.
+        /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest`.
+        internal struct ActivityBatchRequest: Codable, Hashable, Sendable {
+            /// 같은 내용 재전송에 유지하는 배치 식별자입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/eventId`.
-            internal var eventId: Swift.String
-            /// 활동 레코드가 서버에 최초 저장된 시각입니다.
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/batchId`.
+            internal var batchId: Swift.String
+            /// 인증 계정에 등록된 Device 식별자입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/receivedAt`.
-            internal var receivedAt: Foundation.Date
-            /// 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/deviceId`.
+            internal var deviceId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/RecordsPayload`.
+            internal enum RecordsPayloadPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/RecordsPayload/BatchActivityObservation`.
+                case activityObservation(Components.Schemas.BatchActivityObservation)
+                /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/RecordsPayload/BatchCollectionStateChanged`.
+                case collectionStateChanged(Components.Schemas.BatchCollectionStateChanged)
+                internal enum CodingKeys: String, CodingKey {
+                    case recordType
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .recordType
+                    )
+                    switch discriminator {
+                    case "activity_observation":
+                        self = .activityObservation(try .init(from: decoder))
+                    case "collection_state_changed":
+                        self = .collectionStateChanged(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.recordType,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .activityObservation(value):
+                        try value.encode(to: encoder)
+                    case let .collectionStateChanged(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// Device 순번을 가진 원본 1~200건입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/status`.
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/records`.
+            internal typealias RecordsPayload = [Components.Schemas.ActivityBatchRequest.RecordsPayloadPayload]
+            /// Device 순번을 가진 원본 1~200건입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchRequest/records`.
+            internal var records: Components.Schemas.ActivityBatchRequest.RecordsPayload
+            /// Creates a new `ActivityBatchRequest`.
+            ///
+            /// - Parameters:
+            ///   - batchId: 같은 내용 재전송에 유지하는 배치 식별자입니다.
+            ///   - deviceId: 인증 계정에 등록된 Device 식별자입니다.
+            ///   - records: Device 순번을 가진 원본 1~200건입니다.
+            internal init(
+                batchId: Swift.String,
+                deviceId: Swift.String,
+                records: Components.Schemas.ActivityBatchRequest.RecordsPayload
+            ) {
+                self.batchId = batchId
+                self.deviceId = deviceId
+                self.records = records
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case batchId
+                case deviceId
+                case records
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.batchId = try container.decode(
+                    Swift.String.self,
+                    forKey: .batchId
+                )
+                self.deviceId = try container.decode(
+                    Swift.String.self,
+                    forKey: .deviceId
+                )
+                self.records = try container.decode(
+                    Components.Schemas.ActivityBatchRequest.RecordsPayload.self,
+                    forKey: .records
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "batchId",
+                    "deviceId",
+                    "records"
+                ])
+            }
+        }
+        /// 개발용 메모리 전달 수락 결과이며 DB 저장 완료를 보장하지 않습니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse`.
+        internal struct ActivityBatchResponse: Codable, Hashable, Sendable {
+            /// 수락한 배치 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/batchId`.
+            internal var batchId: Swift.String
+            /// 제한된 메모리 전달 경로가 수락했습니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/status`.
             internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
                 case accepted = "accepted"
             }
-            /// 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            /// 제한된 메모리 전달 경로가 수락했습니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/ActivityCreateResponse/status`.
-            internal var status: Components.Schemas.ActivityCreateResponse.StatusPayload
-            /// Creates a new `ActivityCreateResponse`.
+            /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/status`.
+            internal var status: Components.Schemas.ActivityBatchResponse.StatusPayload
+            /// Creates a new `ActivityBatchResponse`.
             ///
             /// - Parameters:
-            ///   - eventId: 저장하거나 중복 확인한 활동 이벤트 식별자입니다.
-            ///   - receivedAt: 활동 레코드가 서버에 최초 저장된 시각입니다.
-            ///   - status: 서버가 활동 레코드를 영구 저장했음을 나타냅니다.
+            ///   - batchId: 수락한 배치 식별자입니다.
+            ///   - status: 제한된 메모리 전달 경로가 수락했습니다.
             internal init(
-                eventId: Swift.String,
-                receivedAt: Foundation.Date,
-                status: Components.Schemas.ActivityCreateResponse.StatusPayload
+                batchId: Swift.String,
+                status: Components.Schemas.ActivityBatchResponse.StatusPayload
             ) {
-                self.eventId = eventId
-                self.receivedAt = receivedAt
+                self.batchId = batchId
                 self.status = status
             }
             internal enum CodingKeys: String, CodingKey {
-                case eventId
-                case receivedAt
+                case batchId
                 case status
             }
         }
@@ -561,186 +651,6 @@ internal enum Components {
                 case selection
                 case startedAt
                 case state
-            }
-        }
-        /// A complete snapshot of the focused activity at one point in time.
-        ///
-        /// - Remark: Generated from `#/components/schemas/ActivityObservation`.
-        internal struct ActivityObservation: Codable, Hashable, Sendable {
-            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/context`.
-            internal enum ContextPayload: Codable, Hashable, Sendable {
-                /// - Remark: Generated from `#/components/schemas/ActivityObservation/context/DetailedActivityContext`.
-                case detailed(Components.Schemas.DetailedActivityContext)
-                /// - Remark: Generated from `#/components/schemas/ActivityObservation/context/OpaqueActivityContext`.
-                case opaque(Components.Schemas.OpaqueActivityContext)
-                internal enum CodingKeys: String, CodingKey {
-                    case kind
-                }
-                internal init(from decoder: any Swift.Decoder) throws {
-                    let container = try decoder.container(keyedBy: CodingKeys.self)
-                    let discriminator = try container.decode(
-                        Swift.String.self,
-                        forKey: .kind
-                    )
-                    switch discriminator {
-                    case "detailed":
-                        self = .detailed(try .init(from: decoder))
-                    case "opaque":
-                        self = .opaque(try .init(from: decoder))
-                    default:
-                        throw Swift.DecodingError.unknownOneOfDiscriminator(
-                            discriminatorKey: CodingKeys.kind,
-                            discriminatorValue: discriminator,
-                            codingPath: decoder.codingPath
-                        )
-                    }
-                }
-                internal func encode(to encoder: any Swift.Encoder) throws {
-                    switch self {
-                    case let .detailed(value):
-                        try value.encode(to: encoder)
-                    case let .opaque(value):
-                        try value.encode(to: encoder)
-                    }
-                }
-            }
-            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/context`.
-            internal var context: Components.Schemas.ActivityObservation.ContextPayload
-            /// 서버에 등록된 Device 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/deviceId`.
-            internal var deviceId: Swift.String
-            /// 레코드 중복 제거에 사용하는 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/eventId`.
-            internal var eventId: Swift.String
-            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/focusSessionId`.
-            internal var focusSessionId: Swift.String?
-            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/observedAt`.
-            internal var observedAt: Foundation.Date
-            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/recordType`.
-            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
-                case activityObservation = "activity_observation"
-            }
-            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/recordType`.
-            internal var recordType: Components.Schemas.ActivityObservation.RecordTypePayload
-            /// Device 안에서 단조 증가하는 레코드 순번입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/sequence`.
-            internal var sequence: Swift.Int
-            /// 관찰 당시의 지원 시간대 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/timezoneId`.
-            internal var timezoneId: Components.Schemas.Timezone
-            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivityObservation/utcOffsetMinutes`.
-            internal var utcOffsetMinutes: Swift.Int
-            /// Creates a new `ActivityObservation`.
-            ///
-            /// - Parameters:
-            ///   - context: 개인정보 필터링을 마친 전체 활동 문맥입니다.
-            ///   - deviceId: 서버에 등록된 Device 식별자입니다.
-            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
-            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
-            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
-            ///   - recordType: 활동 전체 스냅샷 레코드임을 나타냅니다.
-            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
-            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
-            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
-            internal init(
-                context: Components.Schemas.ActivityObservation.ContextPayload,
-                deviceId: Swift.String,
-                eventId: Swift.String,
-                focusSessionId: Swift.String? = nil,
-                observedAt: Foundation.Date,
-                recordType: Components.Schemas.ActivityObservation.RecordTypePayload,
-                sequence: Swift.Int,
-                timezoneId: Components.Schemas.Timezone,
-                utcOffsetMinutes: Swift.Int
-            ) {
-                self.context = context
-                self.deviceId = deviceId
-                self.eventId = eventId
-                self.focusSessionId = focusSessionId
-                self.observedAt = observedAt
-                self.recordType = recordType
-                self.sequence = sequence
-                self.timezoneId = timezoneId
-                self.utcOffsetMinutes = utcOffsetMinutes
-            }
-            internal enum CodingKeys: String, CodingKey {
-                case context
-                case deviceId
-                case eventId
-                case focusSessionId
-                case observedAt
-                case recordType
-                case sequence
-                case timezoneId
-                case utcOffsetMinutes
-            }
-            internal init(from decoder: any Swift.Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                self.context = try container.decode(
-                    Components.Schemas.ActivityObservation.ContextPayload.self,
-                    forKey: .context
-                )
-                self.deviceId = try container.decode(
-                    Swift.String.self,
-                    forKey: .deviceId
-                )
-                self.eventId = try container.decode(
-                    Swift.String.self,
-                    forKey: .eventId
-                )
-                self.focusSessionId = try container.decodeIfPresent(
-                    Swift.String.self,
-                    forKey: .focusSessionId
-                )
-                self.observedAt = try container.decode(
-                    Foundation.Date.self,
-                    forKey: .observedAt
-                )
-                self.recordType = try container.decode(
-                    Components.Schemas.ActivityObservation.RecordTypePayload.self,
-                    forKey: .recordType
-                )
-                self.sequence = try container.decode(
-                    Swift.Int.self,
-                    forKey: .sequence
-                )
-                self.timezoneId = try container.decode(
-                    Components.Schemas.Timezone.self,
-                    forKey: .timezoneId
-                )
-                self.utcOffsetMinutes = try container.decode(
-                    Swift.Int.self,
-                    forKey: .utcOffsetMinutes
-                )
-                try decoder.ensureNoAdditionalProperties(knownKeys: [
-                    "context",
-                    "deviceId",
-                    "eventId",
-                    "focusSessionId",
-                    "observedAt",
-                    "recordType",
-                    "sequence",
-                    "timezoneId",
-                    "utcOffsetMinutes"
-                ])
             }
         }
         /// 실제로 관찰된 동일 문맥의 활동 구간입니다.
@@ -980,6 +890,314 @@ internal enum Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "bundleId",
                     "name"
+                ])
+            }
+        }
+        /// A complete snapshot of the focused activity at one point in time.
+        ///
+        /// - Remark: Generated from `#/components/schemas/BatchActivityObservation`.
+        internal struct BatchActivityObservation: Codable, Hashable, Sendable {
+            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/context`.
+            internal enum ContextPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/context/DetailedActivityContext`.
+                case detailed(Components.Schemas.DetailedActivityContext)
+                /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/context/OpaqueActivityContext`.
+                case opaque(Components.Schemas.OpaqueActivityContext)
+                internal enum CodingKeys: String, CodingKey {
+                    case kind
+                }
+                internal init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let discriminator = try container.decode(
+                        Swift.String.self,
+                        forKey: .kind
+                    )
+                    switch discriminator {
+                    case "detailed":
+                        self = .detailed(try .init(from: decoder))
+                    case "opaque":
+                        self = .opaque(try .init(from: decoder))
+                    default:
+                        throw Swift.DecodingError.unknownOneOfDiscriminator(
+                            discriminatorKey: CodingKeys.kind,
+                            discriminatorValue: discriminator,
+                            codingPath: decoder.codingPath
+                        )
+                    }
+                }
+                internal func encode(to encoder: any Swift.Encoder) throws {
+                    switch self {
+                    case let .detailed(value):
+                        try value.encode(to: encoder)
+                    case let .opaque(value):
+                        try value.encode(to: encoder)
+                    }
+                }
+            }
+            /// 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/context`.
+            internal var context: Components.Schemas.BatchActivityObservation.ContextPayload
+            /// 레코드 중복 제거에 사용하는 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/eventId`.
+            internal var eventId: Swift.String
+            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/focusSessionId`.
+            internal var focusSessionId: Swift.String?
+            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/observedAt`.
+            internal var observedAt: Foundation.Date
+            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/recordType`.
+            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case activityObservation = "activity_observation"
+            }
+            /// 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/recordType`.
+            internal var recordType: Components.Schemas.BatchActivityObservation.RecordTypePayload
+            /// Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/sequence`.
+            internal var sequence: Swift.Int
+            /// 관찰 당시의 지원 시간대 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/timezoneId`.
+            internal var timezoneId: Components.Schemas.Timezone
+            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchActivityObservation/utcOffsetMinutes`.
+            internal var utcOffsetMinutes: Swift.Int
+            /// Creates a new `BatchActivityObservation`.
+            ///
+            /// - Parameters:
+            ///   - context: 개인정보 필터링을 마친 전체 활동 문맥입니다.
+            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///   - recordType: 활동 전체 스냅샷 레코드임을 나타냅니다.
+            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
+            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            internal init(
+                context: Components.Schemas.BatchActivityObservation.ContextPayload,
+                eventId: Swift.String,
+                focusSessionId: Swift.String? = nil,
+                observedAt: Foundation.Date,
+                recordType: Components.Schemas.BatchActivityObservation.RecordTypePayload,
+                sequence: Swift.Int,
+                timezoneId: Components.Schemas.Timezone,
+                utcOffsetMinutes: Swift.Int
+            ) {
+                self.context = context
+                self.eventId = eventId
+                self.focusSessionId = focusSessionId
+                self.observedAt = observedAt
+                self.recordType = recordType
+                self.sequence = sequence
+                self.timezoneId = timezoneId
+                self.utcOffsetMinutes = utcOffsetMinutes
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case context
+                case eventId
+                case focusSessionId
+                case observedAt
+                case recordType
+                case sequence
+                case timezoneId
+                case utcOffsetMinutes
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.context = try container.decode(
+                    Components.Schemas.BatchActivityObservation.ContextPayload.self,
+                    forKey: .context
+                )
+                self.eventId = try container.decode(
+                    Swift.String.self,
+                    forKey: .eventId
+                )
+                self.focusSessionId = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .focusSessionId
+                )
+                self.observedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .observedAt
+                )
+                self.recordType = try container.decode(
+                    Components.Schemas.BatchActivityObservation.RecordTypePayload.self,
+                    forKey: .recordType
+                )
+                self.sequence = try container.decode(
+                    Swift.Int.self,
+                    forKey: .sequence
+                )
+                self.timezoneId = try container.decode(
+                    Components.Schemas.Timezone.self,
+                    forKey: .timezoneId
+                )
+                self.utcOffsetMinutes = try container.decode(
+                    Swift.Int.self,
+                    forKey: .utcOffsetMinutes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "context",
+                    "eventId",
+                    "focusSessionId",
+                    "observedAt",
+                    "recordType",
+                    "sequence",
+                    "timezoneId",
+                    "utcOffsetMinutes"
+                ])
+            }
+        }
+        /// A change in whether the client can observe activity.
+        ///
+        /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged`.
+        internal struct BatchCollectionStateChanged: Codable, Hashable, Sendable {
+            /// 레코드 중복 제거에 사용하는 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/eventId`.
+            internal var eventId: Swift.String
+            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/focusSessionId`.
+            internal var focusSessionId: Swift.String?
+            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/observedAt`.
+            internal var observedAt: Foundation.Date
+            /// 수집 상태가 변경된 이유입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/reason`.
+            internal var reason: Swift.String
+            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/recordType`.
+            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case collectionStateChanged = "collection_state_changed"
+            }
+            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/recordType`.
+            internal var recordType: Components.Schemas.BatchCollectionStateChanged.RecordTypePayload
+            /// Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/sequence`.
+            internal var sequence: Swift.Int
+            /// 변경된 활동 수집 가능 상태입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/state`.
+            internal var state: Components.Schemas.CollectionState
+            /// 관찰 당시의 지원 시간대 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/timezoneId`.
+            internal var timezoneId: Components.Schemas.Timezone
+            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/BatchCollectionStateChanged/utcOffsetMinutes`.
+            internal var utcOffsetMinutes: Swift.Int
+            /// Creates a new `BatchCollectionStateChanged`.
+            ///
+            /// - Parameters:
+            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
+            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
+            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
+            ///   - reason: 수집 상태가 변경된 이유입니다.
+            ///   - recordType: 수집 가능 상태 변경 레코드임을 나타냅니다.
+            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
+            ///   - state: 변경된 활동 수집 가능 상태입니다.
+            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
+            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
+            internal init(
+                eventId: Swift.String,
+                focusSessionId: Swift.String? = nil,
+                observedAt: Foundation.Date,
+                reason: Swift.String,
+                recordType: Components.Schemas.BatchCollectionStateChanged.RecordTypePayload,
+                sequence: Swift.Int,
+                state: Components.Schemas.CollectionState,
+                timezoneId: Components.Schemas.Timezone,
+                utcOffsetMinutes: Swift.Int
+            ) {
+                self.eventId = eventId
+                self.focusSessionId = focusSessionId
+                self.observedAt = observedAt
+                self.reason = reason
+                self.recordType = recordType
+                self.sequence = sequence
+                self.state = state
+                self.timezoneId = timezoneId
+                self.utcOffsetMinutes = utcOffsetMinutes
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case eventId
+                case focusSessionId
+                case observedAt
+                case reason
+                case recordType
+                case sequence
+                case state
+                case timezoneId
+                case utcOffsetMinutes
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.eventId = try container.decode(
+                    Swift.String.self,
+                    forKey: .eventId
+                )
+                self.focusSessionId = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .focusSessionId
+                )
+                self.observedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .observedAt
+                )
+                self.reason = try container.decode(
+                    Swift.String.self,
+                    forKey: .reason
+                )
+                self.recordType = try container.decode(
+                    Components.Schemas.BatchCollectionStateChanged.RecordTypePayload.self,
+                    forKey: .recordType
+                )
+                self.sequence = try container.decode(
+                    Swift.Int.self,
+                    forKey: .sequence
+                )
+                self.state = try container.decode(
+                    Components.Schemas.CollectionState.self,
+                    forKey: .state
+                )
+                self.timezoneId = try container.decode(
+                    Components.Schemas.Timezone.self,
+                    forKey: .timezoneId
+                )
+                self.utcOffsetMinutes = try container.decode(
+                    Swift.Int.self,
+                    forKey: .utcOffsetMinutes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "eventId",
+                    "focusSessionId",
+                    "observedAt",
+                    "reason",
+                    "recordType",
+                    "sequence",
+                    "state",
+                    "timezoneId",
+                    "utcOffsetMinutes"
                 ])
             }
         }
@@ -1435,160 +1653,6 @@ internal enum Components {
         internal enum CollectionState: String, Codable, Hashable, Sendable, CaseIterable {
             case active = "active"
             case suspended = "suspended"
-        }
-        /// A change in whether the client can observe activity.
-        ///
-        /// - Remark: Generated from `#/components/schemas/CollectionStateChanged`.
-        internal struct CollectionStateChanged: Codable, Hashable, Sendable {
-            /// 서버에 등록된 Device 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/deviceId`.
-            internal var deviceId: Swift.String
-            /// 레코드 중복 제거에 사용하는 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/eventId`.
-            internal var eventId: Swift.String
-            /// 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/focusSessionId`.
-            internal var focusSessionId: Swift.String?
-            /// 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/observedAt`.
-            internal var observedAt: Foundation.Date
-            /// 수집 상태가 변경된 이유입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/reason`.
-            internal var reason: Swift.String
-            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/recordType`.
-            internal enum RecordTypePayload: String, Codable, Hashable, Sendable, CaseIterable {
-                case collectionStateChanged = "collection_state_changed"
-            }
-            /// 수집 가능 상태 변경 레코드임을 나타냅니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/recordType`.
-            internal var recordType: Components.Schemas.CollectionStateChanged.RecordTypePayload
-            /// Device 안에서 단조 증가하는 레코드 순번입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/sequence`.
-            internal var sequence: Swift.Int
-            /// 변경된 활동 수집 가능 상태입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/state`.
-            internal var state: Components.Schemas.CollectionState
-            /// 관찰 당시의 지원 시간대 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/timezoneId`.
-            internal var timezoneId: Components.Schemas.Timezone
-            /// 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CollectionStateChanged/utcOffsetMinutes`.
-            internal var utcOffsetMinutes: Swift.Int
-            /// Creates a new `CollectionStateChanged`.
-            ///
-            /// - Parameters:
-            ///   - deviceId: 서버에 등록된 Device 식별자입니다.
-            ///   - eventId: 레코드 중복 제거에 사용하는 식별자입니다.
-            ///   - focusSessionId: 관찰 당시 진행 중인 집중 세션입니다. 일시중지 중에는 생략합니다.
-            ///   - observedAt: 클라이언트 벽시계로 기록한 UTC 관찰 시각입니다.
-            ///   - reason: 수집 상태가 변경된 이유입니다.
-            ///   - recordType: 수집 가능 상태 변경 레코드임을 나타냅니다.
-            ///   - sequence: Device 안에서 단조 증가하는 레코드 순번입니다.
-            ///   - state: 변경된 활동 수집 가능 상태입니다.
-            ///   - timezoneId: 관찰 당시의 지원 시간대 식별자입니다.
-            ///   - utcOffsetMinutes: 관찰 당시 UTC와 현지 시간의 차이(분)입니다.
-            internal init(
-                deviceId: Swift.String,
-                eventId: Swift.String,
-                focusSessionId: Swift.String? = nil,
-                observedAt: Foundation.Date,
-                reason: Swift.String,
-                recordType: Components.Schemas.CollectionStateChanged.RecordTypePayload,
-                sequence: Swift.Int,
-                state: Components.Schemas.CollectionState,
-                timezoneId: Components.Schemas.Timezone,
-                utcOffsetMinutes: Swift.Int
-            ) {
-                self.deviceId = deviceId
-                self.eventId = eventId
-                self.focusSessionId = focusSessionId
-                self.observedAt = observedAt
-                self.reason = reason
-                self.recordType = recordType
-                self.sequence = sequence
-                self.state = state
-                self.timezoneId = timezoneId
-                self.utcOffsetMinutes = utcOffsetMinutes
-            }
-            internal enum CodingKeys: String, CodingKey {
-                case deviceId
-                case eventId
-                case focusSessionId
-                case observedAt
-                case reason
-                case recordType
-                case sequence
-                case state
-                case timezoneId
-                case utcOffsetMinutes
-            }
-            internal init(from decoder: any Swift.Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                self.deviceId = try container.decode(
-                    Swift.String.self,
-                    forKey: .deviceId
-                )
-                self.eventId = try container.decode(
-                    Swift.String.self,
-                    forKey: .eventId
-                )
-                self.focusSessionId = try container.decodeIfPresent(
-                    Swift.String.self,
-                    forKey: .focusSessionId
-                )
-                self.observedAt = try container.decode(
-                    Foundation.Date.self,
-                    forKey: .observedAt
-                )
-                self.reason = try container.decode(
-                    Swift.String.self,
-                    forKey: .reason
-                )
-                self.recordType = try container.decode(
-                    Components.Schemas.CollectionStateChanged.RecordTypePayload.self,
-                    forKey: .recordType
-                )
-                self.sequence = try container.decode(
-                    Swift.Int.self,
-                    forKey: .sequence
-                )
-                self.state = try container.decode(
-                    Components.Schemas.CollectionState.self,
-                    forKey: .state
-                )
-                self.timezoneId = try container.decode(
-                    Components.Schemas.Timezone.self,
-                    forKey: .timezoneId
-                )
-                self.utcOffsetMinutes = try container.decode(
-                    Swift.Int.self,
-                    forKey: .utcOffsetMinutes
-                )
-                try decoder.ensureNoAdditionalProperties(knownKeys: [
-                    "deviceId",
-                    "eventId",
-                    "focusSessionId",
-                    "observedAt",
-                    "reason",
-                    "recordType",
-                    "sequence",
-                    "state",
-                    "timezoneId",
-                    "utcOffsetMinutes"
-                ])
-            }
         }
         /// 사용자가 라벨 또는 미분류를 확정한 관찰 구간 상태입니다.
         ///
@@ -3917,94 +3981,57 @@ internal enum Operations {
             }
         }
     }
-    /// 활동 레코드 생성
+    /// 활동 배치 전달 수락
     ///
-    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
     ///
-    /// - Remark: HTTP `POST /api/v1/activities`.
-    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
-    internal enum ActivitiesCreate {
-        internal static let id: Swift.String = "activitiesCreate"
+    /// - Remark: HTTP `POST /api/v1/activities/batches`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
+    internal enum ActivitiesAcceptBatch {
+        internal static let id: Swift.String = "activitiesAcceptBatch"
         internal struct Input: Sendable, Hashable {
-            /// - Remark: Generated from `#/paths/api/v1/activities/POST/header`.
+            /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/header`.
             internal struct Headers: Sendable, Hashable {
-                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesCreate.AcceptableContentType>]
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesAcceptBatch.AcceptableContentType>]
                 /// Creates a new `Headers`.
                 ///
                 /// - Parameters:
                 ///   - accept:
-                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesCreate.AcceptableContentType>] = .defaultValues()) {
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ActivitiesAcceptBatch.AcceptableContentType>] = .defaultValues()) {
                     self.accept = accept
                 }
             }
-            internal var headers: Operations.ActivitiesCreate.Input.Headers
-            /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody`.
+            internal var headers: Operations.ActivitiesAcceptBatch.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/requestBody`.
             internal enum Body: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json`.
-                internal enum JsonPayload: Codable, Hashable, Sendable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json/ActivityObservation`.
-                    case activityObservation(Components.Schemas.ActivityObservation)
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/json/CollectionStateChanged`.
-                    case collectionStateChanged(Components.Schemas.CollectionStateChanged)
-                    internal enum CodingKeys: String, CodingKey {
-                        case recordType
-                    }
-                    internal init(from decoder: any Swift.Decoder) throws {
-                        let container = try decoder.container(keyedBy: CodingKeys.self)
-                        let discriminator = try container.decode(
-                            Swift.String.self,
-                            forKey: .recordType
-                        )
-                        switch discriminator {
-                        case "activity_observation":
-                            self = .activityObservation(try .init(from: decoder))
-                        case "collection_state_changed":
-                            self = .collectionStateChanged(try .init(from: decoder))
-                        default:
-                            throw Swift.DecodingError.unknownOneOfDiscriminator(
-                                discriminatorKey: CodingKeys.recordType,
-                                discriminatorValue: discriminator,
-                                codingPath: decoder.codingPath
-                            )
-                        }
-                    }
-                    internal func encode(to encoder: any Swift.Encoder) throws {
-                        switch self {
-                        case let .activityObservation(value):
-                            try value.encode(to: encoder)
-                        case let .collectionStateChanged(value):
-                            try value.encode(to: encoder)
-                        }
-                    }
-                }
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/requestBody/content/application\/json`.
-                case json(Operations.ActivitiesCreate.Input.Body.JsonPayload)
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.ActivityBatchRequest)
             }
-            internal var body: Operations.ActivitiesCreate.Input.Body
+            internal var body: Operations.ActivitiesAcceptBatch.Input.Body
             /// Creates a new `Input`.
             ///
             /// - Parameters:
             ///   - headers:
             ///   - body:
             internal init(
-                headers: Operations.ActivitiesCreate.Input.Headers = .init(),
-                body: Operations.ActivitiesCreate.Input.Body
+                headers: Operations.ActivitiesAcceptBatch.Input.Headers = .init(),
+                body: Operations.ActivitiesAcceptBatch.Input.Body
             ) {
                 self.headers = headers
                 self.body = body
             }
         }
         internal enum Output: Sendable, Hashable {
-            internal struct Created: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/201/content`.
+            internal struct Accepted: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/202/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/201/content/application\/json`.
-                    case json(Components.Schemas.ActivityCreateResponse)
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/202/content/application\/json`.
+                    case json(Components.Schemas.ActivityBatchResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
                     /// - Throws: An error if `self` is not `.json`.
                     /// - SeeAlso: `.json`.
-                    internal var json: Components.Schemas.ActivityCreateResponse {
+                    internal var json: Components.Schemas.ActivityBatchResponse {
                         get throws {
                             switch self {
                             case let .json(body):
@@ -4014,62 +4041,62 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.Created.Body
-                /// Creates a new `Created`.
+                internal var body: Operations.ActivitiesAcceptBatch.Output.Accepted.Body
+                /// Creates a new `Accepted`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ActivitiesCreate.Output.Created.Body) {
+                internal init(body: Operations.ActivitiesAcceptBatch.Output.Accepted.Body) {
                     self.body = body
                 }
             }
-            /// 저장되었거나 동일한 재전송으로 확인된 활동 레코드입니다.
+            /// 메모리 전달 수락 결과입니다. DB 반영은 타임라인 조회로 확인합니다.
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/201`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/202`.
             ///
-            /// HTTP response code: `201 created`.
-            case created(Operations.ActivitiesCreate.Output.Created)
-            /// The associated value of the enum case if `self` is `.created`.
+            /// HTTP response code: `202 accepted`.
+            case accepted(Operations.ActivitiesAcceptBatch.Output.Accepted)
+            /// The associated value of the enum case if `self` is `.accepted`.
             ///
-            /// - Throws: An error if `self` is not `.created`.
-            /// - SeeAlso: `.created`.
-            internal var created: Operations.ActivitiesCreate.Output.Created {
+            /// - Throws: An error if `self` is not `.accepted`.
+            /// - SeeAlso: `.accepted`.
+            internal var accepted: Operations.ActivitiesAcceptBatch.Output.Accepted {
                 get throws {
                     switch self {
-                    case let .created(response):
+                    case let .accepted(response):
                         return response
                     default:
                         try throwUnexpectedResponseStatus(
-                            expectedStatus: "created",
+                            expectedStatus: "accepted",
                             response: self
                         )
                     }
                 }
             }
             internal struct Unauthorized: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/401/headers`.
                 internal struct Headers: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers/WWW-Authenticate`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/401/headers/WWW-Authenticate`.
                     internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
                         case bearer = "Bearer"
                     }
                     /// 클라이언트가 사용해야 하는 인증 방식입니다.
                     ///
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/headers/WWW-Authenticate`.
-                    internal var wwwAuthenticate: Operations.ActivitiesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload?
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/401/headers/WWW-Authenticate`.
+                    internal var wwwAuthenticate: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers.WWWAuthenticatePayload?
                     /// Creates a new `Headers`.
                     ///
                     /// - Parameters:
                     ///   - wwwAuthenticate: 클라이언트가 사용해야 하는 인증 방식입니다.
-                    internal init(wwwAuthenticate: Operations.ActivitiesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
+                    internal init(wwwAuthenticate: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers.WWWAuthenticatePayload? = nil) {
                         self.wwwAuthenticate = wwwAuthenticate
                     }
                 }
                 /// Received HTTP response headers
-                internal var headers: Operations.ActivitiesCreate.Output.Unauthorized.Headers
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/content`.
+                internal var headers: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/401/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/401/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/401/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4085,15 +4112,15 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.Unauthorized.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Body
                 /// Creates a new `Unauthorized`.
                 ///
                 /// - Parameters:
                 ///   - headers: Received HTTP response headers
                 ///   - body: Received HTTP response body
                 internal init(
-                    headers: Operations.ActivitiesCreate.Output.Unauthorized.Headers = .init(),
-                    body: Operations.ActivitiesCreate.Output.Unauthorized.Body
+                    headers: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers = .init(),
+                    body: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Body
                 ) {
                     self.headers = headers
                     self.body = body
@@ -4101,15 +4128,15 @@ internal enum Operations {
             }
             /// Unauthorized
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/401`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/401`.
             ///
             /// HTTP response code: `401 unauthorized`.
-            case unauthorized(Operations.ActivitiesCreate.Output.Unauthorized)
+            case unauthorized(Operations.ActivitiesAcceptBatch.Output.Unauthorized)
             /// The associated value of the enum case if `self` is `.unauthorized`.
             ///
             /// - Throws: An error if `self` is not `.unauthorized`.
             /// - SeeAlso: `.unauthorized`.
-            internal var unauthorized: Operations.ActivitiesCreate.Output.Unauthorized {
+            internal var unauthorized: Operations.ActivitiesAcceptBatch.Output.Unauthorized {
                 get throws {
                     switch self {
                     case let .unauthorized(response):
@@ -4123,9 +4150,9 @@ internal enum Operations {
                 }
             }
             internal struct NotFound: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/404/content`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/404/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/404/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/404/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4141,26 +4168,26 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.NotFound.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.NotFound.Body
                 /// Creates a new `NotFound`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ActivitiesCreate.Output.NotFound.Body) {
+                internal init(body: Operations.ActivitiesAcceptBatch.Output.NotFound.Body) {
                     self.body = body
                 }
             }
             /// Not Found
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/404`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/404`.
             ///
             /// HTTP response code: `404 notFound`.
-            case notFound(Operations.ActivitiesCreate.Output.NotFound)
+            case notFound(Operations.ActivitiesAcceptBatch.Output.NotFound)
             /// The associated value of the enum case if `self` is `.notFound`.
             ///
             /// - Throws: An error if `self` is not `.notFound`.
             /// - SeeAlso: `.notFound`.
-            internal var notFound: Operations.ActivitiesCreate.Output.NotFound {
+            internal var notFound: Operations.ActivitiesAcceptBatch.Output.NotFound {
                 get throws {
                     switch self {
                     case let .notFound(response):
@@ -4174,11 +4201,11 @@ internal enum Operations {
                 }
             }
             internal struct MethodNotAllowed: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/headers`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/405/headers`.
                 internal struct Headers: Sendable, Hashable {
                     /// 해당 route에서 허용되는 HTTP method 목록입니다.
                     ///
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/headers/Allow`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/405/headers/Allow`.
                     internal var allow: Swift.String?
                     /// Creates a new `Headers`.
                     ///
@@ -4189,10 +4216,10 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response headers
-                internal var headers: Operations.ActivitiesCreate.Output.MethodNotAllowed.Headers
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/content`.
+                internal var headers: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/405/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/405/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/405/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4208,15 +4235,15 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.MethodNotAllowed.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Body
                 /// Creates a new `MethodNotAllowed`.
                 ///
                 /// - Parameters:
                 ///   - headers: Received HTTP response headers
                 ///   - body: Received HTTP response body
                 internal init(
-                    headers: Operations.ActivitiesCreate.Output.MethodNotAllowed.Headers = .init(),
-                    body: Operations.ActivitiesCreate.Output.MethodNotAllowed.Body
+                    headers: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Headers = .init(),
+                    body: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Body
                 ) {
                     self.headers = headers
                     self.body = body
@@ -4224,15 +4251,15 @@ internal enum Operations {
             }
             /// Method Not Allowed
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/405`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/405`.
             ///
             /// HTTP response code: `405 methodNotAllowed`.
-            case methodNotAllowed(Operations.ActivitiesCreate.Output.MethodNotAllowed)
+            case methodNotAllowed(Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed)
             /// The associated value of the enum case if `self` is `.methodNotAllowed`.
             ///
             /// - Throws: An error if `self` is not `.methodNotAllowed`.
             /// - SeeAlso: `.methodNotAllowed`.
-            internal var methodNotAllowed: Operations.ActivitiesCreate.Output.MethodNotAllowed {
+            internal var methodNotAllowed: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed {
                 get throws {
                     switch self {
                     case let .methodNotAllowed(response):
@@ -4245,10 +4272,10 @@ internal enum Operations {
                     }
                 }
             }
-            internal struct Conflict: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/409/content`.
+            internal struct ContentTooLarge: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/413/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/409/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/413/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4264,42 +4291,42 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.Conflict.Body
-                /// Creates a new `Conflict`.
+                internal var body: Operations.ActivitiesAcceptBatch.Output.ContentTooLarge.Body
+                /// Creates a new `ContentTooLarge`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ActivitiesCreate.Output.Conflict.Body) {
+                internal init(body: Operations.ActivitiesAcceptBatch.Output.ContentTooLarge.Body) {
                     self.body = body
                 }
             }
-            /// Conflict
+            /// Content Too Large
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/409`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/413`.
             ///
-            /// HTTP response code: `409 conflict`.
-            case conflict(Operations.ActivitiesCreate.Output.Conflict)
-            /// The associated value of the enum case if `self` is `.conflict`.
+            /// HTTP response code: `413 contentTooLarge`.
+            case contentTooLarge(Operations.ActivitiesAcceptBatch.Output.ContentTooLarge)
+            /// The associated value of the enum case if `self` is `.contentTooLarge`.
             ///
-            /// - Throws: An error if `self` is not `.conflict`.
-            /// - SeeAlso: `.conflict`.
-            internal var conflict: Operations.ActivitiesCreate.Output.Conflict {
+            /// - Throws: An error if `self` is not `.contentTooLarge`.
+            /// - SeeAlso: `.contentTooLarge`.
+            internal var contentTooLarge: Operations.ActivitiesAcceptBatch.Output.ContentTooLarge {
                 get throws {
                     switch self {
-                    case let .conflict(response):
+                    case let .contentTooLarge(response):
                         return response
                     default:
                         try throwUnexpectedResponseStatus(
-                            expectedStatus: "conflict",
+                            expectedStatus: "contentTooLarge",
                             response: self
                         )
                     }
                 }
             }
             internal struct UnprocessableContent: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/422/content`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/422/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/422/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/422/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4315,26 +4342,26 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.UnprocessableContent.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.UnprocessableContent.Body
                 /// Creates a new `UnprocessableContent`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ActivitiesCreate.Output.UnprocessableContent.Body) {
+                internal init(body: Operations.ActivitiesAcceptBatch.Output.UnprocessableContent.Body) {
                     self.body = body
                 }
             }
             /// Unprocessable Content
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/422`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/422`.
             ///
             /// HTTP response code: `422 unprocessableContent`.
-            case unprocessableContent(Operations.ActivitiesCreate.Output.UnprocessableContent)
+            case unprocessableContent(Operations.ActivitiesAcceptBatch.Output.UnprocessableContent)
             /// The associated value of the enum case if `self` is `.unprocessableContent`.
             ///
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
-            internal var unprocessableContent: Operations.ActivitiesCreate.Output.UnprocessableContent {
+            internal var unprocessableContent: Operations.ActivitiesAcceptBatch.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):
@@ -4348,9 +4375,9 @@ internal enum Operations {
                 }
             }
             internal struct InternalServerError: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/500/content`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/500/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/500/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/500/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4366,26 +4393,26 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.InternalServerError.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.InternalServerError.Body
                 /// Creates a new `InternalServerError`.
                 ///
                 /// - Parameters:
                 ///   - body: Received HTTP response body
-                internal init(body: Operations.ActivitiesCreate.Output.InternalServerError.Body) {
+                internal init(body: Operations.ActivitiesAcceptBatch.Output.InternalServerError.Body) {
                     self.body = body
                 }
             }
             /// Internal Server Error
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/500`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
-            case internalServerError(Operations.ActivitiesCreate.Output.InternalServerError)
+            case internalServerError(Operations.ActivitiesAcceptBatch.Output.InternalServerError)
             /// The associated value of the enum case if `self` is `.internalServerError`.
             ///
             /// - Throws: An error if `self` is not `.internalServerError`.
             /// - SeeAlso: `.internalServerError`.
-            internal var internalServerError: Operations.ActivitiesCreate.Output.InternalServerError {
+            internal var internalServerError: Operations.ActivitiesAcceptBatch.Output.InternalServerError {
                 get throws {
                     switch self {
                     case let .internalServerError(response):
@@ -4399,29 +4426,29 @@ internal enum Operations {
                 }
             }
             internal struct ServiceUnavailable: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers`.
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/503/headers`.
                 internal struct Headers: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers/Retry-After`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/503/headers/Retry-After`.
                     internal enum RetryAfterPayload: String, Codable, Hashable, Sendable, CaseIterable {
                         case _1 = "1"
                     }
-                    /// 같은 eventId와 body로 재시도하기 전 대기할 초입니다.
+                    /// 같은 batchId와 내용으로 재시도하기 전 대기할 초입니다.
                     ///
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/headers/Retry-After`.
-                    internal var retryAfter: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers.RetryAfterPayload?
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/503/headers/Retry-After`.
+                    internal var retryAfter: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers.RetryAfterPayload?
                     /// Creates a new `Headers`.
                     ///
                     /// - Parameters:
-                    ///   - retryAfter: 같은 eventId와 body로 재시도하기 전 대기할 초입니다.
-                    internal init(retryAfter: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers.RetryAfterPayload? = nil) {
+                    ///   - retryAfter: 같은 batchId와 내용으로 재시도하기 전 대기할 초입니다.
+                    internal init(retryAfter: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers.RetryAfterPayload? = nil) {
                         self.retryAfter = retryAfter
                     }
                 }
                 /// Received HTTP response headers
-                internal var headers: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers
-                /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/content`.
+                internal var headers: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers
+                /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/503/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/activities/POST/responses/503/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/activities/batches/POST/responses/503/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4437,15 +4464,15 @@ internal enum Operations {
                     }
                 }
                 /// Received HTTP response body
-                internal var body: Operations.ActivitiesCreate.Output.ServiceUnavailable.Body
+                internal var body: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Body
                 /// Creates a new `ServiceUnavailable`.
                 ///
                 /// - Parameters:
                 ///   - headers: Received HTTP response headers
                 ///   - body: Received HTTP response body
                 internal init(
-                    headers: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers = .init(),
-                    body: Operations.ActivitiesCreate.Output.ServiceUnavailable.Body
+                    headers: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers = .init(),
+                    body: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Body
                 ) {
                     self.headers = headers
                     self.body = body
@@ -4453,15 +4480,15 @@ internal enum Operations {
             }
             /// Service Unavailable
             ///
-            /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)/responses/503`.
+            /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/503`.
             ///
             /// HTTP response code: `503 serviceUnavailable`.
-            case serviceUnavailable(Operations.ActivitiesCreate.Output.ServiceUnavailable)
+            case serviceUnavailable(Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable)
             /// The associated value of the enum case if `self` is `.serviceUnavailable`.
             ///
             /// - Throws: An error if `self` is not `.serviceUnavailable`.
             /// - SeeAlso: `.serviceUnavailable`.
-            internal var serviceUnavailable: Operations.ActivitiesCreate.Output.ServiceUnavailable {
+            internal var serviceUnavailable: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable {
                 get throws {
                     switch self {
                     case let .serviceUnavailable(response):

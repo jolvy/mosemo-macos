@@ -307,7 +307,7 @@ final class MosemoAPITests: XCTestCase {
         XCTAssertEqual(day.timeZoneID, "UTC")
     }
 
-    func testTimelineUnauthorizedClearsToken() async throws {
+    func testTimelineUnauthorizedReportsFailureWithoutInvalidatingToken() async throws {
         let tokenStore = MemoryAccessTokenStore(token: .init(
             value: "timeline-token", expiresAt: now.addingTimeInterval(60)
         ))
@@ -321,7 +321,7 @@ final class MosemoAPITests: XCTestCase {
             try await client.fetch(day: .init(year: 2026, month: 9, day: 14), timeZoneID: "UTC")
         }
         let token = await tokenStore.currentToken()
-        XCTAssertNil(token)
+        XCTAssertEqual(token?.value, "timeline-token")
     }
 
     func testTimelineServerAndTransportFailuresKeepToken() async throws {
@@ -741,14 +741,13 @@ final class MosemoAPITests: XCTestCase {
             utcOffsetMinutes: 540
         )
         let client = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body else {
+            guard case .json(let batch) = input.body, case .activityObservation? = batch.records.first else {
                 XCTFail("Expected an activity observation")
                 return .undocumented(statusCode: 500, .init())
             }
-            XCTAssertEqual(observation.deviceId, deviceID.uuidString)
-            return .created(.init(body: .json(.init(
-                eventId: eventID.uuidString,
-                receivedAt: self.now,
+            XCTAssertEqual(batch.deviceId, deviceID.uuidString)
+            return .accepted(.init(body: .json(.init(
+                batchId: eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -801,7 +800,7 @@ final class MosemoAPITests: XCTestCase {
 
     func testCreateActivityMapsDetailedBrowserObservation() async throws {
         let metadata = makeActivityMetadata()
-        let receivedAt = now.addingTimeInterval(5)
+
         let record = ActivityRecord.observation(.init(
             metadata: metadata,
             context: .detailed(.init(
@@ -818,12 +817,12 @@ final class MosemoAPITests: XCTestCase {
             ))
         ))
         let client = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body else {
+            guard case .json(let batch) = input.body, case .activityObservation(let observation)? = batch.records.first else {
                 XCTFail("Expected an activity observation")
                 return .undocumented(statusCode: 500, .init())
             }
 
-            XCTAssertEqual(observation.deviceId, metadata.deviceRegistrationID.uuidString)
+            XCTAssertEqual(batch.deviceId, metadata.deviceRegistrationID.uuidString)
             XCTAssertEqual(observation.eventId, metadata.eventID.uuidString)
             XCTAssertEqual(observation.sequence, 7)
             XCTAssertEqual(observation.observedAt, metadata.observedAt)
@@ -860,33 +859,28 @@ final class MosemoAPITests: XCTestCase {
             XCTAssertEqual(title.originalByteLength, 42)
             XCTAssertEqual(url.reason, "privacy_rule")
 
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: receivedAt,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
 
         let result = try await client.createActivity(record)
 
-        XCTAssertEqual(result, ActivityCreateResult(
-            eventID: metadata.eventID,
-            receivedAt: receivedAt
-        ))
+        XCTAssertEqual(result, ActivityBatchResult(batchID: metadata.eventID))
     }
 
     func testCreateActivityMapsOpaqueObservation() async throws {
         let metadata = makeActivityMetadata()
         let client = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body,
+            guard case .json(let batch) = input.body, case .activityObservation(let observation)? = batch.records.first,
                   case .opaque(let context) = observation.context else {
                 XCTFail("Expected opaque activity observation")
                 return .undocumented(statusCode: 500, .init())
             }
             XCTAssertEqual(context.kind, .opaque)
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: self.now,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -900,7 +894,7 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityMapsNonBrowserAndOptionalTextLength() async throws {
         let metadata = makeActivityMetadata()
         let client = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body,
+            guard case .json(let batch) = input.body, case .activityObservation(let observation)? = batch.records.first,
                   case .detailed(let context) = observation.context,
                   case .unavailable(let bundleID) = context.app.bundleId,
                   case .captured(let name) = context.app.name,
@@ -927,9 +921,8 @@ final class MosemoAPITests: XCTestCase {
             let webObject = try XCTUnwrap(contextObject["web"] as? [String: Any])
             XCTAssertEqual(webObject["kind"] as? String, "not_applicable")
 
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: self.now,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -950,7 +943,7 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityMapsRemainingDetailedValueStates() async throws {
         let metadata = makeActivityMetadata()
         let redactedTitleClient = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body,
+            guard case .json(let batch) = input.body, case .activityObservation(let observation)? = batch.records.first,
                   case .detailed(let context) = observation.context,
                   case .absent = context.app.bundleId,
                   case .unavailable(let name) = context.app.name,
@@ -964,14 +957,13 @@ final class MosemoAPITests: XCTestCase {
             XCTAssertEqual(name.reason, "name_unavailable")
             XCTAssertEqual(title.reason, "title_private")
             XCTAssertEqual(url.value, "https://example.com")
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: self.now,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
         let unavailableTitleAbsentURLClient = makeClient(createActivity: { input in
-            guard case .json(.activityObservation(let observation)) = input.body,
+            guard case .json(let batch) = input.body, case .activityObservation(let observation)? = batch.records.first,
                   case .detailed(let context) = observation.context,
                   case .browser(let browser) = context.web,
                   case .unavailable(let title) = browser.tabTitle,
@@ -995,9 +987,8 @@ final class MosemoAPITests: XCTestCase {
             XCTAssertEqual(titleObject["reason"] as? String, "automation_denied")
             let urlObject = try XCTUnwrap(webObject["url"] as? [String: Any])
             XCTAssertEqual(urlObject["status"] as? String, "absent")
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: self.now,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -1032,11 +1023,11 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityMapsCollectionStateChange() async throws {
         let metadata = makeActivityMetadata()
         let client = makeClient(createActivity: { input in
-            guard case .json(.collectionStateChanged(let change)) = input.body else {
+            guard case .json(let batch) = input.body, case .collectionStateChanged(let change)? = batch.records.first else {
                 XCTFail("Expected collection state change")
                 return .undocumented(statusCode: 500, .init())
             }
-            XCTAssertEqual(change.deviceId, metadata.deviceRegistrationID.uuidString)
+            XCTAssertEqual(batch.deviceId, metadata.deviceRegistrationID.uuidString)
             XCTAssertEqual(change.eventId, metadata.eventID.uuidString)
             XCTAssertEqual(change.recordType, .collectionStateChanged)
             XCTAssertEqual(change.state, .suspended)
@@ -1045,9 +1036,8 @@ final class MosemoAPITests: XCTestCase {
             XCTAssertEqual(change.observedAt, metadata.observedAt)
             XCTAssertEqual(change.timezoneId, .asiaSeoul)
             XCTAssertEqual(change.utcOffsetMinutes, metadata.utcOffsetMinutes)
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: self.now,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -1062,12 +1052,11 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityReturnsSameServerResultForExplicitRetry() async throws {
         let metadata = makeActivityMetadata()
         let calls = CallCounter()
-        let receivedAt = now.addingTimeInterval(10)
+
         let client = makeClient(createActivity: { _ in
             await calls.increment()
-            return .created(.init(body: .json(.init(
-                eventId: metadata.eventID.uuidString,
-                receivedAt: receivedAt,
+            return .accepted(.init(body: .json(.init(
+                batchId: metadata.eventID.uuidString,
                 status: .accepted
             ))))
         })
@@ -1080,7 +1069,7 @@ final class MosemoAPITests: XCTestCase {
         let retry = try await client.createActivity(record)
 
         XCTAssertEqual(first, retry)
-        XCTAssertEqual(first.receivedAt, receivedAt)
+        XCTAssertEqual(first.batchID, metadata.eventID)
         let callCount = await calls.value()
         XCTAssertEqual(callCount, 2)
     }
@@ -1088,16 +1077,15 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityRejectsInvalidOrMismatchedResponseEventID() async {
         let metadata = makeActivityMetadata()
         let invalidClient = makeClient(createActivity: { _ in
-            .created(.init(body: .json(.init(
-                eventId: "not-a-uuid",
-                receivedAt: self.now,
+            .accepted(.init(body: .json(.init(
+                batchId: "not-a-uuid",
+
                 status: .accepted
             ))))
         })
         let mismatchedClient = makeClient(createActivity: { _ in
-            .created(.init(body: .json(.init(
-                eventId: UUID().uuidString,
-                receivedAt: self.now,
+            .accepted(.init(body: .json(.init(
+                batchId: UUID().uuidString,
                 status: .accepted
             ))))
         })
@@ -1106,15 +1094,15 @@ final class MosemoAPITests: XCTestCase {
             context: .opaque
         ))
 
-        await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+        await assertAPIError(.unexpectedResponse(statusCode: 202)) {
             _ = try await invalidClient.createActivity(record)
         }
-        await assertAPIError(.unexpectedResponse(statusCode: 201)) {
+        await assertAPIError(.unexpectedResponse(statusCode: 202)) {
             _ = try await mismatchedClient.createActivity(record)
         }
     }
 
-    func testCreateActivityClearsTokenOnUnauthorized() async throws {
+    func testBatchUnauthorizedLeavesTokenOwnershipToAuthCoordinator() async throws {
         let metadata = makeActivityMetadata()
         let tokenStore = MemoryAccessTokenStore(token: .init(
             value: "stored-token",
@@ -1138,7 +1126,7 @@ final class MosemoAPITests: XCTestCase {
             )))
         }
         let storedToken = await tokenStore.currentToken()
-        XCTAssertNil(storedToken)
+        XCTAssertNotNil(storedToken)
     }
 
     func testCreateActivityPreservesAuthenticationRequiredWhenTokenDeleteFails() async {
@@ -1161,7 +1149,7 @@ final class MosemoAPITests: XCTestCase {
             )))
         }
         let deleteCallCount = await tokenStore.deleteCallCount()
-        XCTAssertEqual(deleteCallCount, 1)
+        XCTAssertEqual(deleteCallCount, 0)
     }
 
     func testCreateActivityMapsDeviceNotFound() async {
@@ -1185,19 +1173,15 @@ final class MosemoAPITests: XCTestCase {
     func testCreateActivityMapsBothConflictReasonsWithoutRetrying() async {
         let metadata = makeActivityMetadata()
         let cases: [(String, MosemoAPIError)] = [
-            ("ACTIVITY_EVENT_ID_CONFLICT", .activityEventIDConflict),
-            ("ACTIVITY_SEQUENCE_CONFLICT", .activitySequenceConflict),
+            ("ACTIVITY_EVENT_ID_CONFLICT", .unexpectedResponse(statusCode: 409)),
+            ("ACTIVITY_SEQUENCE_CONFLICT", .unexpectedResponse(statusCode: 409)),
         ]
 
-        for (status, expectedError) in cases {
+        for (_, expectedError) in cases {
             let calls = CallCounter()
             let client = makeClient(createActivity: { _ in
                 await calls.increment()
-                return .conflict(.init(body: .json(makeErrorResponse(
-                    code: 409,
-                    status: status,
-                    message: "conflict"
-                ))))
+                return .undocumented(statusCode: 409, .init())
             })
 
             await assertAPIError(expectedError) {
@@ -1871,8 +1855,8 @@ private struct MockGeneratedAPI: APIProtocol {
         Operations.DevicesCreate.Input
     ) async throws -> Operations.DevicesCreate.Output
     typealias CreateActivity = @Sendable (
-        Operations.ActivitiesCreate.Input
-    ) async throws -> Operations.ActivitiesCreate.Output
+        Operations.ActivitiesAcceptBatch.Input
+    ) async throws -> Operations.ActivitiesAcceptBatch.Output
     typealias GetTimeline = @Sendable (
         Operations.ActivitiesGetTimeline.Input
     ) async throws -> Operations.ActivitiesGetTimeline.Output
@@ -1900,9 +1884,9 @@ private struct MockGeneratedAPI: APIProtocol {
     ) async throws -> Operations.DevicesCreate.Output {
         try await createDevice(input)
     }
-    func activitiesCreate(
-        _ input: Operations.ActivitiesCreate.Input
-    ) async throws -> Operations.ActivitiesCreate.Output {
+    func activitiesAcceptBatch(
+        _ input: Operations.ActivitiesAcceptBatch.Input
+    ) async throws -> Operations.ActivitiesAcceptBatch.Output {
         try await createActivity(input)
     }
     func activitiesGetTimeline(
@@ -2131,5 +2115,20 @@ extension MosemoAPITests {
         XCTAssertEqual(history, [finished])
         let labels = try await client.listLabels()
         XCTAssertTrue(labels.contains { $0.id == labelID })
+    }
+}
+
+// Test convenience: exercise original-record mapping through the real batch API.
+private extension LiveMosemoAPIClient {
+    func createActivity(_ record: ActivityRecord) async throws -> ActivityBatchResult {
+        let metadata: ActivityRecordMetadata
+        switch record {
+        case .observation(let value): metadata = value.metadata
+        case .collectionStateChanged(let value): metadata = value.metadata
+        }
+        let item = QueuedActivity(accountID: UUID(), deviceID: metadata.deviceRegistrationID,
+            sequence: metadata.sequence, eventID: metadata.eventID, record: record)
+        let batch = try XCTUnwrap(ActivityBatchPolicy.select([item], batchID: metadata.eventID)?.batch)
+        return try await createActivityBatch(batch)
     }
 }

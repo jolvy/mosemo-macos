@@ -188,7 +188,7 @@ private actor SQLiteDeviceClient: MosemoAPIClient {
         return device
     }
 
-    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult {
+    func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult {
         fatalError("Not used by SQLite storage tests")
     }
 

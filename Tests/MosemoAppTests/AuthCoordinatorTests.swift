@@ -151,7 +151,7 @@ private actor AuthClient: MosemoAPIClient {
         return try registrationResult.get()
     }
 
-    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult {
+    func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult {
         fatalError("Not used by AuthCoordinator lifecycle tests")
     }
 

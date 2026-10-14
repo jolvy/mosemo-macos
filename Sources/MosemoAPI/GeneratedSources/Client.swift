@@ -230,19 +230,19 @@ internal struct Client: APIProtocol {
             }
         )
     }
-    /// 활동 레코드 생성
+    /// 활동 배치 전달 수락
     ///
-    /// 인증된 계정의 기기에서 관찰한 활동 또는 수집 상태 변경 한 건을 저장합니다. 같은 eventId와 같은 내용의 재전송은 최초 저장 결과를 반환합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
     ///
-    /// - Remark: HTTP `POST /api/v1/activities`.
-    /// - Remark: Generated from `#/paths//api/v1/activities/post(activitiesCreate)`.
-    internal func activitiesCreate(_ input: Operations.ActivitiesCreate.Input) async throws -> Operations.ActivitiesCreate.Output {
+    /// - Remark: HTTP `POST /api/v1/activities/batches`.
+    /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
+    internal func activitiesAcceptBatch(_ input: Operations.ActivitiesAcceptBatch.Input) async throws -> Operations.ActivitiesAcceptBatch.Output {
         try await client.send(
             input: input,
-            forOperation: Operations.ActivitiesCreate.id,
+            forOperation: Operations.ActivitiesAcceptBatch.id,
             serializer: { input in
                 let path = try converter.renderedPath(
-                    template: "/api/v1/activities",
+                    template: "/api/v1/activities/batches",
                     parameters: []
                 )
                 var request: HTTPTypes.HTTPRequest = .init(
@@ -267,9 +267,9 @@ internal struct Client: APIProtocol {
             },
             deserializer: { response, responseBody in
                 switch response.status.code {
-                case 201:
+                case 202:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.Created.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.Accepted.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -279,7 +279,7 @@ internal struct Client: APIProtocol {
                     switch chosenContentType {
                     case "application/json":
                         body = try await converter.getResponseBodyAsJSON(
-                            Components.Schemas.ActivityCreateResponse.self,
+                            Components.Schemas.ActivityBatchResponse.self,
                             from: responseBody,
                             transforming: { value in
                                 .json(value)
@@ -288,15 +288,15 @@ internal struct Client: APIProtocol {
                     default:
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
-                    return .created(.init(body: body))
+                    return .accepted(.init(body: body))
                 case 401:
-                    let headers: Operations.ActivitiesCreate.Output.Unauthorized.Headers = .init(wwwAuthenticate: try converter.getOptionalHeaderFieldAsURI(
+                    let headers: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers = .init(wwwAuthenticate: try converter.getOptionalHeaderFieldAsURI(
                         in: response.headerFields,
                         name: "WWW-Authenticate",
-                        as: Operations.ActivitiesCreate.Output.Unauthorized.Headers.WWWAuthenticatePayload.self
+                        as: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Headers.WWWAuthenticatePayload.self
                     ))
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.Unauthorized.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.Unauthorized.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -321,7 +321,7 @@ internal struct Client: APIProtocol {
                     ))
                 case 404:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.NotFound.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.NotFound.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -342,13 +342,13 @@ internal struct Client: APIProtocol {
                     }
                     return .notFound(.init(body: body))
                 case 405:
-                    let headers: Operations.ActivitiesCreate.Output.MethodNotAllowed.Headers = .init(allow: try converter.getOptionalHeaderFieldAsURI(
+                    let headers: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Headers = .init(allow: try converter.getOptionalHeaderFieldAsURI(
                         in: response.headerFields,
                         name: "Allow",
                         as: Swift.String.self
                     ))
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.MethodNotAllowed.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.MethodNotAllowed.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -371,9 +371,9 @@ internal struct Client: APIProtocol {
                         headers: headers,
                         body: body
                     ))
-                case 409:
+                case 413:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.Conflict.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.ContentTooLarge.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -392,10 +392,10 @@ internal struct Client: APIProtocol {
                     default:
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
-                    return .conflict(.init(body: body))
+                    return .contentTooLarge(.init(body: body))
                 case 422:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.UnprocessableContent.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.UnprocessableContent.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -417,7 +417,7 @@ internal struct Client: APIProtocol {
                     return .unprocessableContent(.init(body: body))
                 case 500:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.InternalServerError.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.InternalServerError.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
@@ -438,13 +438,13 @@ internal struct Client: APIProtocol {
                     }
                     return .internalServerError(.init(body: body))
                 case 503:
-                    let headers: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers = .init(retryAfter: try converter.getOptionalHeaderFieldAsURI(
+                    let headers: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers = .init(retryAfter: try converter.getOptionalHeaderFieldAsURI(
                         in: response.headerFields,
                         name: "Retry-After",
-                        as: Operations.ActivitiesCreate.Output.ServiceUnavailable.Headers.RetryAfterPayload.self
+                        as: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Headers.RetryAfterPayload.self
                     ))
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
-                    let body: Operations.ActivitiesCreate.Output.ServiceUnavailable.Body
+                    let body: Operations.ActivitiesAcceptBatch.Output.ServiceUnavailable.Body
                     let chosenContentType = try converter.bestContentType(
                         received: contentType,
                         options: [
