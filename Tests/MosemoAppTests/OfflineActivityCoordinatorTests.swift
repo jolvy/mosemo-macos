@@ -23,7 +23,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
             var statuses: [String] = []
             let coordinator = OfflineActivityCoordinator(queue: queue,
                 client: QueueTestClient(firstError: .networkUnavailable, mismatchedAcknowledgement: mismatch),
-                deviceStateStore: QueueTestDeviceStore(deviceID: device), sleepBeforeRetry: { _ in },
+                deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, sleepBeforeRetry: { _ in },
                 onActivityAccepted: { acceptedAccounts.append($0) },
                 onStatus: { _, status in statuses.append(status) })
             await coordinator.activate(account)
@@ -49,7 +49,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: QueueTestClient(firstError: .validationFailed),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStatus: { _, status in statuses.append(status) }
         )
         await coordinator.activate(account)
@@ -103,7 +103,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: QueueTestClient(),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStorageFailure: { failureCount += 1 },
             onStatus: { _, status in statuses.append(status) }
         )
@@ -142,7 +142,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStatus: { _, _ in }
         )
         await coordinator.activate(firstAccount)
@@ -189,7 +189,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: QueueTestClient(),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStatus: { _, _ in }
         )
         await coordinator.activate(account)
@@ -251,7 +251,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: QueueTestKeyStore())
         let coordinator = OfflineActivityCoordinator(queue: queue, client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, _ in })
 
         _ = try await queue.enqueue(accountID: account.id, deviceID: device, observedAt: .now,
                                     timezoneID: "Asia/Seoul", utcOffsetMinutes: 540) { metadata in
@@ -292,7 +292,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
             .collectionStateChanged(CollectionStateChange(metadata: metadata, state: .active, reason: "test"))
         }
         let coordinator = OfflineActivityCoordinator(queue: queue, client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             sleepBeforeRetry: { seconds in await retryWaits.append(seconds) },
             retryJitter: { 0.5 }, onStatus: { _, _ in })
 
@@ -327,7 +327,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         }
         var statuses: [String] = []
         let coordinator = OfflineActivityCoordinator(queue: queue, client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, status in statuses.append(status) })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, status in statuses.append(status) })
 
         await coordinator.activate(account)
         for _ in 0..<100 {
@@ -362,7 +362,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: QueueTestKeyStore())
         let coordinator = OfflineActivityCoordinator(queue: queue, client: QueueTestClient(firstError: .validationFailed),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, _ in })
         await coordinator.activate(account)
 
         coordinator.record(SafeActivityEvent(eventType: .activity, appBundleID: "com.google.Chrome",
@@ -393,7 +393,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: QueueTestClient(firstError: .validationFailed),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStatus: { _, _ in }
         )
         await coordinator.activate(account)
@@ -432,7 +432,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: QueueTestClient(firstError: .validationFailed),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             onStatus: { _, _ in }
         )
         await coordinator.activate(account)
@@ -482,7 +482,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         var statuses: [String] = []
         let client = QueueTestClient()
         let coordinator = OfflineActivityCoordinator(queue: unreadableQueue, client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, status in statuses.append(status) })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, status in statuses.append(status) })
 
         await coordinator.activate(account)
         for _ in 0..<100 {
@@ -506,7 +506,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: QueueTestKeyStore())
         let coordinator = OfflineActivityCoordinator(queue: queue, client: QueueTestClient(firstError: .validationFailed),
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, _ in })
         await coordinator.activate(account)
 
         coordinator.record(SafeActivityEvent(eventType: .activity, appBundleID: "com.google.Chrome",
@@ -546,7 +546,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let retryWaits = RetryWaitRecorder()
         let firstClient = QueueTestClient(firstError: .networkUnavailable)
         let firstCoordinator = OfflineActivityCoordinator(queue: originalQueue, client: firstClient,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             sleepBeforeRetry: { seconds in
                 await retryWaits.append(seconds)
                 try? await Task.sleep(for: .seconds(seconds))
@@ -563,7 +563,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let reopenedQueue = try EncryptedActivityQueue(databaseURL: databaseURL, keyStore: keyStore)
         let replayClient = QueueTestClient()
         let restartedCoordinator = OfflineActivityCoordinator(queue: reopenedQueue, client: replayClient,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device), onStatus: { _, _ in })
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, onStatus: { _, _ in })
         await restartedCoordinator.activate(account)
         for _ in 0..<100 {
             if try await reopenedQueue.count(accountID: account.id) == 0 { break }
@@ -572,6 +572,10 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
 
         let replay = await replayClient.records()
         let pending = try await reopenedQueue.count(accountID: account.id)
+        let originalBatches = await firstClient.batches()
+        let replayBatches = await replayClient.batches()
+        XCTAssertEqual(originalBatches.map(\.id), replayBatches.map(\.id))
+        XCTAssertEqual(originalBatches.map(\.body), replayBatches.map(\.body))
         XCTAssertEqual(firstAttempt, [original.record])
         XCTAssertEqual(replay, [original.record])
         XCTAssertEqual(pending, 0)
@@ -588,7 +592,7 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: QueueTestKeyStore())
         let coordinator = OfflineActivityCoordinator(queue: queue, client: client,
-            deviceStateStore: QueueTestDeviceStore(deviceID: device),
+            deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture },
             sleepBeforeRetry: { seconds in await retryWaits.append(seconds) },
             retryJitter: { 0.5 }, onStatus: { _, _ in })
 
@@ -665,6 +669,7 @@ private actor QueueTestClient: MosemoAPIClient {
     private var maximumRequests = 0
     private var firstError: MosemoAPIError?
     private var sentRecords: [ActivityRecord] = []
+    private var sentBatches: [ActivityBatch] = []
     private let mismatchedAcknowledgement: Bool
 
     init(firstError: MosemoAPIError? = nil, mismatchedAcknowledgement: Bool = false) {
@@ -679,14 +684,10 @@ private actor QueueTestClient: MosemoAPIClient {
     func signOut() async throws { fatalError("unused") }
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay { fatalError("unused") }
 
-    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult {
-        let metadata: ActivityRecordMetadata
-        switch record {
-        case .observation(let value): metadata = value.metadata
-        case .collectionStateChanged(let value): metadata = value.metadata
-        }
-        sentSequences.append(metadata.sequence)
-        sentRecords.append(record)
+    func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult {
+        sentBatches.append(batch)
+        sentSequences.append(contentsOf: batch.items.map(\.sequence))
+        sentRecords.append(contentsOf: batch.items.map(\.record))
         activeRequests += 1
         maximumRequests = max(maximumRequests, activeRequests)
         try await Task.sleep(for: .milliseconds(20))
@@ -695,13 +696,13 @@ private actor QueueTestClient: MosemoAPIClient {
             self.firstError = nil
             throw firstError
         }
-        return ActivityCreateResult(eventID: mismatchedAcknowledgement ? UUID() : metadata.eventID,
-                                    receivedAt: metadata.observedAt)
+        return ActivityBatchResult(batchID: mismatchedAcknowledgement ? UUID() : batch.id)
     }
 
     func sequences() -> [Int] { sentSequences }
     func maximumConcurrentRequests() -> Int { maximumRequests }
     func records() -> [ActivityRecord] { sentRecords }
+    func batches() -> [ActivityBatch] { sentBatches }
 }
 
 private actor RetryWaitRecorder {
@@ -787,7 +788,7 @@ extension OfflineActivityCoordinatorTests {
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"), keyStore: QueueTestKeyStore())
         let client = QueueTestClient()
         var focusNow = Date.now
-        let coordinator = OfflineActivityCoordinator(queue: queue, client: client, deviceStateStore: QueueTestDeviceStore(deviceID: device), focusClock: { focusNow }, onStatus: { _, _ in })
+        let coordinator = OfflineActivityCoordinator(queue: queue, client: client, deviceStateStore: QueueTestDeviceStore(deviceID: device), batchClock: { .distantFuture }, focusClock: { focusNow }, onStatus: { _, _ in })
         await coordinator.activate(account)
         coordinator.focusSessionID = focusID
         let observedBeforePause = focusNow.addingTimeInterval(1)

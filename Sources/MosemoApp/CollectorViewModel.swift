@@ -175,11 +175,16 @@ final class CollectorViewModel: ObservableObject {
         }
     }
 
+    let activityAuthenticationFailures = PassthroughSubject<UUID, Never>()
+
     func configureSynchronization(client: any MosemoAPIClient,
                                   deviceStateStore: any DeviceRegistrationStateStoring,
-                                  queue: EncryptedActivityQueue) {
+                                  queue: EncryptedActivityQueue,
+                                  batchClock: @escaping @Sendable () -> Date = { .now }) {
         synchronization = OfflineActivityCoordinator(queue: queue, client: client,
             deviceStateStore: deviceStateStore,
+            batchClock: batchClock,
+            onAuthenticationFailure: { [weak self] accountID in self?.activityAuthenticationFailures.send(accountID) },
             onStorageFailure: { [weak self] in
                 self?.handleActivityStorageFailure()
             }, onActivityAccepted: { [weak self] accountID in

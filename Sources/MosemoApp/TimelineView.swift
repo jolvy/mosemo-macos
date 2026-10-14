@@ -2,6 +2,8 @@ import SwiftUI
 import MosemoAPI
 
 struct TimelineView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isVisible = false
     @ObservedObject var model: TimelineViewModel
     let showsPreviewNotice: Bool
     var previewUpload: (() -> Void)? = nil
@@ -115,6 +117,15 @@ struct TimelineView: View {
             }
         }
         .padding(24)
+        .onAppear {
+            isVisible = true
+            model.setPolling(visible: true, active: scenePhase == .active)
+        }
+        .onDisappear {
+            isVisible = false
+            model.setPolling(visible: false, active: false)
+        }
+        .onChange(of: scenePhase) { _, phase in model.setPolling(visible: isVisible, active: phase == .active) }
     }
 
     private var selectedDateHeading: some View {

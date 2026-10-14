@@ -10,6 +10,6 @@ public protocol MosemoAPIClient: TimelineFetching, Sendable {
 
     func currentAccount() async throws -> Account
     func registerDevice(idempotencyKey: UUID) async throws -> Device
-    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult
+    func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult
     func signOut() async throws
 }

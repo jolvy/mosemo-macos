@@ -256,7 +256,7 @@ final class CollectorObservationTests: XCTestCase {
         let client = ObservationAPIClient()
         let account = Account(id: UUID(), provider: .kakao, createdAt: .now, lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
         let deviceID = UUID()
-        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue)
+        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { .distantFuture })
         await model.synchronizationAccountChanged(account)
         try await waitUntilAsync { await client.observations().count == 1 }
 
@@ -275,21 +275,22 @@ final class CollectorObservationTests: XCTestCase {
         source.advance(to: 10)
         model.pollCurrentActivity()
         await waitUntil { model.events.count == 4 }
-        try await waitUntilAsync { try await queue.count(accountID: account.id) == 3 }
+        try await waitUntilAsync { try await queue.count(accountID: account.id) == 4 }
         let sentBeforeAcceptance = await client.observations()
         XCTAssertEqual(sentBeforeAcceptance.count, 1)
-        let head = try await queue.first(accountID: account.id, deviceID: deviceID)
-        XCTAssertEqual(head?.record, .observation(sentBeforeAcceptance[0]))
+        let inflight = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: .distantFuture)
+        guard case .ready(let head) = inflight else { return XCTFail("Expected persisted in-flight batch") }
+        XCTAssertTrue(head.items.contains { $0.record == .observation(sentBeforeAcceptance[0]) })
 
         await client.finishNextObservation(error: .networkUnavailable)
         try await waitUntilAsync { await client.observations().count == 2 }
         let retried = await client.observations()
         XCTAssertEqual(retried[0], retried[1], "Response loss must replay the exact persisted record")
         let pendingAfterResponseLoss = try await queue.count(accountID: account.id)
-        XCTAssertEqual(pendingAfterResponseLoss, 3)
+        XCTAssertEqual(pendingAfterResponseLoss, 4)
 
         await client.finishNextObservation()
-        try await waitUntilAsync { await client.observations().count == 3 }
+        try await waitUntilAsync { await client.observations().count == 4 }
         let sentAfterAcceptance = await client.observations()
         let periodic = sentAfterAcceptance[2]
         XCTAssertEqual(periodic.metadata.observedAt, source.date(5))
@@ -302,8 +303,6 @@ final class CollectorObservationTests: XCTestCase {
         XCTAssertEqual(detail.window, .captured(title: ActivityPrivacyFilter.title("Example browser window")))
         XCTAssertFalse(model.diagnosticSnapshot().contains(String(repeating: "a", count: 100)))
 
-        await client.finishNextObservation()
-        try await waitUntilAsync { await client.observations().count == 4 }
         await client.finishNextObservation()
         try await waitUntilAsync { try await queue.count(accountID: account.id) == 0 }
         let sent = await client.observations()
@@ -336,14 +335,17 @@ final class CollectorObservationTests: XCTestCase {
         let client = ObservationAPIClient()
         let account = Account(id: UUID(), provider: .kakao, createdAt: .now, lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
         let deviceID = UUID()
-        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue)
+        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { .distantFuture })
         await model.synchronizationAccountChanged(account)
         try await waitUntilAsync { await client.observations().count == 1 }
         source.advance(to: 5)
         model.pollCurrentActivity()
-        try await waitUntilAsync { try await queue.count(accountID: account.id) == 2 }
-        let saved = try await queue.first(accountID: account.id, deviceID: deviceID)
-        guard case .observation(let observation)? = saved?.record else {
+        try await waitUntilAsync { try await queue.count(accountID: account.id) == 3 }
+        let saved = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: .distantFuture)
+        guard case .ready(let batch) = saved,
+              let observation = batch.items.compactMap({ item -> ActivityObservation? in
+                  if case .observation(let value) = item.record { return value }; return nil
+              }).first else {
             return XCTFail("Expected a persisted protected observation")
         }
         XCTAssertEqual(observation.context, .opaque)
@@ -607,18 +609,19 @@ private actor ObservationAPIClient: MosemoAPIClient {
     func signOut() async throws { fatalError("unused") }
     func fetch(day: TimelineDate, timeZoneID: String) async throws -> TimelineDay { fatalError("unused") }
 
-    func createActivity(_ record: ActivityRecord) async throws -> ActivityCreateResult {
-        switch record {
-        case .collectionStateChanged(let state):
-            return ActivityCreateResult(eventID: state.metadata.eventID, receivedAt: state.metadata.observedAt)
-        case .observation(let observation):
-            sent.append(observation)
+    func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult {
+        let observations = batch.items.compactMap { item -> ActivityObservation? in
+            if case .observation(let value) = item.record { return value }
+            return nil
+        }
+        if !observations.isEmpty {
+            sent.append(contentsOf: observations)
             activeRequests += 1
             maximumRequests = max(maximumRequests, activeRequests)
             defer { activeRequests -= 1 }
             try await withCheckedThrowingContinuation { pending.append($0) }
-            return ActivityCreateResult(eventID: observation.metadata.eventID, receivedAt: observation.metadata.observedAt)
         }
+        return ActivityBatchResult(batchID: batch.id)
     }
 
     func finishNextObservation(error: MosemoAPIError? = nil) {

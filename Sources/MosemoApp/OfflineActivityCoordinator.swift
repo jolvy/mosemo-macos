@@ -65,9 +65,16 @@ final class OfflineActivityCoordinator {
     private var deviceID: UUID?
     private var generation = 0
     private var isSending = false
+    private var sendRequested = false
     private var blockedGeneration: Int?
     private var blockedStatus: String?
     private var sendTask: Task<Void, Never>?
+    private var batchWaitTask: Task<Void, Never>?
+    private var batchAuthorizationID = UUID()
+    private let batchClock: @Sendable () -> Date
+    private let makeBatchID: @Sendable () -> UUID
+    private let sleepBeforeBatch: @Sendable (TimeInterval) async -> Void
+    private let onAuthenticationFailure: @MainActor (UUID) -> Void
     private var pendingWrites: [PendingWrite] = []
     private var writeTask: Task<Void, Never>?
     private var storageFailureLatched = false
@@ -80,14 +87,22 @@ final class OfflineActivityCoordinator {
 
     init(queue: EncryptedActivityQueue, client: any MosemoAPIClient,
          deviceStateStore: any DeviceRegistrationStateStoring,
+         batchClock: @escaping @Sendable () -> Date = { .now },
+         makeBatchID: @escaping @Sendable () -> UUID = { UUID() },
+         sleepBeforeBatch: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
          focusClock: @escaping @MainActor () -> Date = { .now },
          sleepBeforeRetry: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
              try? await Task.sleep(for: .seconds(seconds))
          },
-         retryJitter: @escaping @Sendable () -> Double = { Double.random(in: 0.5...1.0) },
+         retryJitter: @escaping @Sendable () -> Double = { Double.random(in: 0...1) },
+         onAuthenticationFailure: @escaping @MainActor (UUID) -> Void = { _ in },
          onStorageFailure: @escaping @MainActor () -> Void = {},
          onActivityAccepted: @escaping @MainActor (UUID) -> Void = { _ in },
          onStatus: @escaping @MainActor (Int, String) -> Void) {
+        self.batchClock = batchClock
+        self.makeBatchID = makeBatchID
+        self.sleepBeforeBatch = sleepBeforeBatch
+        self.onAuthenticationFailure = onAuthenticationFailure
         self.focusClock = focusClock
         self.queue = queue
         self.client = client
@@ -103,8 +118,7 @@ final class OfflineActivityCoordinator {
         focusSessionID = nil
         focusWindows.removeAll()
         sendTask?.cancel()
-        sendTask = nil
-        isSending = false
+        batchWaitTask?.cancel()
         generation += 1
         blockedGeneration = nil
         blockedStatus = nil
@@ -112,6 +126,9 @@ final class OfflineActivityCoordinator {
         let currentGeneration = generation
         self.account = account
         deviceID = nil
+        batchAuthorizationID = UUID()
+        await queue.authorizeBatchAcknowledgements(account == nil ? nil : batchAuthorizationID)
+        guard generation == currentGeneration else { return }
         guard let account else {
             let count = (try? await queue.count()) ?? 0
             guard generation == currentGeneration else { return }
@@ -268,6 +285,7 @@ final class OfflineActivityCoordinator {
                 guard generation == pending.generation else { continue }
                 await updateCount(status: "동기화 대기", expectedGeneration: pending.generation)
                 guard generation == pending.generation else { continue }
+                batchWaitTask?.cancel()
                 sendNext(generation: pending.generation)
             } catch {
                 storageFailureLatched = true
@@ -285,18 +303,27 @@ final class OfflineActivityCoordinator {
     }
 
     private func sendNext(generation expectedGeneration: Int) {
-        guard !isSending, blockedGeneration != expectedGeneration,
+        guard blockedGeneration != expectedGeneration,
               generation == expectedGeneration, let account, let deviceID else { return }
+        if isSending { sendRequested = true; return }
         isSending = true
         sendTask = Task { [weak self] in
             guard let self else { return }
+            let authorizationID = batchAuthorizationID
+            var drainBacklog = false
+            defer {
+                isSending = false
+                sendTask = nil
+                if generation != expectedGeneration || sendRequested { sendNext(generation: generation) }
+            }
             while !Task.isCancelled, generation == expectedGeneration {
-                let item: QueuedActivity?
+                sendRequested = false
+                let preparation: ActivityBatchPreparation
                 do {
-                    item = try await queue.first(accountID: account.id, deviceID: deviceID)
+                    preparation = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID,
+                        batchID: makeBatchID(), now: batchClock(), drainBacklog: drainBacklog)
                 } catch {
                     guard generation == expectedGeneration else { return }
-                    isSending = false
                     blockedGeneration = expectedGeneration
                     blockedStatus = "복구 필요 · 기록 보존 중"
                     await publishQueueStatus(accountID: account.id, status: "복구 필요 · 기록 보존 중",
@@ -304,53 +331,71 @@ final class OfflineActivityCoordinator {
                     return
                 }
                 guard generation == expectedGeneration, !Task.isCancelled else { return }
-                guard let item else {
-                    isSending = false
+                if case .waiting(let delay) = preparation {
+                    let sleep = sleepBeforeBatch
+                    let wait = Task { await sleep(delay) }
+                    batchWaitTask = wait
+                    await wait.value
+                    batchWaitTask = nil
+                    continue
+                }
+                guard case .ready(let batch) = preparation else {
                     let count = (try? await queue.count(accountID: account.id)) ?? 0
                     guard generation == expectedGeneration else { return }
                     publish(count: count, status: count == 0 ? "동기화 완료" : "동기화 대기")
-                    if count > 0 { sendNext(generation: expectedGeneration) }
                     return
                 }
                 let pendingCount = (try? await queue.count(accountID: account.id)) ?? 0
                 guard generation == expectedGeneration, !Task.isCancelled else { return }
                 publish(count: pendingCount, status: "활동 전송 중")
                 do {
-                    let result = try await client.createActivity(item.record)
+                    let result = try await client.createActivityBatch(batch)
                     guard generation == expectedGeneration else { return }
-                    guard result.eventID == item.eventID else {
-                        isSending = false
+                    guard result.batchID == batch.id else {
                         blockedGeneration = expectedGeneration
                         blockedStatus = "수락 확인 필요"
                         await publishQueueStatus(accountID: account.id, status: "수락 확인 필요",
                                                  expectedGeneration: expectedGeneration)
                         return
                     }
+                    try await queue.acknowledgeBatch(batchID: batch.id, accountID: account.id, deviceID: deviceID,
+                        eventIDs: batch.items.map(\.eventID), authorizationID: authorizationID)
+                    guard generation == expectedGeneration else { return }
                     onActivityAccepted(account.id)
-                    try await queue.acknowledge(accountID: account.id, deviceID: deviceID,
-                                                sequence: item.sequence, eventID: item.eventID)
+                    drainBacklog = true
                     guard generation == expectedGeneration else { return }
                     retryAttempt = 0
                     await updateCount(status: "동기화 대기", expectedGeneration: expectedGeneration)
                 } catch let error as MosemoAPIError {
                     guard generation == expectedGeneration else { return }
+                    if error == .activityBatchRejectedTooLarge {
+                        do {
+                            _ = try await queue.splitRejectedBatch(batch, newBatchID: makeBatchID(), authorizationID: authorizationID)
+                            drainBacklog = true
+                            continue
+                        } catch {
+                            guard generation == expectedGeneration else { return }
+                            blockedGeneration = expectedGeneration
+                            blockedStatus = "조치 필요 · 기록 보존 중"
+                            await publishQueueStatus(accountID: account.id, status: blockedStatus!, expectedGeneration: expectedGeneration)
+                            return
+                        }
+                    }
                     if isRetryable(error) {
                         retryAttempt += 1
-                        let base = min(60.0, pow(2.0, Double(min(retryAttempt - 1, 6))))
                         let retryAfter: TimeInterval
                         if case .retryableServerError(_, let suppliedDelay) = error {
                             retryAfter = suppliedDelay ?? 0
                         } else {
                             retryAfter = 0
                         }
-                        let jitter = min(1.0, max(0.5, retryJitter()))
-                        let delay = max(retryAfter, base * jitter)
+                        let delay = ActivityBatchRetryPolicy.delay(attempt: retryAttempt - 1, jitter: retryJitter(), retryAfter: retryAfter)
                         await publishQueueStatus(accountID: account.id, status: "자동 재시도 대기",
                                                  expectedGeneration: expectedGeneration)
                         await sleepBeforeRetry(delay)
                         continue
                     }
-                    isSending = false
+                    if error == .authenticationRequired { onAuthenticationFailure(account.id) }
                     blockedGeneration = expectedGeneration
                     blockedStatus = "조치 필요 · 기록 보존 중"
                     await publishQueueStatus(accountID: account.id, status: "조치 필요 · 기록 보존 중",
@@ -358,7 +403,6 @@ final class OfflineActivityCoordinator {
                     return
                 } catch {
                     guard generation == expectedGeneration else { return }
-                    isSending = false
                     blockedGeneration = expectedGeneration
                     blockedStatus = "조치 필요 · 기록 보존 중"
                     await publishQueueStatus(accountID: account.id, status: "조치 필요 · 기록 보존 중",
@@ -367,14 +411,13 @@ final class OfflineActivityCoordinator {
                 }
             }
             guard generation == expectedGeneration else { return }
-            isSending = false
             await updateCount(status: "동기화 대기", expectedGeneration: expectedGeneration)
         }
     }
 
     private func isRetryable(_ error: MosemoAPIError) -> Bool {
         switch error {
-        case .networkUnavailable, .timedOut, .serverError, .retryableServerError: true
+        case .networkUnavailable, .timedOut, .serverError, .retryableServerError, .activityQueueStorageFailed: true
         case .unexpectedResponse(let status): status == 408 || status == 429 || (500...599).contains(status)
         default: false
         }

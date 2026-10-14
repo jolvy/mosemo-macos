@@ -196,12 +196,8 @@ public enum ActivityPrivacyFilter {
     }
 }
 
-public struct ActivityCreateResult: Equatable, Sendable {
-    public let eventID: UUID
-    public let receivedAt: Date
+public struct ActivityBatchResult: Equatable, Sendable {
+    public let batchID: UUID
 
-    public init(eventID: UUID, receivedAt: Date) {
-        self.eventID = eventID
-        self.receivedAt = receivedAt
-    }
+    public init(batchID: UUID) { self.batchID = batchID }
 }

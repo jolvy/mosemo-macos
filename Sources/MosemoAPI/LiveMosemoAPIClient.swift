@@ -8,6 +8,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
     private let anonymousClient: any APIProtocol
     private let authenticatedClient: any APIProtocol
     private let tokenStore: any AccessTokenStoring
+    private let batchClient: @Sendable (Data) -> any APIProtocol
     private let now: @Sendable () -> Date
 
     public init(
@@ -31,6 +32,8 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
         let transport = URLSessionTransport(configuration: .init(session: session))
         let now: @Sendable () -> Date = { Date() }
         let configuration = Configuration(dateTranscoder: MosemoDateTranscoder())
+        let batchTransport = URLSessionTransport(configuration: .init(
+            session: URLSession(configuration: Self.batchSessionConfiguration()), httpBodyProcessingMode: .buffered))
 
         self.init(
             baseURL: baseURL,
@@ -45,7 +48,12 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
                 )]
             ),
             tokenStore: tokenStore,
-            now: now
+            now: now,
+            batchClient: { body in
+                Client(serverURL: baseURL, configuration: configuration,
+                    transport: ExactActivityBatchTransport(underlying: batchTransport, body: body, now: now),
+                    middlewares: [BearerAuthenticationMiddleware(tokenStore: tokenStore, now: now)])
+            }
         )
     }
 
@@ -54,13 +62,15 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
         anonymousClient: any APIProtocol,
         authenticatedClient: any APIProtocol,
         tokenStore: any AccessTokenStoring,
-        now: @escaping @Sendable () -> Date
+        now: @escaping @Sendable () -> Date,
+        batchClient: (@Sendable (Data) -> any APIProtocol)? = nil
     ) {
         self.baseURL = baseURL
         self.anonymousClient = anonymousClient
         self.authenticatedClient = authenticatedClient
         self.tokenStore = tokenStore
         self.now = now
+        self.batchClient = batchClient ?? { _ in authenticatedClient }
     }
 
     public func makeKakaoLoginURL(codeChallenge: String) throws -> URL {
@@ -191,71 +201,65 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
         }
     }
 
-    public func createActivity(
-        _ record: ActivityRecord
-    ) async throws -> ActivityCreateResult {
-        let request = try ActivityRequestMapper.request(from: record)
+    static func batchSessionConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        // Resource timeout bounds upload, headers and the entire response body, including trickle traffic.
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 15
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        return configuration
+    }
 
+    public func createActivityBatch(_ batch: ActivityBatch) async throws -> ActivityBatchResult {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            try MosemoDateTranscoder().decode(decoder.singleValueContainer().decode(String.self))
+        }
+        let request = try decoder.decode(Components.Schemas.ActivityBatchRequest.self, from: batch.body)
+        guard UUID(uuidString: request.batchId) == batch.id, UUID(uuidString: request.deviceId) == batch.deviceID,
+              request.records.count == batch.items.count, !request.records.isEmpty,
+              request.records.count <= 200, batch.body.count <= ActivityBatchPolicy.maximumBytes else {
+            throw MosemoAPIError.validationFailed
+        }
         do {
-            let response = try await authenticatedClient.activitiesCreate(
-                body: .json(request.payload)
-            )
+            let response = try await batchClient(batch.body).activitiesAcceptBatch(body: .json(request))
             switch response {
-            case .created(let response):
+            case .accepted(let response):
                 let result = try response.body.json
-                guard let eventID = UUID(uuidString: result.eventId),
-                      eventID == request.eventID else {
-                    throw MosemoAPIError.unexpectedResponse(statusCode: 201)
+                guard result.status == .accepted, let id = UUID(uuidString: result.batchId), id == batch.id else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 202)
                 }
-                return ActivityCreateResult(
-                    eventID: eventID,
-                    receivedAt: result.receivedAt
-                )
-            case .unauthorized:
-                throw MosemoAPIError.authenticationRequired
+                return ActivityBatchResult(batchID: id)
+            case .unauthorized: throw MosemoAPIError.authenticationRequired
             case .notFound(let response):
-                let error = try response.body.json.error
-                if error.status == "FOCUS_SESSION_NOT_FOUND" { throw MosemoAPIError.focusSessionNotFound }
-                guard error.status == "ACTIVITY_DEVICE_NOT_FOUND" else {
+                guard try response.body.json.error.status == "ACTIVITY_DEVICE_NOT_FOUND" else {
                     throw MosemoAPIError.unexpectedResponse(statusCode: 404)
                 }
                 throw MosemoAPIError.activityDeviceNotFound
-            case .methodNotAllowed:
-                throw Self.error(forHTTPStatus: 405)
-            case .conflict(let response):
-                let error = try response.body.json.error
-                switch error.status {
-                case "ACTIVITY_EVENT_ID_CONFLICT":
-                    throw MosemoAPIError.activityEventIDConflict
-                case "ACTIVITY_SEQUENCE_CONFLICT":
-                    throw MosemoAPIError.activitySequenceConflict
-                default:
-                    throw MosemoAPIError.unexpectedResponse(statusCode: 409)
+            case .contentTooLarge(let response):
+                guard try response.body.json.error.status == "ACTIVITY_BATCH_TOO_LARGE" else {
+                    throw MosemoAPIError.unexpectedResponse(statusCode: 413)
                 }
-            case .unprocessableContent:
-                throw MosemoAPIError.validationFailed
-            case .internalServerError:
-                throw MosemoAPIError.retryableServerError(statusCode: 500, retryAfter: nil)
+                throw MosemoAPIError.activityBatchRejectedTooLarge
+            case .unprocessableContent: throw MosemoAPIError.validationFailed
+            case .methodNotAllowed: throw MosemoAPIError.unexpectedResponse(statusCode: 405)
+            case .internalServerError: throw MosemoAPIError.retryableServerError(statusCode: 500, retryAfter: nil)
             case .serviceUnavailable(let response):
-                throw MosemoAPIError.retryableServerError(
-                    statusCode: 503,
-                    retryAfter: response.headers.retryAfter == ._1 ? 1 : nil
-                )
+                throw MosemoAPIError.retryableServerError(statusCode: 503, retryAfter: response.headers.retryAfter == ._1 ? 1 : nil)
             case .undocumented(let statusCode, let payload):
                 if statusCode == 408 || statusCode == 429 || (500...599).contains(statusCode) {
-                    throw MosemoAPIError.retryableServerError(
-                        statusCode: statusCode,
-                        retryAfter: Self.retryAfter(payload.headerFields[HTTPField.Name("Retry-After")!])
-                    )
+                    throw MosemoAPIError.retryableServerError(statusCode: statusCode,
+                        retryAfter: Self.retryAfter(payload.headerFields[HTTPField.Name("Retry-After")!]))
                 }
                 throw Self.error(forHTTPStatus: statusCode)
             }
         } catch {
-            let mappedError = Self.mapActivity(error)
-            if mappedError == .authenticationRequired {
-                try? await tokenStore.delete()
-            }
-            throw mappedError
+            // Token ownership is handled by the existing auth coordinator; a late batch response
+            // must not delete a token belonging to a newer authentication generation.
+            throw Self.mapActivity(error)
         }
     }
 
@@ -285,11 +289,9 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
                 throw Self.error(forHTTPStatus: statusCode)
             }
         } catch {
-            let mapped = Self.mapActivity(error)
-            if mapped == .authenticationRequired {
-                try? await tokenStore.delete()
-            }
-            throw mapped
+            // Polling can outlive an account/authentication switch. Report the error;
+            // the generation-aware view/auth coordinator owns token invalidation.
+            throw Self.mapActivity(error)
         }
     }
 

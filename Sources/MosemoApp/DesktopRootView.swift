@@ -38,6 +38,9 @@ struct DesktopRootView: View {
                 }
             }
         }
+        .onReceive(model.activityAuthenticationFailures) { accountID in
+            auth.timelineAuthenticationFailed(for: accountID)
+        }
         .task {
             await auth.restoreSession()
         }

@@ -112,7 +112,7 @@ jq -e '
     (.components.schemas.DeviceCreateResponse.properties.deviceId.format == "uuid") and
     (.paths["/api/v1/devices"].post.responses["401"] != null) and
     (.paths["/api/v1/devices"].post.responses["422"] != null) and
-    (.paths["/api/v1/activities"].post.operationId == "activitiesCreate") and
+    (.paths["/api/v1/activities/batches"].post.operationId == "activitiesAcceptBatch") and
     (.paths["/api/v1/activities/timeline"].get.operationId == "activitiesGetTimeline") and
     (.paths["/api/v1/activities/timeline"].get.parameters | any(
         .name == "date" and .in == "query" and .required == true and .schema.format == "date"
@@ -124,9 +124,16 @@ jq -e '
         | ($document.components.schemas[$schema].properties.endedAt.anyOf
             | map(.type) | sort == ["null", "string"])
     )) and
-    (["201", "401", "404", "405", "409", "422", "500"]
+    (["202", "401", "404", "405", "413", "422", "500", "503"]
         | all(. as $status
-            | $document.paths["/api/v1/activities"].post.responses[$status] != null)) and
+            | $document.paths["/api/v1/activities/batches"].post.responses[$status] != null)) and
+    (.paths["/api/v1/activities"].post == null) and
+    (.components.schemas.ActivityBatchRequest.required | sort == ["batchId", "deviceId", "records"]) and
+    (.components.schemas.ActivityBatchRequest.properties.records.minItems == 1) and
+    (.components.schemas.ActivityBatchRequest.properties.records.maxItems == 200) and
+    (.components.schemas.BatchActivityObservation.properties.deviceId == null) and
+    (.components.schemas.BatchCollectionStateChanged.properties.deviceId == null) and
+    (.components.schemas.ActivityBatchResponse.properties.receivedAt == null) and
     (.components.schemas.CapturedText.required
         | index("originalByteLength") == null) and
     (.components.schemas.CapturedText.properties.originalByteLength.anyOf
@@ -142,8 +149,8 @@ jq '
     (.components.schemas.FocusSessionResponse.properties.endedAt,
      .components.schemas.FocusSessionResponse.properties.workSeconds,
      .components.schemas.FocusSessionResponse.properties.labelId,
-     .components.schemas.ActivityObservation.properties.focusSessionId,
-     .components.schemas.CollectionStateChanged.properties.focusSessionId) |= without_null_branch |
+     .components.schemas.BatchActivityObservation.properties.focusSessionId,
+     .components.schemas.BatchCollectionStateChanged.properties.focusSessionId) |= without_null_branch |
     (.components.schemas.FocusSessionResponse.required) |= map(select(. != "endedAt" and . != "workSeconds" and . != "labelId")) |
     (.components.schemas.CapturedText.properties.originalByteLength) |= (
         . as $property
