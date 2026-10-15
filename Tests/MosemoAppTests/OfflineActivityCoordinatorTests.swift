@@ -138,7 +138,9 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
         let keyStore = ControllableQueueTestKeyStore()
         let queue = try EncryptedActivityQueue(databaseURL: directory.appendingPathComponent("queue.sqlite"),
                                                keyStore: keyStore)
-        let client = QueueTestClient(firstError: .validationFailed)
+        let sentCurrentAccount = expectation(description: "Current account send was attempted")
+        let client = QueueTestClient(firstError: .validationFailed,
+                                     onRecord: { sentCurrentAccount.fulfill() })
         let coordinator = OfflineActivityCoordinator(
             queue: queue,
             client: client,
@@ -165,12 +167,16 @@ final class OfflineActivityCoordinatorTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
 
+        // Persistence and network dispatch are separate asynchronous steps. Do not
+        // destructively inspect the queue before the sender has read its batch.
+        await fulfillment(of: [sentCurrentAccount], timeout: 3)
         let firstRecords = try await drainRecords(from: queue, accountID: firstAccount.id, deviceID: device)
         let secondRecords = try await drainRecords(from: queue, accountID: secondAccount.id, deviceID: device)
         let sentRecords = await client.records()
         XCTAssertEqual(firstRecords.map(\.kind), [.observation(bundleID: "com.example.first-account")])
         XCTAssertEqual(secondRecords.map(\.kind), [.observation(bundleID: "com.example.second-account")])
         XCTAssertEqual(sentRecords.count, 1)
+        guard sentRecords.count == 1 else { return }
         guard case .observation(let sentObservation) = sentRecords[0],
               case .detailed(let sentDetails) = sentObservation.context else {
             return XCTFail("Expected the current account observation to be sent")
@@ -671,10 +677,13 @@ private actor QueueTestClient: MosemoAPIClient {
     private var sentRecords: [ActivityRecord] = []
     private var sentBatches: [ActivityBatch] = []
     private let mismatchedAcknowledgement: Bool
+    private let onRecord: @Sendable () -> Void
 
-    init(firstError: MosemoAPIError? = nil, mismatchedAcknowledgement: Bool = false) {
+    init(firstError: MosemoAPIError? = nil, mismatchedAcknowledgement: Bool = false,
+         onRecord: @escaping @Sendable () -> Void = {}) {
         self.firstError = firstError
         self.mismatchedAcknowledgement = mismatchedAcknowledgement
+        self.onRecord = onRecord
     }
 
     nonisolated func makeKakaoLoginURL(codeChallenge: String) throws -> URL { fatalError("unused") }
@@ -688,6 +697,7 @@ private actor QueueTestClient: MosemoAPIClient {
         sentBatches.append(batch)
         sentSequences.append(contentsOf: batch.items.map(\.sequence))
         sentRecords.append(contentsOf: batch.items.map(\.record))
+        onRecord()
         activeRequests += 1
         maximumRequests = max(maximumRequests, activeRequests)
         try await Task.sleep(for: .milliseconds(20))
