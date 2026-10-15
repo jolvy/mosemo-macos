@@ -48,6 +48,11 @@ enum ActivityRequestMapper {
     private static func timezone(
         _ value: String
     ) throws -> Components.Schemas.Timezone {
+        // Foundation reports UTC as GMT on macOS (including CI runners).
+        switch value {
+        case "GMT", "Etc/GMT", "Etc/UTC": return .utc
+        default: break
+        }
         guard let timezone = Components.Schemas.Timezone(rawValue: value) else {
             throw MosemoAPIError.validationFailed
         }
