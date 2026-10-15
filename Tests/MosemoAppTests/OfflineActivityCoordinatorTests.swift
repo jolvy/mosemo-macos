@@ -812,6 +812,7 @@ extension OfflineActivityCoordinatorTests {
         }
         let records = await client.records()
         XCTAssertEqual(records.count, 2)
+        guard records.count == 2 else { return }
         if case .observation(let focused) = records[0] { XCTAssertEqual(focused.focusSessionID, focusID) } else { XCTFail("Expected observation") }
         if case .observation(let paused) = records[1] { XCTAssertNil(paused.focusSessionID) } else { XCTFail("Expected observation") }
     }
