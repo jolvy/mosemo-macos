@@ -678,7 +678,7 @@ extension LiveMosemoAPIClient: LabelReviewReading {
         case "LABELING_SEGMENT_NOT_LABELABLE": reason = .segmentNotLabelable
         case "LABEL_NOT_AVAILABLE": reason = .labelNotAvailable
         case "ACTIVITY_TIMELINE_BUSY": reason = .timelineBusy
-        case "VALIDATION_ERROR": reason = .validationFailed
+        case "INVALID_ARGUMENT": reason = .validationFailed
         default: reason = .other(error.status)
         }
         return LabelConfirmationRejection(reason: reason, failedIndex: index, retryAfter: retryAfter)
