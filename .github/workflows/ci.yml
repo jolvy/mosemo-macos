@@ -25,7 +25,7 @@ jobs:
         with:
           repository: jolvy/mosemo
           # Contract used by this client; update together with generated sources.
-          ref: 84dcd3f210387429c2c97c0f3693187263ca8788
+          ref: 4f79e0fe1f44c24e783655afba6d6363e6400434
           path: mosemo-server
           persist-credentials: false
 

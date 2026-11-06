@@ -173,7 +173,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
             )
             switch response {
             case .created(let response):
-                guard let id = UUID(uuidString: try response.body.json.deviceId),
+                guard let id = UUID(uuidString: try response.body.json.id),
                     Self.isVersion7(id)
                 else {
                     throw MosemoAPIError.unexpectedResponse(statusCode: 201)
@@ -306,7 +306,7 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
     private static func account(
         from response: Components.Schemas.AccountResponse
     ) throws -> Account {
-        guard let id = UUID(uuidString: response.accountId) else {
+        guard let id = UUID(uuidString: response.id) else {
             throw MosemoAPIError.unexpectedResponse(statusCode: 200)
         }
         let provider: AccountProvider
@@ -453,7 +453,7 @@ extension LiveMosemoAPIClient: LabelReviewReading {
             switch response {
             case .ok(let result):
                 return try result.body.json.map { label in
-                    guard let id = UUID(uuidString: label.labelId) else {
+                    guard let id = UUID(uuidString: label.id) else {
                         throw MosemoAPIError.unexpectedResponse(statusCode: 200)
                     }
                     return LabelCatalogEntry(
@@ -492,7 +492,7 @@ extension LiveMosemoAPIClient: LabelReviewReading {
                         return []
                     }
                     return try group.segments.map { segment in
-                        guard let id = UUID(uuidString: segment.segmentId) else {
+                        guard let id = UUID(uuidString: segment.id) else {
                             throw MosemoAPIError.unexpectedResponse(statusCode: 200)
                         }
                         return PendingLabelTimelineSegment(
@@ -672,10 +672,10 @@ extension LiveMosemoAPIClient: LabelReviewReading {
         }.first
         let reason: LabelConfirmationRejectionReason
         switch error.status {
-        case "ACTIVITY_LABEL_CONFIRMATION_CONFLICT": reason = .priorConfirmationConflict
-        case "ACTIVITY_SEGMENT_CHANGED": reason = .segmentChanged
-        case "ACTIVITY_SEGMENT_NOT_FOUND": reason = .segmentNotFound
-        case "ACTIVITY_SEGMENT_NOT_LABELABLE": reason = .segmentNotLabelable
+        case "LABELING_CONFIRMATION_CONFLICT": reason = .priorConfirmationConflict
+        case "LABELING_SEGMENT_CHANGED": reason = .segmentChanged
+        case "LABELING_SEGMENT_NOT_FOUND": reason = .segmentNotFound
+        case "LABELING_SEGMENT_NOT_LABELABLE": reason = .segmentNotLabelable
         case "LABEL_NOT_AVAILABLE": reason = .labelNotAvailable
         case "ACTIVITY_TIMELINE_BUSY": reason = .timelineBusy
         case "VALIDATION_ERROR": reason = .validationFailed
@@ -704,7 +704,7 @@ extension LiveMosemoAPIClient: LabelReviewReading {
 extension LiveMosemoAPIClient: FocusSessionServing {
     public func startFocusSession(id: UUID, deviceID: UUID, startedAt: Date, targetSeconds: Int) async throws -> FocusSessionRecord {
         do {
-            let output = try await authenticatedClient.focusSessionsCreate(body: .json(.init(deviceId: deviceID.uuidString, sessionId: id.uuidString, startedAt: startedAt, targetSeconds: targetSeconds)))
+            let output = try await authenticatedClient.focusSessionsCreate(body: .json(.init(deviceId: deviceID.uuidString, id: id.uuidString, startedAt: startedAt, targetSeconds: targetSeconds)))
             switch output {
             case .created(let response): return try Self.focusRecord(response.body.json)
             case .unauthorized: throw MosemoAPIError.authenticationRequired
@@ -720,7 +720,7 @@ extension LiveMosemoAPIClient: FocusSessionServing {
 
     public func completeFocusSession(id: UUID, endedAt: Date, workSeconds: Int, labelID: UUID, description: String) async throws -> FocusSessionRecord {
         do {
-            let output = try await authenticatedClient.focusSessionsComplete(path: .init(sessionId: id.uuidString), body: .json(.init(description: description, endedAt: endedAt, labelId: labelID.uuidString, workSeconds: workSeconds)))
+            let output = try await authenticatedClient.focusSessionsComplete(path: .init(focusSessionId: id.uuidString), body: .json(.init(description: description, endedAt: endedAt, labelId: labelID.uuidString, workSeconds: workSeconds)))
             switch output {
             case .ok(let response): return try Self.focusRecord(response.body.json)
             case .unauthorized: throw MosemoAPIError.authenticationRequired
@@ -751,7 +751,7 @@ extension LiveMosemoAPIClient: FocusSessionServing {
     }
 
     private static func focusRecord(_ response: Components.Schemas.FocusSessionResponse) throws -> FocusSessionRecord {
-        guard let id = UUID(uuidString: response.sessionId), let deviceID = UUID(uuidString: response.deviceId) else { throw MosemoAPIError.unexpectedResponse(statusCode: 200) }
+        guard let id = UUID(uuidString: response.id), let deviceID = UUID(uuidString: response.deviceId) else { throw MosemoAPIError.unexpectedResponse(statusCode: 200) }
         let labelID = response.labelId.flatMap(UUID.init(uuidString:))
         guard response.labelId == nil || labelID != nil else { throw MosemoAPIError.unexpectedResponse(statusCode: 200) }
         return FocusSessionRecord(id: id, deviceID: deviceID, startedAt: response.startedAt, endedAt: response.endedAt, targetSeconds: response.targetSeconds, workSeconds: response.workSeconds, labelID: labelID, description: response.description)

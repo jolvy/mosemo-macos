@@ -109,7 +109,7 @@ jq -e '
     )) and
     (.paths["/api/v1/devices"].post.responses["201"].content["application/json"].schema."$ref"
         == "#/components/schemas/DeviceCreateResponse") and
-    (.components.schemas.DeviceCreateResponse.properties.deviceId.format == "uuid") and
+    (.components.schemas.DeviceCreateResponse.properties.id.format == "uuid") and
     (.paths["/api/v1/devices"].post.responses["401"] != null) and
     (.paths["/api/v1/devices"].post.responses["422"] != null) and
     (.paths["/api/v1/activities/batches"].post.operationId == "activitiesAcceptBatch") and
