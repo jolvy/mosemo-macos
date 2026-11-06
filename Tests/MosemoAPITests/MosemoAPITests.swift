@@ -69,7 +69,7 @@ final class MosemoAPITests: XCTestCase {
         let client = makeClient(exchange: { _ in
             .unprocessableContent(.init(body: .json(makeErrorResponse(
                 code: 422,
-                status: "VALIDATION_ERROR",
+                status: "INVALID_ARGUMENT",
                 message: "validation failed"
             ))))
         })
@@ -1699,6 +1699,7 @@ final class MosemoAPITests: XCTestCase {
             (.conflict, "LABELING_SEGMENT_NOT_LABELABLE", .segmentNotLabelable),
             (.conflict, "LABELING_SEGMENT_CHANGED", .segmentChanged),
             (.conflict, "LABELING_CONFIRMATION_CONFLICT", .priorConfirmationConflict),
+            (.unprocessableContent, "INVALID_ARGUMENT", .validationFailed),
         ]
         for (httpStatus, status, expected) in cases {
             let body = Data(#"{"error":{"code":\#(httpStatus.code),"status":"\#(status)","message":"rejected","details":[{"loc":["body","items",0],"msg":"rejected","type":"\#(status.lowercased())"}]}}"#.utf8)
