@@ -24,8 +24,8 @@ final class MosemoAPITests: XCTestCase {
             },
             getMe: { _ in
                 .ok(.init(body: .json(.init(
-                    accountId: accountID.uuidString,
                     createdAt: createdAt,
+                    id: accountID.uuidString,
                     lastAuthenticatedAt: authenticatedAt,
                     provider: .kakao,
                     timezone: .asiaSeoul
@@ -169,7 +169,7 @@ final class MosemoAPITests: XCTestCase {
             },
             "segments": [
               {
-                "segmentId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000001",
                 "startedAt": "2026-09-14T00:00:00.123456Z",
                 "endedAt": "2026-09-14T00:00:00.123456Z",
                 "lastObservedAt": "2026-09-14T00:00:00.123456Z",
@@ -211,7 +211,7 @@ final class MosemoAPITests: XCTestCase {
             ]
           },
           {
-            "segmentId": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000002",
             "startedAt": "2026-09-14T00:00:00Z",
             "endedAt": null,
             "lastObservedAt": "2026-09-14T00:00:01Z",
@@ -221,14 +221,14 @@ final class MosemoAPITests: XCTestCase {
             "itemType": "opaque_activity"
           },
           {
-            "segmentId": "00000000-0000-0000-0000-000000000003",
+            "id": "00000000-0000-0000-0000-000000000003",
             "startedAt": "2026-09-14T00:00:01Z",
             "endedAt": null,
             "reason": "screen_locked",
             "itemType": "capture_gap"
           },
           {
-            "segmentId": "00000000-0000-0000-0000-000000000004",
+            "id": "00000000-0000-0000-0000-000000000004",
             "startedAt": "2026-09-14T00:00:02Z",
             "endedAt": null,
             "lastObservedAt": "2026-09-14T00:00:02Z",
@@ -404,7 +404,7 @@ final class MosemoAPITests: XCTestCase {
             uuidString: "01890F8E-7B5A-7CC0-98C7-8F3E12345678"
         )!
         let client = makeClient(devicesCreate: { _ in
-            .created(.init(body: .json(.init(deviceId: deviceID.uuidString))))
+            .created(.init(body: .json(.init(id: deviceID.uuidString))))
         })
 
         let device = try await client.registerDevice(idempotencyKey: UUID())
@@ -418,7 +418,7 @@ final class MosemoAPITests: XCTestCase {
             "550E8400-E29B-41D4-A716-446655440000",
         ] {
             let client = makeClient(devicesCreate: { _ in
-                .created(.init(body: .json(.init(deviceId: id))))
+                .created(.init(body: .json(.init(id: id))))
             })
 
             await assertAPIError(.unexpectedResponse(statusCode: 201)) {
@@ -432,7 +432,7 @@ final class MosemoAPITests: XCTestCase {
             value: "registration-token",
             expiresAt: now.addingTimeInterval(60)
         ))
-        for data in [Data(), Data("{}".utf8), Data(#"{"deviceId":12}"#.utf8)] {
+        for data in [Data(), Data("{}".utf8), Data(#"{"id":12}"#.utf8)] {
             let transport = RecordingClientTransport { _, _, _, _ in
                 (
                     HTTPResponse(
@@ -1449,8 +1449,8 @@ final class MosemoAPITests: XCTestCase {
         let recorder = RequestRecorder()
         let body = Data(#"""
         [
-          {"labelId":"11111111-1111-1111-1111-111111111111","displayName":"코딩","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-25T00:00:00Z","archivedAt":null},
-          {"labelId":"22222222-2222-2222-2222-222222222222","displayName":"옛 라벨","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-26T00:00:00Z","archivedAt":"2026-09-27T00:00:00Z"}
+          {"id":"11111111-1111-1111-1111-111111111111","displayName":"코딩","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-25T00:00:00Z","archivedAt":null},
+          {"id":"22222222-2222-2222-2222-222222222222","displayName":"옛 라벨","createdAt":"2026-09-20T00:00:00Z","updatedAt":"2026-09-26T00:00:00Z","archivedAt":"2026-09-27T00:00:00Z"}
         ]
         """#.utf8)
         let transport = RecordingClientTransport { request, requestBody, baseURL, operationID in
@@ -1508,7 +1508,7 @@ final class MosemoAPITests: XCTestCase {
         ))
         let recorder = RequestRecorder()
         let body = Data(#"""
-        [{"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"pending","selection":null,"segments":[{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"captured","title":{"status":"captured","value":"Editor.swift"}},"web":{"kind":"not_applicable"}}}]}]
+        [{"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"pending","selection":null,"segments":[{"id":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"captured","title":{"status":"captured","value":"Editor.swift"}},"web":{"kind":"not_applicable"}}}]}]
         """#.utf8)
         let transport = RecordingClientTransport { request, requestBody, baseURL, operationID in
             await recorder.record(request: request, hasBody: requestBody != nil,
@@ -1541,7 +1541,7 @@ final class MosemoAPITests: XCTestCase {
         ]
         let segments = webValues.enumerated().map { index, web in
             """
-            {"segmentId":"00000000-0000-0000-0000-00000000000\(index + 1)","segmentVersion":"\(String(repeating: "b", count: 64))","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Chrome"}},"window":{"status":"captured","title":{"status":"captured","value":"Window title"}},"web":\(web)}}
+            {"id":"00000000-0000-0000-0000-00000000000\(index + 1)","segmentVersion":"\(String(repeating: "b", count: 64))","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Chrome"}},"window":{"status":"captured","title":{"status":"captured","value":"Window title"}},"web":\(web)}}
             """
         }.joined(separator: ",")
         let body = Data("""
@@ -1614,10 +1614,10 @@ final class MosemoAPITests: XCTestCase {
     func testLabelTimelineIgnoresConfirmedOpenOpaqueAndCaptureGapItems() async throws {
         let body = Data(#"""
         [
-          {"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"confirmed","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222","displayName":"코딩"},"segments":[{"segmentId":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}}]},
-          {"itemType":"in_progress_activity","segmentId":"33333333-3333-3333-3333-333333333333","startedAt":"2026-09-26T00:05:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:06:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}},
-          {"itemType":"opaque_activity","segmentId":"44444444-4444-4444-4444-444444444444","startedAt":"2026-09-26T00:06:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:07:00Z","context":{"kind":"opaque"}},
-          {"itemType":"capture_gap","segmentId":"55555555-5555-5555-5555-555555555555","startedAt":"2026-09-26T00:07:00Z","endedAt":null,"reason":"paused"}
+          {"itemType":"activity_group","groupVersion":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","state":"confirmed","selection":{"kind":"label","labelId":"22222222-2222-2222-2222-222222222222","displayName":"코딩"},"segments":[{"id":"11111111-1111-1111-1111-111111111111","segmentVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","startedAt":"2026-09-26T00:00:00Z","endedAt":"2026-09-26T00:05:00Z","lastObservedAt":"2026-09-26T00:04:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}}]},
+          {"itemType":"in_progress_activity","id":"33333333-3333-3333-3333-333333333333","startedAt":"2026-09-26T00:05:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:06:00Z","context":{"kind":"detailed","app":{"bundleId":{"status":"absent"},"name":{"status":"captured","value":"Xcode"}},"window":{"status":"absent"},"web":{"kind":"not_applicable"}}},
+          {"itemType":"opaque_activity","id":"44444444-4444-4444-4444-444444444444","startedAt":"2026-09-26T00:06:00Z","endedAt":null,"lastObservedAt":"2026-09-26T00:07:00Z","context":{"kind":"opaque"}},
+          {"itemType":"capture_gap","id":"55555555-5555-5555-5555-555555555555","startedAt":"2026-09-26T00:07:00Z","endedAt":null,"reason":"paused"}
         ]
         """#.utf8)
         let transport = RecordingClientTransport { _, _, _, _ in
@@ -1673,7 +1673,7 @@ final class MosemoAPITests: XCTestCase {
     }
 
     func testBatchConfirmationMapsPriorSelectionConflictAndFailedItem() async throws {
-        let body = Data(#"{"error":{"code":409,"status":"ACTIVITY_LABEL_CONFIRMATION_CONFLICT","message":"conflict","details":[{"loc":["body","items",1,"selection"],"msg":"conflict","type":"activity_label_confirmation_conflict"}]}}"#.utf8)
+        let body = Data(#"{"error":{"code":409,"status":"LABELING_CONFIRMATION_CONFLICT","message":"conflict","details":[{"loc":["body","items",1,"selection"],"msg":"conflict","type":"labeling_confirmation_conflict"}]}}"#.utf8)
         let transport = RecordingClientTransport { _, _, _, _ in
             (HTTPResponse(status: .conflict, headerFields: [.contentType: "application/json"]), HTTPBody(body))
         }
@@ -1690,6 +1690,35 @@ final class MosemoAPITests: XCTestCase {
         } catch let error as LabelConfirmationRejection {
             XCTAssertEqual(error.reason, .priorConfirmationConflict)
             XCTAssertEqual(error.failedIndex, 1)
+        }
+    }
+
+    func testBatchConfirmationMapsLabelingRejectionStatusesToSpecificReasons() async throws {
+        let cases: [(HTTPResponse.Status, String, LabelConfirmationRejectionReason)] = [
+            (.notFound, "LABELING_SEGMENT_NOT_FOUND", .segmentNotFound),
+            (.conflict, "LABELING_SEGMENT_NOT_LABELABLE", .segmentNotLabelable),
+            (.conflict, "LABELING_SEGMENT_CHANGED", .segmentChanged),
+            (.conflict, "LABELING_CONFIRMATION_CONFLICT", .priorConfirmationConflict),
+        ]
+        for (httpStatus, status, expected) in cases {
+            let body = Data(#"{"error":{"code":\#(httpStatus.code),"status":"\#(status)","message":"rejected","details":[{"loc":["body","items",0],"msg":"rejected","type":"\#(status.lowercased())"}]}}"#.utf8)
+            let transport = RecordingClientTransport { _, _, _, _ in
+                (HTTPResponse(status: httpStatus, headerFields: [.contentType: "application/json"]), HTTPBody(body))
+            }
+            let client = makeTransportClient(
+                tokenStore: MemoryAccessTokenStore(token: .init(value: "review-token", expiresAt: now.addingTimeInterval(60))),
+                transport: transport
+            )
+
+            do {
+                try await client.confirmSegmentLabels([
+                    .init(segmentID: UUID(), segmentVersion: String(repeating: "a", count: 64), selection: .unclassified)
+                ])
+                XCTFail("Expected rejection for \(status)")
+            } catch let error as LabelConfirmationRejection {
+                XCTAssertEqual(error.reason, expected, status)
+                XCTAssertEqual(error.failedIndex, 0, status)
+            }
         }
     }
 
@@ -1816,7 +1845,7 @@ private func makeErrorResponse(
 }
 
 private func makeDeviceResponse(id: String) -> Data {
-    Data(#"{"deviceId":"\#(id)"}"#.utf8)
+    Data(#"{"id":"\#(id)"}"#.utf8)
 }
 
 private func deviceOutput(statusCode: Int) -> Operations.DevicesCreate.Output {
@@ -2064,7 +2093,7 @@ extension MosemoAPITests {
             XCTAssertEqual(request.headerFields[.authorization], "Bearer test-focus-token")
             if let body { await recorder.record(request: request, operationID: operation, body: Data(try await Array(collecting: body, upTo: 10000))) }
             let completed = operation != "focusSessionsCreate"
-            let value: [String: Any] = ["sessionId": id.uuidString, "deviceId": deviceID.uuidString, "startedAt": "2026-10-07T00:00:00.123456Z", "endedAt": completed ? "2026-10-07T00:20:00.123456Z" : NSNull(), "targetSeconds": 1200, "workSeconds": completed ? 1100 : NSNull(), "labelId": completed ? labelID.uuidString : NSNull(), "description": ""]
+            let value: [String: Any] = ["id": id.uuidString, "deviceId": deviceID.uuidString, "startedAt": "2026-10-07T00:00:00.123456Z", "endedAt": completed ? "2026-10-07T00:20:00.123456Z" : NSNull(), "targetSeconds": 1200, "workSeconds": completed ? 1100 : NSNull(), "labelId": completed ? labelID.uuidString : NSNull(), "description": ""]
             let response = try JSONSerialization.data(withJSONObject: operation == "focusSessionsList" ? [value] : value)
             return (HTTPResponse(status: operation == "focusSessionsCreate" ? .created : .ok, headerFields: [.contentType: "application/json"]), HTTPBody(response))
         }
@@ -2080,6 +2109,9 @@ extension MosemoAPITests {
         XCTAssertEqual(history, [finished])
         let requests = await recorder.requests()
         XCTAssertEqual(requests[0].request.path, "/api/v1/focus-sessions")
+        let createBody = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[0].body) as? [String: Any])
+        XCTAssertEqual(createBody["id"] as? String, id.uuidString)
+        XCTAssertNil(createBody["sessionId"])
         XCTAssertEqual(requests[1].request.path, "/api/v1/focus-sessions/\(id.uuidString)/completion")
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].body) as? [String: Any])
         XCTAssertEqual(body["workSeconds"] as? Int, 1100)

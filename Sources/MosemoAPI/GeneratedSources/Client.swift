@@ -232,7 +232,7 @@ internal struct Client: APIProtocol {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -2167,8 +2167,8 @@ internal struct Client: APIProtocol {
     ///
     /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
     ///
-    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
-    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
     internal func focusSessionsComplete(_ input: Operations.FocusSessionsComplete.Input) async throws -> Operations.FocusSessionsComplete.Output {
         try await client.send(
             input: input,
@@ -2177,7 +2177,7 @@ internal struct Client: APIProtocol {
                 let path = try converter.renderedPath(
                     template: "/api/v1/focus-sessions/{}/completion",
                     parameters: [
-                        input.path.sessionId
+                        input.path.focusSessionId
                     ]
                 )
                 var request: HTTPTypes.HTTPRequest = .init(

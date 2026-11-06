@@ -20,7 +20,7 @@ internal protocol APIProtocol: Sendable {
     func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -85,8 +85,8 @@ internal protocol APIProtocol: Sendable {
     ///
     /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
     ///
-    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
-    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
     func focusSessionsComplete(_ input: Operations.FocusSessionsComplete.Input) async throws -> Operations.FocusSessionsComplete.Output
     /// 내 라벨 목록 조회
     ///
@@ -110,7 +110,7 @@ extension APIProtocol {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -241,8 +241,8 @@ extension APIProtocol {
     ///
     /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
     ///
-    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
-    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
     internal func focusSessionsComplete(
         path: Operations.FocusSessionsComplete.Input.Path,
         headers: Operations.FocusSessionsComplete.Input.Headers = .init(),
@@ -350,14 +350,14 @@ internal enum Components {
         ///
         /// - Remark: Generated from `#/components/schemas/AccountResponse`.
         internal struct AccountResponse: Codable, Hashable, Sendable {
-            /// Mosemo 계정의 고유 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/AccountResponse/accountId`.
-            internal var accountId: Swift.String
             /// 계정이 생성된 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/AccountResponse/createdAt`.
             internal var createdAt: Foundation.Date
+            /// Mosemo 계정의 고유 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/AccountResponse/id`.
+            internal var id: Swift.String
             /// 외부 인증 제공자를 통해 마지막으로 인증한 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/AccountResponse/lastAuthenticatedAt`.
@@ -373,27 +373,27 @@ internal enum Components {
             /// Creates a new `AccountResponse`.
             ///
             /// - Parameters:
-            ///   - accountId: Mosemo 계정의 고유 식별자입니다.
             ///   - createdAt: 계정이 생성된 시각입니다.
+            ///   - id: Mosemo 계정의 고유 식별자입니다.
             ///   - lastAuthenticatedAt: 외부 인증 제공자를 통해 마지막으로 인증한 시각입니다.
             ///   - provider: 계정 인증에 사용한 외부 인증 제공자입니다.
             ///   - timezone: 날짜 조회에 사용하는 계정의 지원 시간대입니다.
             internal init(
-                accountId: Swift.String,
                 createdAt: Foundation.Date,
+                id: Swift.String,
                 lastAuthenticatedAt: Foundation.Date,
                 provider: Components.Schemas.AccountProvider,
                 timezone: Components.Schemas.Timezone
             ) {
-                self.accountId = accountId
                 self.createdAt = createdAt
+                self.id = id
                 self.lastAuthenticatedAt = lastAuthenticatedAt
                 self.provider = provider
                 self.timezone = timezone
             }
             internal enum CodingKeys: String, CodingKey {
-                case accountId
                 case createdAt
+                case id
                 case lastAuthenticatedAt
                 case provider
                 case timezone
@@ -497,7 +497,7 @@ internal enum Components {
                 ])
             }
         }
-        /// 개발용 메모리 전달 수락 결과이며 DB 저장 완료를 보장하지 않습니다.
+        /// Kafka 발행 확인 결과이며 DB 처리 완료를 보장하지 않습니다.
         ///
         /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse`.
         internal struct ActivityBatchResponse: Codable, Hashable, Sendable {
@@ -505,13 +505,13 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/batchId`.
             internal var batchId: Swift.String
-            /// 제한된 메모리 전달 경로가 수락했습니다.
+            /// Kafka에서 배치 발행을 확인했습니다.
             ///
             /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/status`.
             internal enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
                 case accepted = "accepted"
             }
-            /// 제한된 메모리 전달 경로가 수락했습니다.
+            /// Kafka에서 배치 발행을 확인했습니다.
             ///
             /// - Remark: Generated from `#/components/schemas/ActivityBatchResponse/status`.
             internal var status: Components.Schemas.ActivityBatchResponse.StatusPayload
@@ -519,7 +519,7 @@ internal enum Components {
             ///
             /// - Parameters:
             ///   - batchId: 수락한 배치 식별자입니다.
-            ///   - status: 제한된 메모리 전달 경로가 수락했습니다.
+            ///   - status: Kafka에서 배치 발행을 확인했습니다.
             internal init(
                 batchId: Swift.String,
                 status: Components.Schemas.ActivityBatchResponse.StatusPayload
@@ -704,14 +704,14 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/id`.
+            internal var id: Swift.String
             /// 같은 문맥이 마지막으로 실제 관찰된 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/lastObservedAt`.
             internal var lastObservedAt: Foundation.Date
-            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 활동 구간 종류입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/ActivitySegmentResponse/segmentType`.
@@ -731,30 +731,30 @@ internal enum Components {
             /// - Parameters:
             ///   - context: 개인정보 필터 후 원본 전체 문맥입니다.
             ///   - endedAt: 관찰로 확인되거나 침묵으로 닫힌 종료 시각입니다.
+            ///   - id: 재구축 시 바뀔 수 있는 구간 식별자입니다.
             ///   - lastObservedAt: 같은 문맥이 마지막으로 실제 관찰된 시각입니다.
-            ///   - segmentId: 재구축 시 바뀔 수 있는 구간 식별자입니다.
             ///   - segmentType: 활동 구간 종류입니다.
             ///   - startedAt: 첫 활동 관찰 시각입니다.
             internal init(
                 context: Components.Schemas.ActivitySegmentResponse.ContextPayload,
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 lastObservedAt: Foundation.Date,
-                segmentId: Swift.String,
                 segmentType: Components.Schemas.ActivitySegmentResponse.SegmentTypePayload,
                 startedAt: Foundation.Date
             ) {
                 self.context = context
                 self.endedAt = endedAt
+                self.id = id
                 self.lastObservedAt = lastObservedAt
-                self.segmentId = segmentId
                 self.segmentType = segmentType
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case context
                 case endedAt
+                case id
                 case lastObservedAt
-                case segmentId
                 case segmentType
                 case startedAt
             }
@@ -1422,14 +1422,14 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/id`.
+            internal var id: Swift.String
             /// 첫 suspended의 수집 중단 사유입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/reason`.
             internal var reason: Swift.String
-            /// 재구축 시 바뀔 수 있는 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 수집 공백 종류입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/CaptureGapResponse/segmentType`.
@@ -1448,27 +1448,27 @@ internal enum Components {
             ///
             /// - Parameters:
             ///   - endedAt: 다음 실제 활동 관찰로 확인된 종료 시각입니다.
+            ///   - id: 재구축 시 바뀔 수 있는 구간 식별자입니다.
             ///   - reason: 첫 suspended의 수집 중단 사유입니다.
-            ///   - segmentId: 재구축 시 바뀔 수 있는 구간 식별자입니다.
             ///   - segmentType: 수집 공백 종류입니다.
             ///   - startedAt: 첫 suspended 관찰 시각입니다.
             internal init(
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 reason: Swift.String,
-                segmentId: Swift.String,
                 segmentType: Components.Schemas.CaptureGapResponse.SegmentTypePayload,
                 startedAt: Foundation.Date
             ) {
                 self.endedAt = endedAt
+                self.id = id
                 self.reason = reason
-                self.segmentId = segmentId
                 self.segmentType = segmentType
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case endedAt
+                case id
                 case reason
-                case segmentId
                 case segmentType
                 case startedAt
             }
@@ -1985,17 +1985,17 @@ internal enum Components {
         internal struct DeviceCreateResponse: Codable, Hashable, Sendable {
             /// 서버가 발급한 Device 식별자입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/DeviceCreateResponse/deviceId`.
-            internal var deviceId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/DeviceCreateResponse/id`.
+            internal var id: Swift.String
             /// Creates a new `DeviceCreateResponse`.
             ///
             /// - Parameters:
-            ///   - deviceId: 서버가 발급한 Device 식별자입니다.
-            internal init(deviceId: Swift.String) {
-                self.deviceId = deviceId
+            ///   - id: 서버가 발급한 Device 식별자입니다.
+            internal init(id: Swift.String) {
+                self.id = id
             }
             internal enum CodingKeys: String, CodingKey {
-                case deviceId
+                case id
             }
         }
         /// 공개 오류 envelope 안의 공통 payload입니다.
@@ -2202,8 +2202,8 @@ internal enum Components {
             internal var deviceId: Swift.String
             /// 재시도에도 유지하는 클라이언트 발급 세션 UUID입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/sessionId`.
-            internal var sessionId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/id`.
+            internal var id: Swift.String
             /// UTC 세션 시작 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/FocusSessionCreateRequest/startedAt`.
@@ -2216,23 +2216,23 @@ internal enum Components {
             ///
             /// - Parameters:
             ///   - deviceId: 세션을 시작한 등록 기기 식별자입니다.
-            ///   - sessionId: 재시도에도 유지하는 클라이언트 발급 세션 UUID입니다.
+            ///   - id: 재시도에도 유지하는 클라이언트 발급 세션 UUID입니다.
             ///   - startedAt: UTC 세션 시작 시각입니다.
             ///   - targetSeconds: 0이면 경과 시간, 양수이면 카운트다운 목표 초입니다.
             internal init(
                 deviceId: Swift.String,
-                sessionId: Swift.String,
+                id: Swift.String,
                 startedAt: Foundation.Date,
                 targetSeconds: Swift.Int
             ) {
                 self.deviceId = deviceId
-                self.sessionId = sessionId
+                self.id = id
                 self.startedAt = startedAt
                 self.targetSeconds = targetSeconds
             }
             internal enum CodingKeys: String, CodingKey {
                 case deviceId
-                case sessionId
+                case id
                 case startedAt
                 case targetSeconds
             }
@@ -2242,9 +2242,9 @@ internal enum Components {
                     Swift.String.self,
                     forKey: .deviceId
                 )
-                self.sessionId = try container.decode(
+                self.id = try container.decode(
                     Swift.String.self,
-                    forKey: .sessionId
+                    forKey: .id
                 )
                 self.startedAt = try container.decode(
                     Foundation.Date.self,
@@ -2256,7 +2256,7 @@ internal enum Components {
                 )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "deviceId",
-                    "sessionId",
+                    "id",
                     "startedAt",
                     "targetSeconds"
                 ])
@@ -2278,14 +2278,14 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 집중 세션 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/id`.
+            internal var id: Swift.String
             /// 완료 시 확정된 라벨입니다. 완료 전에는 null입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/labelId`.
             internal var labelId: Swift.String?
-            /// 집중 세션 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/sessionId`.
-            internal var sessionId: Swift.String
             /// UTC 세션 시작 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/FocusSessionResponse/startedAt`.
@@ -2304,8 +2304,8 @@ internal enum Components {
             ///   - description: 작업 설명입니다.
             ///   - deviceId: 세션을 시작한 등록 기기 식별자입니다.
             ///   - endedAt: UTC 종료 시각입니다. 기록 완료 전에는 null입니다.
+            ///   - id: 집중 세션 식별자입니다.
             ///   - labelId: 완료 시 확정된 라벨입니다. 완료 전에는 null입니다.
-            ///   - sessionId: 집중 세션 식별자입니다.
             ///   - startedAt: UTC 세션 시작 시각입니다.
             ///   - targetSeconds: 목표 초입니다. 0이면 경과 시간입니다.
             ///   - workSeconds: 일시중지를 제외한 작업 초입니다. 완료 전에는 null입니다.
@@ -2313,8 +2313,8 @@ internal enum Components {
                 description: Swift.String,
                 deviceId: Swift.String,
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 labelId: Swift.String? = nil,
-                sessionId: Swift.String,
                 startedAt: Foundation.Date,
                 targetSeconds: Swift.Int,
                 workSeconds: Swift.Int? = nil
@@ -2322,8 +2322,8 @@ internal enum Components {
                 self.description = description
                 self.deviceId = deviceId
                 self.endedAt = endedAt
+                self.id = id
                 self.labelId = labelId
-                self.sessionId = sessionId
                 self.startedAt = startedAt
                 self.targetSeconds = targetSeconds
                 self.workSeconds = workSeconds
@@ -2332,8 +2332,8 @@ internal enum Components {
                 case description
                 case deviceId
                 case endedAt
+                case id
                 case labelId
-                case sessionId
                 case startedAt
                 case targetSeconds
                 case workSeconds
@@ -2351,6 +2351,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/id`.
+            internal var id: Swift.String
             /// 아직 종료가 확인되지 않은 상세 활동입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/itemType`.
@@ -2365,10 +2369,6 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/lastObservedAt`.
             internal var lastObservedAt: Foundation.Date
-            /// 관찰 활동 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 관찰 구간 시작 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/InProgressActivityResponse/startedAt`.
@@ -2378,31 +2378,31 @@ internal enum Components {
             /// - Parameters:
             ///   - context: 개인정보 필터 후 상세 관찰 문맥입니다.
             ///   - endedAt: 종료가 아직 확인되지 않아 항상 null입니다.
+            ///   - id: 관찰 활동 구간 식별자입니다.
             ///   - itemType: 아직 종료가 확인되지 않은 상세 활동입니다.
             ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
-            ///   - segmentId: 관찰 활동 구간 식별자입니다.
             ///   - startedAt: 관찰 구간 시작 시각입니다.
             internal init(
                 context: Components.Schemas.DetailedActivityContext,
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 itemType: Components.Schemas.InProgressActivityResponse.ItemTypePayload,
                 lastObservedAt: Foundation.Date,
-                segmentId: Swift.String,
                 startedAt: Foundation.Date
             ) {
                 self.context = context
                 self.endedAt = endedAt
+                self.id = id
                 self.itemType = itemType
                 self.lastObservedAt = lastObservedAt
-                self.segmentId = segmentId
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case context
                 case endedAt
+                case id
                 case itemType
                 case lastObservedAt
-                case segmentId
                 case startedAt
             }
         }
@@ -2424,8 +2424,8 @@ internal enum Components {
             internal var displayName: Swift.String
             /// 라벨의 고유 식별자입니다.
             ///
-            /// - Remark: Generated from `#/components/schemas/LabelResponse/labelId`.
-            internal var labelId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/LabelResponse/id`.
+            internal var id: Swift.String
             /// 라벨 마지막 갱신 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/LabelResponse/updatedAt`.
@@ -2436,26 +2436,26 @@ internal enum Components {
             ///   - archivedAt: 보관 시각입니다. 사용 중인 라벨이면 null입니다.
             ///   - createdAt: 라벨 생성 시각입니다.
             ///   - displayName: 현재 라벨 표시 이름입니다.
-            ///   - labelId: 라벨의 고유 식별자입니다.
+            ///   - id: 라벨의 고유 식별자입니다.
             ///   - updatedAt: 라벨 마지막 갱신 시각입니다.
             internal init(
                 archivedAt: Foundation.Date? = nil,
                 createdAt: Foundation.Date,
                 displayName: Swift.String,
-                labelId: Swift.String,
+                id: Swift.String,
                 updatedAt: Foundation.Date
             ) {
                 self.archivedAt = archivedAt
                 self.createdAt = createdAt
                 self.displayName = displayName
-                self.labelId = labelId
+                self.id = id
                 self.updatedAt = updatedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case archivedAt
                 case createdAt
                 case displayName
-                case labelId
+                case id
                 case updatedAt
             }
         }
@@ -2552,6 +2552,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 수집 공백 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/id`.
+            internal var id: Swift.String
             /// 명시적인 수집 공백입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/itemType`.
@@ -2566,10 +2570,6 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/reason`.
             internal var reason: Swift.String
-            /// 수집 공백 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 수집 공백 시작 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineCaptureGapResponse/startedAt`.
@@ -2578,28 +2578,28 @@ internal enum Components {
             ///
             /// - Parameters:
             ///   - endedAt: 수집 공백 종료 시각입니다.
+            ///   - id: 수집 공백 구간 식별자입니다.
             ///   - itemType: 명시적인 수집 공백입니다.
             ///   - reason: 첫 수집 중단의 사유입니다.
-            ///   - segmentId: 수집 공백 구간 식별자입니다.
             ///   - startedAt: 수집 공백 시작 시각입니다.
             internal init(
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 itemType: Components.Schemas.LabelTimelineCaptureGapResponse.ItemTypePayload,
                 reason: Swift.String,
-                segmentId: Swift.String,
                 startedAt: Foundation.Date
             ) {
                 self.endedAt = endedAt
+                self.id = id
                 self.itemType = itemType
                 self.reason = reason
-                self.segmentId = segmentId
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case endedAt
+                case id
                 case itemType
                 case reason
-                case segmentId
                 case startedAt
             }
         }
@@ -2658,14 +2658,14 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/endedAt`.
             internal var endedAt: Foundation.Date
+            /// 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/id`.
+            internal var id: Swift.String
             /// 마지막 실제 관찰 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/lastObservedAt`.
             internal var lastObservedAt: Foundation.Date
-            /// 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 현재 관찰 구간의 불투명 version입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/LabelTimelineSegmentResponse/segmentVersion`.
@@ -2679,30 +2679,30 @@ internal enum Components {
             /// - Parameters:
             ///   - context: 개인정보 필터 후 상세 관찰 문맥입니다.
             ///   - endedAt: 종료가 확인된 관찰 구간 시각입니다.
+            ///   - id: 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
             ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
-            ///   - segmentId: 재구축 시 바뀔 수 있는 관찰 구간 식별자입니다.
             ///   - segmentVersion: 현재 관찰 구간의 불투명 version입니다.
             ///   - startedAt: 관찰 구간 시작 시각입니다.
             internal init(
                 context: Components.Schemas.DetailedActivityContext,
                 endedAt: Foundation.Date,
+                id: Swift.String,
                 lastObservedAt: Foundation.Date,
-                segmentId: Swift.String,
                 segmentVersion: Swift.String,
                 startedAt: Foundation.Date
             ) {
                 self.context = context
                 self.endedAt = endedAt
+                self.id = id
                 self.lastObservedAt = lastObservedAt
-                self.segmentId = segmentId
                 self.segmentVersion = segmentVersion
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case context
                 case endedAt
+                case id
                 case lastObservedAt
-                case segmentId
                 case segmentVersion
                 case startedAt
             }
@@ -2789,6 +2789,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/endedAt`.
             internal var endedAt: Foundation.Date?
+            /// 관찰 활동 구간 식별자입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/id`.
+            internal var id: Swift.String
             /// 불투명 활동입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/itemType`.
@@ -2803,10 +2807,6 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/lastObservedAt`.
             internal var lastObservedAt: Foundation.Date
-            /// 관찰 활동 구간 식별자입니다.
-            ///
-            /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/segmentId`.
-            internal var segmentId: Swift.String
             /// 관찰 구간 시작 시각입니다.
             ///
             /// - Remark: Generated from `#/components/schemas/OpaqueActivityResponse/startedAt`.
@@ -2816,31 +2816,31 @@ internal enum Components {
             /// - Parameters:
             ///   - context: 식별 정보가 제거된 관찰 문맥입니다.
             ///   - endedAt: 종료가 확인된 시각입니다.
+            ///   - id: 관찰 활동 구간 식별자입니다.
             ///   - itemType: 불투명 활동입니다.
             ///   - lastObservedAt: 마지막 실제 관찰 시각입니다.
-            ///   - segmentId: 관찰 활동 구간 식별자입니다.
             ///   - startedAt: 관찰 구간 시작 시각입니다.
             internal init(
                 context: Components.Schemas.OpaqueActivityContext,
                 endedAt: Foundation.Date? = nil,
+                id: Swift.String,
                 itemType: Components.Schemas.OpaqueActivityResponse.ItemTypePayload,
                 lastObservedAt: Foundation.Date,
-                segmentId: Swift.String,
                 startedAt: Foundation.Date
             ) {
                 self.context = context
                 self.endedAt = endedAt
+                self.id = id
                 self.itemType = itemType
                 self.lastObservedAt = lastObservedAt
-                self.segmentId = segmentId
                 self.startedAt = startedAt
             }
             internal enum CodingKeys: String, CodingKey {
                 case context
                 case endedAt
+                case id
                 case itemType
                 case lastObservedAt
-                case segmentId
                 case startedAt
             }
         }
@@ -3983,7 +3983,7 @@ internal enum Operations {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 개발용 메모리 경로에 수락합니다. DB 저장 완료 또는 내구성 있는 Kafka ACK를 보장하지 않으며 종료 시 미처리 원본이 유실될 수 있습니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -4050,7 +4050,7 @@ internal enum Operations {
                     self.body = body
                 }
             }
-            /// 메모리 전달 수락 결과입니다. DB 반영은 타임라인 조회로 확인합니다.
+            /// Kafka 발행 ACK를 확인한 결과이며 원본별 처리 성공·DB commit·Consumer offset commit을 뜻하지 않습니다. DB 반영은 타임라인 조회로 확인합니다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)/responses/202`.
             ///
@@ -8382,27 +8382,27 @@ internal enum Operations {
     ///
     /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
     ///
-    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{session_id}/completion`.
-    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)`.
+    /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
+    /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
     internal enum FocusSessionsComplete {
         internal static let id: Swift.String = "focusSessionsComplete"
         internal struct Input: Sendable, Hashable {
-            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/path`.
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/path`.
             internal struct Path: Sendable, Hashable {
                 /// 집중 세션 식별자입니다.
                 ///
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/path/session_id`.
-                internal var sessionId: Swift.String
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/path/focus_session_id`.
+                internal var focusSessionId: Swift.String
                 /// Creates a new `Path`.
                 ///
                 /// - Parameters:
-                ///   - sessionId: 집중 세션 식별자입니다.
-                internal init(sessionId: Swift.String) {
-                    self.sessionId = sessionId
+                ///   - focusSessionId: 집중 세션 식별자입니다.
+                internal init(focusSessionId: Swift.String) {
+                    self.focusSessionId = focusSessionId
                 }
             }
             internal var path: Operations.FocusSessionsComplete.Input.Path
-            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/header`.
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/header`.
             internal struct Headers: Sendable, Hashable {
                 internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.FocusSessionsComplete.AcceptableContentType>]
                 /// Creates a new `Headers`.
@@ -8414,9 +8414,9 @@ internal enum Operations {
                 }
             }
             internal var headers: Operations.FocusSessionsComplete.Input.Headers
-            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/requestBody`.
+            /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/requestBody`.
             internal enum Body: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/requestBody/content/application\/json`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/requestBody/content/application\/json`.
                 case json(Components.Schemas.FocusSessionCompleteRequest)
             }
             internal var body: Operations.FocusSessionsComplete.Input.Body
@@ -8438,9 +8438,9 @@ internal enum Operations {
         }
         internal enum Output: Sendable, Hashable {
             internal struct Ok: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/200/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/200/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/200/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/200/content/application\/json`.
                     case json(Components.Schemas.FocusSessionResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8467,7 +8467,7 @@ internal enum Operations {
             }
             /// Successful Response
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/200`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/200`.
             ///
             /// HTTP response code: `200 ok`.
             case ok(Operations.FocusSessionsComplete.Output.Ok)
@@ -8489,15 +8489,15 @@ internal enum Operations {
                 }
             }
             internal struct Unauthorized: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/401/headers`.
                 internal struct Headers: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
                     internal enum WWWAuthenticatePayload: String, Codable, Hashable, Sendable, CaseIterable {
                         case bearer = "Bearer"
                     }
                     /// 클라이언트가 사용해야 하는 인증 방식입니다.
                     ///
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/401/headers/WWW-Authenticate`.
                     internal var wwwAuthenticate: Operations.FocusSessionsComplete.Output.Unauthorized.Headers.WWWAuthenticatePayload?
                     /// Creates a new `Headers`.
                     ///
@@ -8509,9 +8509,9 @@ internal enum Operations {
                 }
                 /// Received HTTP response headers
                 internal var headers: Operations.FocusSessionsComplete.Output.Unauthorized.Headers
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/401/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/401/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/401/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8543,7 +8543,7 @@ internal enum Operations {
             }
             /// Unauthorized
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/401`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/401`.
             ///
             /// HTTP response code: `401 unauthorized`.
             case unauthorized(Operations.FocusSessionsComplete.Output.Unauthorized)
@@ -8565,9 +8565,9 @@ internal enum Operations {
                 }
             }
             internal struct NotFound: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/404/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/404/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/404/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/404/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8594,7 +8594,7 @@ internal enum Operations {
             }
             /// Not Found
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/404`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/404`.
             ///
             /// HTTP response code: `404 notFound`.
             case notFound(Operations.FocusSessionsComplete.Output.NotFound)
@@ -8616,11 +8616,11 @@ internal enum Operations {
                 }
             }
             internal struct MethodNotAllowed: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/headers`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/405/headers`.
                 internal struct Headers: Sendable, Hashable {
                     /// 해당 route에서 허용되는 HTTP method 목록입니다.
                     ///
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/headers/Allow`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/405/headers/Allow`.
                     internal var allow: Swift.String?
                     /// Creates a new `Headers`.
                     ///
@@ -8632,9 +8632,9 @@ internal enum Operations {
                 }
                 /// Received HTTP response headers
                 internal var headers: Operations.FocusSessionsComplete.Output.MethodNotAllowed.Headers
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/405/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/405/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/405/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8666,7 +8666,7 @@ internal enum Operations {
             }
             /// Method Not Allowed
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/405`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/405`.
             ///
             /// HTTP response code: `405 methodNotAllowed`.
             case methodNotAllowed(Operations.FocusSessionsComplete.Output.MethodNotAllowed)
@@ -8688,9 +8688,9 @@ internal enum Operations {
                 }
             }
             internal struct Conflict: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/409/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/409/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/409/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/409/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8717,7 +8717,7 @@ internal enum Operations {
             }
             /// Conflict
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/409`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/409`.
             ///
             /// HTTP response code: `409 conflict`.
             case conflict(Operations.FocusSessionsComplete.Output.Conflict)
@@ -8739,9 +8739,9 @@ internal enum Operations {
                 }
             }
             internal struct UnprocessableContent: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/422/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/422/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/422/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/422/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8768,7 +8768,7 @@ internal enum Operations {
             }
             /// Unprocessable Content
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/422`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/422`.
             ///
             /// HTTP response code: `422 unprocessableContent`.
             case unprocessableContent(Operations.FocusSessionsComplete.Output.UnprocessableContent)
@@ -8790,9 +8790,9 @@ internal enum Operations {
                 }
             }
             internal struct InternalServerError: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/500/content`.
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/500/content`.
                 internal enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{session_id}/completion/PUT/responses/500/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/500/content/application\/json`.
                     case json(Components.Schemas.ErrorResponse)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -8819,7 +8819,7 @@ internal enum Operations {
             }
             /// Internal Server Error
             ///
-            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{session_id}/completion/put(focusSessionsComplete)/responses/500`.
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Operations.FocusSessionsComplete.Output.InternalServerError)
