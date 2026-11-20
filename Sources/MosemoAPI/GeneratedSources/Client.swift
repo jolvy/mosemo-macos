@@ -232,7 +232,7 @@ internal struct Client: APIProtocol {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. observedAt이 서버 수락 시각보다 24시간 넘게 이전이거나 수락 시각보다 이후인 레코드가 하나라도 있으면 발행하지 않고 배치 전체를 422로 거절합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -2165,7 +2165,7 @@ internal struct Client: APIProtocol {
     }
     /// 종료한 집중 세션 기록 완료
     ///
-    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다. 계정별 관찰 쓰기 잠금을 3초 안에 얻지 못하면 503과 Retry-After: 1을 반환합니다.
     ///
     /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
     /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
@@ -2372,6 +2372,36 @@ internal struct Client: APIProtocol {
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
                     return .internalServerError(.init(body: body))
+                case 503:
+                    let headers: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers = .init(retryAfter: try converter.getOptionalHeaderFieldAsURI(
+                        in: response.headerFields,
+                        name: "Retry-After",
+                        as: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers.RetryAfterPayload.self
+                    ))
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ErrorResponse.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .serviceUnavailable(.init(
+                        headers: headers,
+                        body: body
+                    ))
                 default:
                     return .undocumented(
                         statusCode: response.status.code,

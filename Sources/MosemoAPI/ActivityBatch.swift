@@ -19,6 +19,8 @@ public enum ActivityBatchPolicy {
     public static let maximumCount = 200
     public static let maximumBytes = 512 * 1024
     public static let maximumWait: TimeInterval = 10
+    /// The server refuses records observed more than 24 hours before, or after, its acceptance time.
+    public static let acceptanceWindow: TimeInterval = 24 * 60 * 60
 
     public struct Selection: Sendable {
         public let batch: ActivityBatch
@@ -74,12 +76,20 @@ public enum ActivityBatchPolicy {
 }
 
 extension QueuedActivity {
-    func validateMetadata() throws {
-        let metadata: ActivityRecordMetadata
+    var metadata: ActivityRecordMetadata {
         switch record {
-        case .observation(let value): metadata = value.metadata
-        case .collectionStateChanged(let value): metadata = value.metadata
+        case .observation(let value): value.metadata
+        case .collectionStateChanged(let value): value.metadata
         }
+    }
+
+    /// `now − 24h ≤ observedAt ≤ now`, compared as absolute instants (time zone fields are ignored).
+    func isWithinAcceptanceWindow(now: Date) -> Bool {
+        let observedAt = metadata.observedAt
+        return observedAt <= now && observedAt >= now.addingTimeInterval(-ActivityBatchPolicy.acceptanceWindow)
+    }
+
+    func validateMetadata() throws {
         guard metadata.deviceRegistrationID == deviceID, metadata.eventID == eventID,
               metadata.sequence == sequence else { throw MosemoAPIError.activityQueueStorageFailed }
     }

@@ -18,5 +18,7 @@ public enum MosemoAPIError: Error, Equatable, Sendable {
     case credentialStorageFailed
     case activityBatchRejectedTooLarge
     case activityBatchRecordTooLarge
+    /// Zero-based positions in the sent batch whose `observedAt` the server refused (HTTP 422).
+    case activityRecordsOutsideAcceptanceWindow(indices: [Int])
     case activityQueueStorageFailed
 }

@@ -120,6 +120,15 @@ public actor EncryptedActivityQueue {
         return try database.splitRejectedBatch(batch, newBatchID: newBatchID, key: key)
     }
 
+    /// Only call after an explicit HTTP 422 `ACTIVITY_RECORD_OUTSIDE_ACCEPTANCE_WINDOW` for `batch`.
+    /// Deletes the indexed records and the pending batch; the next `prepareBatch` builds a new batchId.
+    public func dropRecordsOutsideAcceptanceWindow(_ batch: ActivityBatch, indices: [Int],
+                                                   authorizationID: UUID? = nil) async throws {
+        let key = try await keyStore.loadOrCreateKey()
+        if let authorizationID, batchAuthorizationID != authorizationID { throw MosemoAPIError.authenticationRequired }
+        try database.dropRejectedRecords(batch, indices: indices, key: key)
+    }
+
     public func count(accountID: UUID? = nil) throws -> Int {
         try database.count(accountID: accountID)
     }
@@ -241,7 +250,12 @@ private final class ActivityQueueDatabase: @unchecked Sendable {
                       drainBacklog: Bool, key: Data) throws -> ActivityBatchPreparation {
         try locked {
             try transaction {
-                if let batch = try loadBatch(accountID: accountID, deviceID: deviceID, key: key) { return .ready(batch) }
+                if let batch = try loadBatch(accountID: accountID, deviceID: deviceID, key: key) {
+                    // A batch whose content changes must not reuse its batchId.
+                    guard batch.items.contains(where: { !$0.isWithinAcceptanceWindow(now: now) }) else { return .ready(batch) }
+                    try clearBatch(accountID: accountID, deviceID: deviceID)
+                }
+                try dropRecordsOutsideAcceptanceWindow(accountID: accountID, deviceID: deviceID, now: now, key: key)
                 let items = try records(accountID: accountID, deviceID: deviceID, key: key)
                 guard let selection = try ActivityBatchPolicy.select(items, batchID: batchID) else { return .empty }
                 let statement = try prepare("SELECT enqueued_at FROM activity_queue_records WHERE account_id=? AND device_id=? ORDER BY sequence LIMIT 1")
@@ -288,6 +302,36 @@ private final class ActivityQueueDatabase: @unchecked Sendable {
                 return selection.batch
             }
         }
+    }
+
+    func dropRejectedRecords(_ expected: ActivityBatch, indices: [Int], key: Data) throws {
+        try locked {
+            try transaction {
+                guard let current = try loadBatch(accountID: expected.accountID, deviceID: expected.deviceID, key: key),
+                      current == expected, !indices.isEmpty,
+                      indices.allSatisfy(current.items.indices.contains) else { throw MosemoAPIError.activityQueueStorageFailed }
+                for index in Set(indices) { try deleteRecord(current.items[index]) }
+                try clearBatch(accountID: current.accountID, deviceID: current.deviceID)
+            }
+        }
+    }
+
+    /// Sequence gaps left by deleted records are accepted by the server; sequences are never renumbered.
+    private func dropRecordsOutsideAcceptanceWindow(accountID: UUID, deviceID: UUID, now: Date, key: Data) throws {
+        while true {
+            let expired = try records(accountID: accountID, deviceID: deviceID, key: key)
+                .filter { !$0.isWithinAcceptanceWindow(now: now) }
+            if expired.isEmpty { return }
+            for item in expired { try deleteRecord(item) }
+        }
+    }
+
+    private func deleteRecord(_ item: QueuedActivity) throws {
+        let statement = try prepare("DELETE FROM activity_queue_records WHERE account_id=? AND device_id=? AND sequence=? AND event_id=?")
+        defer { sqlite3_finalize(statement) }
+        try bind(item.accountID.uuidString, statement, 1); try bind(item.deviceID.uuidString, statement, 2)
+        try bind(item.sequence, statement, 3); try bind(item.eventID.uuidString, statement, 4); try step(statement)
+        guard sqlite3_changes(handle) == 1 else { throw MosemoAPIError.activityQueueStorageFailed }
     }
 
     private func loadBatch(accountID: UUID, deviceID: UUID, key: Data) throws -> ActivityBatch? {

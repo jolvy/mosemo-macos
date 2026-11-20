@@ -381,6 +381,20 @@ final class OfflineActivityCoordinator {
                             return
                         }
                     }
+                    if case .activityRecordsOutsideAcceptanceWindow(let indices) = error {
+                        do {
+                            try await queue.dropRecordsOutsideAcceptanceWindow(batch, indices: indices,
+                                                                               authorizationID: authorizationID)
+                            drainBacklog = true
+                            continue
+                        } catch {
+                            guard generation == expectedGeneration else { return }
+                            blockedGeneration = expectedGeneration
+                            blockedStatus = "조치 필요 · 기록 보존 중"
+                            await publishQueueStatus(accountID: account.id, status: blockedStatus!, expectedGeneration: expectedGeneration)
+                            return
+                        }
+                    }
                     if isRetryable(error) {
                         retryAttempt += 1
                         let retryAfter: TimeInterval

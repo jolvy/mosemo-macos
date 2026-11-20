@@ -256,7 +256,7 @@ final class CollectorObservationTests: XCTestCase {
         let client = ObservationAPIClient()
         let account = Account(id: UUID(), provider: .kakao, createdAt: .now, lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
         let deviceID = UUID()
-        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { .distantFuture })
+        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { [batchNow = source.date(60)] in batchNow })
         await model.synchronizationAccountChanged(account)
         try await waitUntilAsync { await client.observations().count == 1 }
 
@@ -278,7 +278,7 @@ final class CollectorObservationTests: XCTestCase {
         try await waitUntilAsync { try await queue.count(accountID: account.id) == 4 }
         let sentBeforeAcceptance = await client.observations()
         XCTAssertEqual(sentBeforeAcceptance.count, 1)
-        let inflight = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: .distantFuture)
+        let inflight = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: source.date(60))
         guard case .ready(let head) = inflight else { return XCTFail("Expected persisted in-flight batch") }
         XCTAssertTrue(head.items.contains { $0.record == .observation(sentBeforeAcceptance[0]) })
 
@@ -335,13 +335,13 @@ final class CollectorObservationTests: XCTestCase {
         let client = ObservationAPIClient()
         let account = Account(id: UUID(), provider: .kakao, createdAt: .now, lastAuthenticatedAt: .now, timeZoneID: "Asia/Seoul")
         let deviceID = UUID()
-        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { .distantFuture })
+        model.configureSynchronization(client: client, deviceStateStore: ObservationDeviceStore(deviceID: deviceID), queue: queue, batchClock: { [batchNow = source.date(60)] in batchNow })
         await model.synchronizationAccountChanged(account)
         try await waitUntilAsync { await client.observations().count == 1 }
         source.advance(to: 5)
         model.pollCurrentActivity()
         try await waitUntilAsync { try await queue.count(accountID: account.id) == 3 }
-        let saved = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: .distantFuture)
+        let saved = try await queue.prepareBatch(accountID: account.id, deviceID: deviceID, batchID: UUID(), now: source.date(60))
         guard case .ready(let batch) = saved,
               let observation = batch.items.compactMap({ item -> ActivityObservation? in
                   if case .observation(let value) = item.record { return value }; return nil
@@ -543,8 +543,11 @@ private final class ObservationSource {
             diagnosticContext: TransientBrowserContext(title: "Page", url: "https://example.com/page"))
     }
 
+    private static let epoch = Date().timeIntervalSince1970.rounded(.down)
+
     func date(_ seconds: TimeInterval) -> Date {
-        Date(timeIntervalSince1970: 1_800_000_000 + seconds)
+        // Near the real clock: collection-state records are stamped with Date() and must share the acceptance window.
+        Date(timeIntervalSince1970: Self.epoch + seconds)
     }
 
     func advance(to seconds: TimeInterval) {
