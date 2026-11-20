@@ -20,7 +20,7 @@ internal protocol APIProtocol: Sendable {
     func accountsGetMe(_ input: Operations.AccountsGetMe.Input) async throws -> Operations.AccountsGetMe.Output
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. observedAt이 서버 수락 시각보다 24시간 넘게 이전이거나 수락 시각보다 이후인 레코드가 하나라도 있으면 발행하지 않고 배치 전체를 422로 거절합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -83,7 +83,7 @@ internal protocol APIProtocol: Sendable {
     func focusSessionsCreate(_ input: Operations.FocusSessionsCreate.Input) async throws -> Operations.FocusSessionsCreate.Output
     /// 종료한 집중 세션 기록 완료
     ///
-    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다. 계정별 관찰 쓰기 잠금을 3초 안에 얻지 못하면 503과 Retry-After: 1을 반환합니다.
     ///
     /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
     /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
@@ -110,7 +110,7 @@ extension APIProtocol {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. observedAt이 서버 수락 시각보다 24시간 넘게 이전이거나 수락 시각보다 이후인 레코드가 하나라도 있으면 발행하지 않고 배치 전체를 422로 거절합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -239,7 +239,7 @@ extension APIProtocol {
     }
     /// 종료한 집중 세션 기록 완료
     ///
-    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다. 계정별 관찰 쓰기 잠금을 3초 안에 얻지 못하면 503과 Retry-After: 1을 반환합니다.
     ///
     /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
     /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
@@ -2262,6 +2262,79 @@ internal enum Components {
                 ])
             }
         }
+        /// 세션 안의 일시중지 구간 [시작, 종료)입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FocusSessionPauseRequest`.
+        internal struct FocusSessionPauseRequest: Codable, Hashable, Sendable {
+            /// UTC 일시중지 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionPauseRequest/endedAt`.
+            internal var endedAt: Foundation.Date
+            /// UTC 일시중지 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionPauseRequest/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `FocusSessionPauseRequest`.
+            ///
+            /// - Parameters:
+            ///   - endedAt: UTC 일시중지 종료 시각입니다.
+            ///   - startedAt: UTC 일시중지 시작 시각입니다.
+            internal init(
+                endedAt: Foundation.Date,
+                startedAt: Foundation.Date
+            ) {
+                self.endedAt = endedAt
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case endedAt
+                case startedAt
+            }
+            internal init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.endedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .endedAt
+                )
+                self.startedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .startedAt
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "endedAt",
+                    "startedAt"
+                ])
+            }
+        }
+        /// 저장된 일시중지 구간 [시작, 종료)입니다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/FocusSessionPauseResponse`.
+        internal struct FocusSessionPauseResponse: Codable, Hashable, Sendable {
+            /// UTC 일시중지 종료 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionPauseResponse/endedAt`.
+            internal var endedAt: Foundation.Date
+            /// UTC 일시중지 시작 시각입니다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/FocusSessionPauseResponse/startedAt`.
+            internal var startedAt: Foundation.Date
+            /// Creates a new `FocusSessionPauseResponse`.
+            ///
+            /// - Parameters:
+            ///   - endedAt: UTC 일시중지 종료 시각입니다.
+            ///   - startedAt: UTC 일시중지 시작 시각입니다.
+            internal init(
+                endedAt: Foundation.Date,
+                startedAt: Foundation.Date
+            ) {
+                self.endedAt = endedAt
+                self.startedAt = startedAt
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case endedAt
+                case startedAt
+            }
+        }
         /// 진행 중이거나 완료한 집중 세션입니다.
         ///
         /// - Remark: Generated from `#/components/schemas/FocusSessionResponse`.
@@ -3983,7 +4056,7 @@ internal enum Operations {
     }
     /// 활동 배치 전달 수락
     ///
-    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
+    /// 인증 계정의 Device 원본 1~200건, 비압축 JSON 512 KiB 이하를 Kafka에 발행하고 발행 확인 후 수락합니다. observedAt이 서버 수락 시각보다 24시간 넘게 이전이거나 수락 시각보다 이후인 레코드가 하나라도 있으면 발행하지 않고 배치 전체를 422로 거절합니다. 발행 확인은 최대 5초 대기하며 HTTP 전체 수락 제한은 10초입니다. 별도 Consumer의 DB 처리나 offset commit 완료를 기다리지 않습니다. 503 응답에는 Retry-After: 1을 반환합니다. 확인 timeout은 미발행을 뜻하지 않으므로 같은 batchId와 내용으로 재시도합니다.
     ///
     /// - Remark: HTTP `POST /api/v1/activities/batches`.
     /// - Remark: Generated from `#/paths//api/v1/activities/batches/post(activitiesAcceptBatch)`.
@@ -8380,7 +8453,7 @@ internal enum Operations {
     }
     /// 종료한 집중 세션 기록 완료
     ///
-    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다.
+    /// 라벨은 필수이고 설명은 선택입니다. 동일한 완료 요청은 재시도할 수 있고 확정된 기록은 변경할 수 없습니다. 계정별 관찰 쓰기 잠금을 3초 안에 얻지 못하면 503과 Retry-After: 1을 반환합니다.
     ///
     /// - Remark: HTTP `PUT /api/v1/focus-sessions/{focus_session_id}/completion`.
     /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)`.
@@ -8835,6 +8908,82 @@ internal enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct ServiceUnavailable: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/503/headers`.
+                internal struct Headers: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/503/headers/Retry-After`.
+                    internal enum RetryAfterPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                        case _1 = "1"
+                    }
+                    /// 같은 완료 요청을 재시도하기 전 대기할 초입니다.
+                    ///
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/503/headers/Retry-After`.
+                    internal var retryAfter: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers.RetryAfterPayload?
+                    /// Creates a new `Headers`.
+                    ///
+                    /// - Parameters:
+                    ///   - retryAfter: 같은 완료 요청을 재시도하기 전 대기할 초입니다.
+                    internal init(retryAfter: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers.RetryAfterPayload? = nil) {
+                        self.retryAfter = retryAfter
+                    }
+                }
+                /// Received HTTP response headers
+                internal var headers: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers
+                /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/503/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/focus-sessions/{focus_session_id}/completion/PUT/responses/503/content/application\/json`.
+                    case json(Components.Schemas.ErrorResponse)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.ErrorResponse {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Body
+                /// Creates a new `ServiceUnavailable`.
+                ///
+                /// - Parameters:
+                ///   - headers: Received HTTP response headers
+                ///   - body: Received HTTP response body
+                internal init(
+                    headers: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Headers = .init(),
+                    body: Operations.FocusSessionsComplete.Output.ServiceUnavailable.Body
+                ) {
+                    self.headers = headers
+                    self.body = body
+                }
+            }
+            /// Service Unavailable
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/focus-sessions/{focus_session_id}/completion/put(focusSessionsComplete)/responses/503`.
+            ///
+            /// HTTP response code: `503 serviceUnavailable`.
+            case serviceUnavailable(Operations.FocusSessionsComplete.Output.ServiceUnavailable)
+            /// The associated value of the enum case if `self` is `.serviceUnavailable`.
+            ///
+            /// - Throws: An error if `self` is not `.serviceUnavailable`.
+            /// - SeeAlso: `.serviceUnavailable`.
+            internal var serviceUnavailable: Operations.FocusSessionsComplete.Output.ServiceUnavailable {
+                get throws {
+                    switch self {
+                    case let .serviceUnavailable(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "serviceUnavailable",
                             response: self
                         )
                     }

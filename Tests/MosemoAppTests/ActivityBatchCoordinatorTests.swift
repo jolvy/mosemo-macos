@@ -193,7 +193,8 @@ private struct BatchFixture {
 }
 private final class BatchTestClock: @unchecked Sendable {
     private let lock = NSLock()
-    private var value = Date(timeIntervalSince1970: 1_800_000_000)
+    // Whole seconds (enqueuedAt is stored in ms) and ahead of Date()-stamped collection-state records.
+    private var value = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) + 60)
     func now() -> Date { lock.lock(); defer { lock.unlock() }; return value }
     func advance(_ seconds: Double) { lock.lock(); defer { lock.unlock() }; value.addTimeInterval(seconds) }
 }

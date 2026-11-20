@@ -37,6 +37,30 @@ final class ActivityBatchTransportTests: XCTestCase {
         }
     }
 
+    func testAcceptanceWindow422MapsOnlyReadableInRangeIndices() async throws {
+        let batch = try await makeBatch()
+        func body(_ status: String, _ details: String) -> String {
+            #"{"error":{"code":422,"status":""# + status + #"","message":"m","details":["# + details + "]}}"
+        }
+        let window = "ACTIVITY_RECORD_OUTSIDE_ACCEPTANCE_WINDOW"
+        let detail = { (index: String, field: String) in
+            #"{"loc":["body","records","# + index + #",""# + field + #""],"msg":"m","type":"t"}"#
+        }
+        for (response, expected) in [
+            (body(window, detail("0", "observedAt")), MosemoAPIError.activityRecordsOutsideAcceptanceWindow(indices: [0])),
+            (body(window, detail("1", "observedAt")), .validationFailed),
+            (body(window, detail("\"0\"", "observedAt")), .validationFailed),
+            (body(window, detail("0", "sequence")), .validationFailed),
+            (body(window, ""), .validationFailed),
+            (body("INVALID_ARGUMENT", detail("0", "observedAt")), .validationFailed),
+            ("not json", .validationFailed)
+        ] {
+            let transport = BatchWireStub(status: 422, response: Data(response.utf8))
+            do { _ = try await makeClient(transport).createActivityBatch(batch); XCTFail("Expected rejection") }
+            catch { XCTAssertEqual(error as? MosemoAPIError, expected, response) }
+        }
+    }
+
     func testBatchSessionHasWholeResourceDeadlineOf15Seconds() {
         let configuration = LiveMosemoAPIClient.batchSessionConfiguration()
         XCTAssertEqual(configuration.timeoutIntervalForResource, 15)

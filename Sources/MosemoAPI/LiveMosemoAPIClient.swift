@@ -244,7 +244,8 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
                     throw MosemoAPIError.unexpectedResponse(statusCode: 413)
                 }
                 throw MosemoAPIError.activityBatchRejectedTooLarge
-            case .unprocessableContent: throw MosemoAPIError.validationFailed
+            case .unprocessableContent(let response):
+                throw Self.activityBatchRejection((try? response.body.json)?.error, recordCount: batch.items.count)
             case .methodNotAllowed: throw MosemoAPIError.unexpectedResponse(statusCode: 405)
             case .internalServerError: throw MosemoAPIError.retryableServerError(statusCode: 500, retryAfter: nil)
             case .serviceUnavailable(let response):
@@ -392,6 +393,22 @@ public struct LiveMosemoAPIClient: MosemoAPIClient, LabelConfirmationWriting {
             }
         }
         return mapCommon(error, statusCode: nil)
+    }
+
+    /// Any unreadable or out-of-range index keeps the whole batch: nothing may be dropped on a guess.
+    private static func activityBatchRejection(_ error: Components.Schemas.ErrorPayload?, recordCount: Int) -> MosemoAPIError {
+        guard let error, error.status == "ACTIVITY_RECORD_OUTSIDE_ACCEPTANCE_WINDOW", !error.details.isEmpty else {
+            return .validationFailed
+        }
+        var indices: [Int] = []
+        for detail in error.details {
+            guard detail.loc.count == 4,
+                  detail.loc[0].value1 == "body", detail.loc[1].value1 == "records",
+                  let index = detail.loc[2].value2, (0..<recordCount).contains(index),
+                  detail.loc[3].value1 == "observedAt" else { return .validationFailed }
+            indices.append(index)
+        }
+        return .activityRecordsOutsideAcceptanceWindow(indices: Array(Set(indices)).sorted())
     }
 
     private static func retryAfter(_ value: String?) -> TimeInterval? {
@@ -729,6 +746,8 @@ extension LiveMosemoAPIClient: FocusSessionServing {
             case .notFound: throw MosemoAPIError.focusSessionNotFound
             case .methodNotAllowed: throw Self.error(forHTTPStatus: 405)
             case .internalServerError: throw Self.error(forHTTPStatus: 500)
+            case .serviceUnavailable(let response):
+                throw MosemoAPIError.retryableServerError(statusCode: 503, retryAfter: response.headers.retryAfter == ._1 ? 1 : nil)
             case .undocumented(let code, _): throw Self.error(forHTTPStatus: code)
             }
         } catch { throw await mappedFocusError(error) }
